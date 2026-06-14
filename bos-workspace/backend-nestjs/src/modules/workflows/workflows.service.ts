@@ -14,6 +14,7 @@ import { WorkflowActionDto } from './dto/workflow-action.dto';
 export class WorkflowsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  // --- HÀM TRỢ GIÚP: ĐÁNH GIÁ ĐIỀU KIỆN RẼ NHÁNH ---
   private evaluateTransitionCondition(logic: any, recordData: any): boolean {
     const rules = logic?.rules;
     if (!rules || !rules.field) return true;
@@ -39,6 +40,7 @@ export class WorkflowsService {
     }
   }
 
+  // --- CÁC API CƠ BẢN ---
   async create(dto: CreateWorkflowDto) {
     const entity = await this.prisma.entity.findUnique({
       where: { id: dto.entityId },
@@ -71,7 +73,6 @@ export class WorkflowsService {
   // BỘ LỌC TẦM NHÌN QUY TRÌNH (VISIBILITY FILTER ENGINE)
   // ====================================================
   async findAll(currentUser: any) {
-    // 1. Lấy toàn bộ danh sách quy trình thô trong hệ thống
     const workflows = await this.prisma.workflow.findMany({
       include: {
         entity: { select: { id: true, name: true, code: true } },
@@ -80,11 +81,9 @@ export class WorkflowsService {
       orderBy: { id: 'desc' },
     });
 
-    // 2. Chạy thuật toán lọc Tầm nhìn động dựa trên metadata JSONB
     return workflows.filter((wf) => {
       const visibility: any = wf.visibility || {};
 
-      // Kịch bản 1: Nếu cấu hình cho phép tất cả xem (allowAll: true) hoặc chưa cấu hình -> Cho qua
       if (
         visibility.allowAll === true ||
         Object.keys(visibility).length === 0
@@ -92,7 +91,6 @@ export class WorkflowsService {
         return true;
       }
 
-      // Kịch bản 2: Lọc nghiêm ngặt theo loại tài khoản (INTERNAL/EXTERNAL)
       if (
         visibility.allowedUserTypes &&
         Array.isArray(visibility.allowedUserTypes)
@@ -102,7 +100,6 @@ export class WorkflowsService {
         }
       }
 
-      // Kịch bản 3: Kiểm tra khớp chéo theo Phòng ban, Vai trò, hoặc User ID cụ thể
       const isAllowedDept =
         currentUser.departmentId &&
         visibility.allowedDepartments?.includes(currentUser.departmentId);
@@ -113,7 +110,6 @@ export class WorkflowsService {
         currentUser.userId,
       );
 
-      // Chỉ cần thỏa mãn ít nhất 1 điều kiện khớp chéo -> Cho phép xem quy trình
       return isAllowedDept || isAllowedRole || isAllowedUser;
     });
   }
@@ -271,68 +267,89 @@ export class WorkflowsService {
     });
   }
 
+  // ====================================================
+  // BẢN NÂNG CẤP HOÀN HẢO: HÀM LÕI XỬ LÝ PHÊ DUYỆT CÓ KHÓA CHỐNG TRÙNG LẶP
+  // ====================================================
   async handleAction(
     instanceId: number,
     userId: number,
     dto: WorkflowActionDto,
   ) {
-    const instance = await this.prisma.workflowInstance.findUnique({
-      where: { id: instanceId },
-      include: {
-        record: true,
-        version: {
-          include: {
-            steps: true,
+    // 1. Mở ngay Prisma Transaction để thực thi khóa dòng dữ liệu
+    return this.prisma.$transaction(async (tx) => {
+      // 2. CHỐT CHẶN RACE CONDITION: Khóa cứng dòng dữ liệu này bằng SELECT FOR UPDATE của Postgres
+      // Bắt mọi transaction song song khác muốn chạm vào instanceId này phải xếp hàng đợi
+      await tx.$queryRawUnsafe(
+        `SELECT id FROM workflow_instances WHERE id = $1 FOR UPDATE`,
+        instanceId,
+      );
+
+      // 3. ĐỌC DỮ LIỆU SẠCH: Sau khi đã lấy được Khóa, lúc này ta mới đọc dữ liệu thực tế từ DB
+      // Đảm bảo không bị lỗi Dirty Read (Đọc dữ liệu cũ khi người trước đang sửa đổi)
+      const instance = await tx.workflowInstance.findUnique({
+        where: { id: instanceId },
+        include: {
+          record: true,
+          version: {
+            include: {
+              steps: true,
+            },
           },
         },
-      },
-    });
+      });
 
-    if (!instance)
-      throw new NotFoundException('Không tìm thấy lượt chạy quy trình.');
-    if (instance.status !== 'IN_PROGRESS') {
-      throw new BadRequestException('Lượt chạy quy trình này đã kết thúc.');
-    }
+      if (!instance)
+        throw new NotFoundException('Không tìm thấy lượt chạy quy trình.');
 
-    const transition = await this.prisma.workflowTransition.findUnique({
-      where: { id: dto.transitionId },
-      include: { fromStep: true, toStep: true },
-    });
+      // Nếu người trước xếp hàng duyệt xong và đã đóng luồng (status chuyển sang COMPLETED),
+      // người sau vào đọc ra status mới và lập tức bị chặn bằng lỗi BadRequest dưới đây!
+      if (instance.status !== 'IN_PROGRESS') {
+        throw new BadRequestException(
+          'Lượt chạy quy trình này đã kết thúc hoặc đang được xử lý bởi thành viên khác.',
+        );
+      }
 
-    if (!transition)
-      throw new NotFoundException(
-        'Không tìm thấy đường nối quy trình (Nút bấm).',
-      );
-    if (transition.fromStepId !== instance.currentStep) {
-      throw new BadRequestException(
-        'Đường nối không thuộc về bước duyệt hiện tại của phiếu.',
-      );
-    }
+      // 4. Tìm thông tin đường rẽ nhánh (Nút bấm)
+      const transition = await tx.workflowTransition.findUnique({
+        where: { id: dto.transitionId },
+        include: { fromStep: true, toStep: true },
+      });
 
-    const currentStepObj = transition.fromStep;
-    const nextStepObj = transition.toStep;
+      if (!transition)
+        throw new NotFoundException(
+          'Không tìm thấy đường nối quy trình (Nút bấm).',
+        );
+      if (transition.fromStepId !== instance.currentStep) {
+        throw new BadRequestException(
+          'Đường nối không thuộc về bước duyệt hiện tại của phiếu.',
+        );
+      }
 
-    const stepConfig: any = currentStepObj.permissions || {};
-    const approverType = stepConfig.approverType || 'SINGLE';
-    const candidateUsers = stepConfig.candidateUsers || [];
+      const currentStepObj = transition.fromStep;
+      const nextStepObj = transition.toStep;
 
-    if (candidateUsers.length > 0 && !candidateUsers.includes(userId)) {
-      throw new BadRequestException(
-        'Tài khoản của bạn không được phân quyền thực hiện hành động tại bước này.',
-      );
-    }
+      // Đọc cấu hình người duyệt
+      const stepConfig: any = currentStepObj.permissions || {};
+      const approverType = stepConfig.approverType || 'SINGLE';
+      const candidateUsers = stepConfig.candidateUsers || [];
 
-    const transLogic: any = transition.conditionLogic || {};
-    const actionLabel = transLogic.actionLabel || 'Phê duyệt';
-    const requiresSignature = transLogic.requiresSignature || false;
+      if (candidateUsers.length > 0 && !candidateUsers.includes(userId)) {
+        throw new BadRequestException(
+          'Tài khoản của bạn không được phân quyền thực hiện hành động tại bước này.',
+        );
+      }
 
-    if (requiresSignature && !dto.signatureData) {
-      throw new BadRequestException(
-        `Nút bấm '${actionLabel}' yêu cầu bạn phải thực hiện Chữ ký điện tử.`,
-      );
-    }
+      const transLogic: any = transition.conditionLogic || {};
+      const actionLabel = transLogic.actionLabel || 'Phê duyệt';
+      const requiresSignature = transLogic.requiresSignature || false;
 
-    return this.prisma.$transaction(async (tx) => {
+      if (requiresSignature && !dto.signatureData) {
+        throw new BadRequestException(
+          `Nút bấm '${actionLabel}' yêu cầu bạn phải thực hiện Chữ ký điện tử.`,
+        );
+      }
+
+      // Ghi nhận lượt duyệt hiện tại vào Audit Log
       await tx.workflowLog.create({
         data: {
           instanceId,
@@ -348,6 +365,7 @@ export class WorkflowsService {
 
       let shouldTransition = true;
 
+      // XỬ LÝ DUYỆT ĐỒNG THUẬN SONG SONG (ALL_OF)
       if (approverType === 'ALL_OF' && candidateUsers.length > 1) {
         const approvedLogs = await tx.workflowLog.findMany({
           where: {
@@ -368,6 +386,7 @@ export class WorkflowsService {
         }
       }
 
+      // 5. Thực hiện chuyển trạm phê duyệt
       if (shouldTransition) {
         let finalStatus = 'IN_PROGRESS';
         let nextStepId: number | null = transition.toStepId;
