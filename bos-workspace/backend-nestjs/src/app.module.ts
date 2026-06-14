@@ -11,7 +11,8 @@ import { FieldsModule } from './modules/fields/fields.module';
 import { RecordsModule } from './modules/records/records.module';
 import { WorkflowsModule } from './modules/workflows/workflows.module';
 import { WorkflowStepsModule } from './modules/workflow-steps/workflow-steps.module';
-import { PrintTemplatesModule } from './modules/print-templates/print-templates.module'; // <-- IMPORT MỚI
+import { PrintTemplatesModule } from './modules/print-templates/print-templates.module';
+import { AnalyticsModule } from './modules/analytics/analytics.module'; // <-- IMPORT MỚI
 
 @Module({
   imports: [
@@ -25,7 +26,8 @@ import { PrintTemplatesModule } from './modules/print-templates/print-templates.
     RecordsModule,
     WorkflowsModule,
     WorkflowStepsModule,
-    PrintTemplatesModule, // <-- KÍCH HOẠT
+    PrintTemplatesModule,
+    AnalyticsModule, // <-- KÍCH HOẠT
   ],
   providers: [
     {
