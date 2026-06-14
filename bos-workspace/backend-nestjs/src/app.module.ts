@@ -5,7 +5,8 @@ import { PrismaModule } from './prisma/prisma.module';
 import { OrganizationsModule } from './modules/organizations/organizations.module';
 import { RolesModule } from './modules/roles/roles.module';
 import { UsersModule } from './modules/users/users.module';
-import { AuthModule } from './modules/auth/auth.module'; // <-- Thêm dòng này
+import { AuthModule } from './modules/auth/auth.module';
+import { EntitiesModule } from './modules/entities/entities.module'; // <-- Import
 
 @Module({
   imports: [
@@ -13,7 +14,8 @@ import { AuthModule } from './modules/auth/auth.module'; // <-- Thêm dòng này
     OrganizationsModule,
     RolesModule,
     UsersModule,
-    AuthModule, // <-- Kích hoạt AuthModule
+    AuthModule,
+    EntitiesModule, // <-- Kích hoạt
   ],
   providers: [
     {
