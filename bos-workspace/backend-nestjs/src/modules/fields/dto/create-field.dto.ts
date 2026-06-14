@@ -57,8 +57,12 @@ export class CreateFieldDto {
 
   @ApiPropertyOptional({
     description:
-      'Cấu hình mở rộng dạng JSON (Cho Dropdown, Công thức, Tùy chọn in...)',
-    example: { prefix: 'VND', min: 0 },
+      'Cấu hình JSON siêu chi tiết theo loại trường. Hỗ trợ requiredIf, showIf, min, max, regexPattern...',
+    example: {
+      placeholder: 'Nhập số tiền...',
+      min: 1000,
+      requiredIf: { field: 'category', operator: '==', value: 'IT' },
+    },
   })
   @IsObject()
   @IsOptional()

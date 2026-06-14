@@ -2,9 +2,10 @@
 import { Module } from '@nestjs/common';
 import { RecordsService } from './records.service';
 import { RecordsController } from './records.controller';
+import { DynamicValidationService } from './dynamic-validation.service'; // Import
 
 @Module({
   controllers: [RecordsController],
-  providers: [RecordsService],
+  providers: [RecordsService, DynamicValidationService], // Thêm vào providers
 })
 export class RecordsModule {}

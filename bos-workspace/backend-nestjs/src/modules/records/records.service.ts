@@ -7,55 +7,14 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateRecordDto } from './dto/create-record.dto';
 import { UpdateRecordDto } from './dto/update-record.dto';
+import { DynamicValidationService } from './dynamic-validation.service'; // <-- KÍCH HOẠT ĐỘNG CƠ MỚI
 
 @Injectable()
 export class RecordsService {
-  constructor(private readonly prisma: PrismaService) {}
-
-  // --- HÀM NỘI BỘ: LÀM SẠCH VÀ ÉP KIỂU DỮ LIỆU ---
-  private validateAndSanitizeData(fields: any[], inputData: any) {
-    const sanitizedData: Record<string, any> = {};
-
-    for (const field of fields) {
-      let value = inputData[field.code];
-
-      // 1. Kiểm tra trường bắt buộc (isRequired)
-      if (
-        field.isRequired &&
-        (value === undefined || value === null || value === '')
-      ) {
-        throw new BadRequestException(
-          `Dữ liệu không hợp lệ: Trường '${field.name}' là bắt buộc nhập.`,
-        );
-      }
-
-      // 2. Ép kiểu và Validate (Chỉ xử lý khi có giá trị)
-      if (value !== undefined && value !== null && value !== '') {
-        switch (field.type) {
-          case 'NUMBER':
-            const numVal = Number(value);
-            if (isNaN(numVal)) {
-              throw new BadRequestException(
-                `Dữ liệu không hợp lệ: Trường '${field.name}' phải là định dạng số.`,
-              );
-            }
-            sanitizedData[field.code] = numVal; // Lưu đúng kiểu số
-            break;
-
-          case 'TEXT':
-            sanitizedData[field.code] = String(value); // Ép về chuỗi
-            break;
-
-          // Các kiểu phức tạp khác (SELECT, TABLE...) sẽ lưu nguyên bản JSON
-          default:
-            sanitizedData[field.code] = value;
-        }
-      }
-    }
-
-    // Kết quả trả về là một Object "sạch", chỉ chứa các key hợp lệ đã được ép kiểu
-    return sanitizedData;
-  }
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly dynamicValidator: DynamicValidationService, // <-- INJECT ĐỘNG CƠ VÀO ĐÂY
+  ) {}
 
   async create(userId: number, dto: CreateRecordDto) {
     const entity = await this.prisma.entity.findUnique({
@@ -66,8 +25,11 @@ export class RecordsService {
     if (!entity)
       throw new NotFoundException('Không tìm thấy Biểu mẫu (Entity).');
 
-    // Chạy qua màng lọc dữ liệu
-    const cleanData = this.validateAndSanitizeData(entity.fields, dto.data);
+    // Gọi Động cơ Validate VIP PRO xử lý dữ liệu
+    const cleanData = this.dynamicValidator.validateAndSanitize(
+      entity.fields,
+      dto.data,
+    );
 
     return this.prisma.record.create({
       data: {
@@ -116,8 +78,11 @@ export class RecordsService {
       // Gộp data cũ và mới để validate lại toàn bộ
       const mergedData = { ...(currentRecord.data as object), ...dto.data };
 
-      // Chạy qua màng lọc
-      dataToSave = this.validateAndSanitizeData(entity.fields, mergedData);
+      // Gọi Động cơ Validate VIP PRO
+      dataToSave = this.dynamicValidator.validateAndSanitize(
+        entity.fields,
+        mergedData,
+      );
     }
 
     return this.prisma.record.update({
