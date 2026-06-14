@@ -7,7 +7,8 @@ import { RolesModule } from './modules/roles/roles.module';
 import { UsersModule } from './modules/users/users.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { EntitiesModule } from './modules/entities/entities.module';
-import { FieldsModule } from './modules/fields/fields.module'; // <-- Import FieldsModule
+import { FieldsModule } from './modules/fields/fields.module';
+import { RecordsModule } from './modules/records/records.module'; // <-- Import mới
 
 @Module({
   imports: [
@@ -17,7 +18,8 @@ import { FieldsModule } from './modules/fields/fields.module'; // <-- Import Fie
     UsersModule,
     AuthModule,
     EntitiesModule,
-    FieldsModule, // <-- Kích hoạt
+    FieldsModule,
+    RecordsModule, // <-- Kích hoạt module
   ],
   providers: [
     {
