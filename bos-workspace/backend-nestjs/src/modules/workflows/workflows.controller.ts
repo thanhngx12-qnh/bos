@@ -33,9 +33,13 @@ export class WorkflowsController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Lấy danh sách Quy trình' })
-  findAll() {
-    return this.workflowsService.findAll();
+  @ApiOperation({
+    summary: 'Lấy danh sách Quy trình (Đã lọc theo tầm nhìn phân quyền)',
+  })
+  findAll(@Request() req) {
+    // <-- CẬP NHẬT Ở ĐÂY ĐỂ ĐÓN REQ
+    const currentUser = req.user;
+    return this.workflowsService.findAll(currentUser); // Truyền thông tin user xuống Service
   }
 
   @Get(':id')
@@ -82,9 +86,6 @@ export class WorkflowsController {
     );
   }
 
-  // ==========================================
-  // API THỰC THI LUỒNG QUY TRÌNH (INSTANCES)
-  // ==========================================
   @Post('instances/start')
   @ApiOperation({
     summary: 'Khởi chạy luồng quy trình cho 1 bản ghi (Trình ký phiếu)',

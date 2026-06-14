@@ -6,6 +6,7 @@ import {
   IsString,
   IsOptional,
   Length,
+  IsObject,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 
@@ -32,4 +33,13 @@ export class CreateWorkflowDto {
   @IsString()
   @IsOptional()
   description?: string;
+
+  // THUỘC TÍNH MỚI: Khai báo để tránh bị Whitelist Pipe của NestJS gạt bỏ khi PATCH
+  @ApiPropertyOptional({
+    description: 'Cấu hình phân quyền tầm nhìn',
+    example: { allowAll: false, allowedDepartments: [1] },
+  })
+  @IsObject()
+  @IsOptional()
+  visibility?: Record<string, any>;
 }
