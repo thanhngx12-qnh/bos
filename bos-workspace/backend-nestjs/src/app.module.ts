@@ -19,7 +19,8 @@ import { WorkflowStepsModule } from './modules/workflow-steps/workflow-steps.mod
 import { PrintTemplatesModule } from './modules/print-templates/print-templates.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { TenantMiddleware } from './prisma/tenant.middleware';
-import { RedisModule } from './modules/redis/redis.module'; // <-- IMPORT REDIS MODULE
+import { RedisModule } from './modules/redis/redis.module';
+import { AttachmentsModule } from './modules/attachments/attachments.module'; // <-- IMPORT MỚI
 
 @Module({
   imports: [
@@ -35,7 +36,8 @@ import { RedisModule } from './modules/redis/redis.module'; // <-- IMPORT REDIS 
     WorkflowStepsModule,
     PrintTemplatesModule,
     AnalyticsModule,
-    RedisModule, // <-- KÍCH HOẠT REDIS MODULE TOÀN CỤC
+    RedisModule,
+    AttachmentsModule, // <-- KÍCH HOẠT ATTACHMENTS MODULE
   ],
   providers: [
     {

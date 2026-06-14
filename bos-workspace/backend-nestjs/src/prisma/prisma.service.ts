@@ -23,7 +23,14 @@ export class PrismaService
       query: {
         $allModels: {
           async $allOperations({ model, operation, args, query }) {
-            const tenantModels = ['User', 'Entity', 'Record', 'Workflow'];
+            // Sửa mảng này trong src/prisma/prisma.service.ts
+            const tenantModels = [
+              'User',
+              'Entity',
+              'Record',
+              'Workflow',
+              'Attachment',
+            ]; // <-- THÊM 'Attachment' VÀO ĐÂY
 
             if (tenantModels.includes(model)) {
               const store = tenantContext.getStore();

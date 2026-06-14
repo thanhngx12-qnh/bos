@@ -18,10 +18,11 @@ model Tenant {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  users     User[]
-  entities  Entity[]
-  records   Record[]
-  workflows Workflow[]
+  users       User[]
+  entities    Entity[]
+  records     Record[]
+  workflows   Workflow[]
+  attachments Attachment[] // Quan hệ với bảng lưu tệp đính kèm
 
   @@map("tenants")
 }
@@ -48,7 +49,7 @@ model User {
   instances    WorkflowInstance[]
   workflowLogs WorkflowLog[]
   participations WorkflowParticipant[]
-  recordRevisions RecordRevision[] // Quan hệ với bảng lưu lịch sử sửa biểu mẫu
+  recordRevisions RecordRevision[] // Quan hệ với lịch sử chỉnh sửa biểu mẫu
 
   @@map("users")
 }
@@ -123,7 +124,7 @@ model PrintTemplate {
   id          Int      @id @default(autoincrement())
   entityId    Int      @map("entity_id")
   name        String
-  template    Json     // Lưu cấu trúc layout mẫu in (HTML/JSON)
+  template    Json
   createdAt   DateTime @default(now()) @map("created_at")
   
   entity      Entity   @relation(fields: [entityId], references: [id])
@@ -147,17 +148,18 @@ model Record {
   tenant      Tenant?  @relation(fields: [tenantId], references: [id])
   instances   WorkflowInstance[]
   revisions   RecordRevision[] // Quan hệ với bảng lưu lịch sử sửa
+  attachments Attachment[] // Quan hệ với tệp đính kèm của biểu mẫu
 
   @@index([entityId])
   @@map("records")
 }
 
-// BẢNG MỚI: LƯU VẾT LỊCH SỬ CHỈNH SỬA BẢN GHI (AUDIT TRAIL)
+// BẢNG LƯU VẾT LỊCH SỬ CHỈNH SỬA BẢN GHI (AUDIT TRAIL)
 model RecordRevision {
   id          Int      @id @default(autoincrement())
   recordId    Int      @map("record_id")
-  userId      Int      @map("user_id") // Người thực hiện sửa
-  patchData   Json     @map("patch_data") // Dữ liệu chứa các trường bị thay đổi { fieldCode: { old: value, new: value } }
+  userId      Int      @map("user_id")
+  patchData   Json     @map("patch_data")
   createdAt   DateTime @default(now()) @map("created_at")
 
   record      Record   @relation(fields: [recordId], references: [id], onDelete: Cascade)
@@ -165,6 +167,23 @@ model RecordRevision {
 
   @@index([recordId])
   @@map("record_revisions")
+}
+
+// BẢNG MỚI: QUẢN LÝ TỆP TIN ĐÍNH KÈM (ATTACHMENTS)
+model Attachment {
+  id          Int      @id @default(autoincrement())
+  recordId    Int?     @map("record_id") // Có thể null nếu là file tĩnh hướng dẫn
+  tenantId    Int?     @map("tenant_id") // SaaS Isolation
+  fileName    String   @map("file_name") // Tên file gốc (VD: "invoice.pdf")
+  s3Key       String   @unique @map("s3_key") // S3 Key (VD: "tenant_1/uuid_invoice.pdf")
+  mimeType    String   @map("mime_type") // MIME Type (VD: "application/pdf")
+  fileSize    Int      @map("file_size") // Dung lượng file tính bằng bytes
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  record      Record?  @relation(fields: [recordId], references: [id], onDelete: Cascade)
+  tenant      Tenant?  @relation(fields: [tenantId], references: [id])
+
+  @@map("attachments")
 }
 
 // ==========================================
