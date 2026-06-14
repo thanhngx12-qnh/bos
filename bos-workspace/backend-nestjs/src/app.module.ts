@@ -8,7 +8,8 @@ import { UsersModule } from './modules/users/users.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { EntitiesModule } from './modules/entities/entities.module';
 import { FieldsModule } from './modules/fields/fields.module';
-import { RecordsModule } from './modules/records/records.module'; // <-- Import mới
+import { RecordsModule } from './modules/records/records.module';
+import { WorkflowsModule } from './modules/workflows/workflows.module'; // <-- Import mới
 
 @Module({
   imports: [
@@ -19,7 +20,8 @@ import { RecordsModule } from './modules/records/records.module'; // <-- Import 
     AuthModule,
     EntitiesModule,
     FieldsModule,
-    RecordsModule, // <-- Kích hoạt module
+    RecordsModule,
+    WorkflowsModule, // <-- Kích hoạt module
   ],
   providers: [
     {
