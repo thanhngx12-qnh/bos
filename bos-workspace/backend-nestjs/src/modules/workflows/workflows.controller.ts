@@ -6,14 +6,17 @@ import {
   Body,
   Patch,
   Param,
+  Delete,
   ParseIntPipe,
   UseGuards,
-  Delete,
+  Request,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { WorkflowsService } from './workflows.service';
 import { CreateWorkflowDto } from './dto/create-workflow.dto';
 import { UpdateWorkflowDto } from './dto/update-workflow.dto';
+import { CreateInstanceDto } from './dto/create-instance.dto';
+import { WorkflowActionDto } from './dto/workflow-action.dto';
 import { JwtAuthGuard } from '../../core/guards/jwt-auth.guard';
 
 @ApiTags('Workflow Engine (Cỗ máy Quy trình)')
@@ -24,9 +27,7 @@ export class WorkflowsController {
   constructor(private readonly workflowsService: WorkflowsService) {}
 
   @Post()
-  @ApiOperation({
-    summary: 'Tạo mới một Quy trình (Tự động sinh Version 1 - DRAFT)',
-  })
+  @ApiOperation({ summary: 'Tạo mới một Quy trình' })
   create(@Body() dto: CreateWorkflowDto) {
     return this.workflowsService.create(dto);
   }
@@ -52,11 +53,14 @@ export class WorkflowsController {
     return this.workflowsService.update(id, dto);
   }
 
-  // --- API QUẢN LÝ VERSION ---
+  @Delete(':id')
+  @ApiOperation({ summary: 'Xóa Quy trình' })
+  remove(@Param('id', ParseIntPipe) id: number) {
+    return this.workflowsService.remove(id);
+  }
+
   @Post(':id/versions/:versionId/clone')
-  @ApiOperation({
-    summary: 'Nhân bản một Version thành Version mới (VD: V1 -> V2)',
-  })
+  @ApiOperation({ summary: 'Nhân bản một Version thành Version mới' })
   cloneVersion(
     @Param('id', ParseIntPipe) workflowId: number,
     @Param('versionId', ParseIntPipe) versionId: number,
@@ -65,9 +69,7 @@ export class WorkflowsController {
   }
 
   @Patch(':id/versions/:versionId/status')
-  @ApiOperation({
-    summary: 'Cập nhật trạng thái Version (PUBLISHED / ARCHIVED)',
-  })
+  @ApiOperation({ summary: 'Cập nhật trạng thái Version' })
   updateVersionStatus(
     @Param('id', ParseIntPipe) workflowId: number,
     @Param('versionId', ParseIntPipe) versionId: number,
@@ -80,11 +82,32 @@ export class WorkflowsController {
     );
   }
 
-  @Delete(':id')
+  // ==========================================
+  // API THỰC THI LUỒNG QUY TRÌNH (INSTANCES)
+  // ==========================================
+  @Post('instances/start')
   @ApiOperation({
-    summary: 'Xóa Quy trình (Chỉ xóa được khi chưa có phiếu chạy)',
+    summary: 'Khởi chạy luồng quy trình cho 1 bản ghi (Trình ký phiếu)',
   })
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.workflowsService.remove(id);
+  startInstance(@Request() req, @Body() dto: CreateInstanceDto) {
+    const userId = req.user.userId;
+    return this.workflowsService.startInstance(userId, dto);
+  }
+
+  @Post('instances/:id/action')
+  @ApiOperation({ summary: 'Thực hiện Phê duyệt hoặc Từ chối phiếu' })
+  handleAction(
+    @Request() req,
+    @Param('id', ParseIntPipe) instanceId: number,
+    @Body() dto: WorkflowActionDto,
+  ) {
+    const userId = req.user.userId;
+    return this.workflowsService.handleAction(instanceId, userId, dto);
+  }
+
+  @Get('instances/:id/logs')
+  @ApiOperation({ summary: 'Lấy lịch sử Audit Log phê duyệt của lượt chạy' })
+  getInstanceLogs(@Param('id', ParseIntPipe) instanceId: number) {
+    return this.workflowsService.getInstanceLogs(instanceId);
   }
 }
