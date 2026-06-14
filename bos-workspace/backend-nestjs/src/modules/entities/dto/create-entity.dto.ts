@@ -36,4 +36,13 @@ export class CreateEntityDto {
   @IsString()
   @IsOptional()
   description?: string;
+
+  // THUỘC TÍNH MỚI: Cho phép Admin cấu hình mẫu tự sinh mã khi tạo/sửa Biểu mẫu
+  @ApiPropertyOptional({
+    description: 'Mẫu tự sinh mã nghiệp vụ (Hỗ trợ cấu hình dạng SEQ)',
+    example: 'QTMS-{SEQ:4}', // QTMS-0001, QTMS-0002...
+  })
+  @IsString()
+  @IsOptional()
+  autoCodePattern?: string;
 }

@@ -51,7 +51,11 @@ export class EntitiesService {
 
     return this.prisma.entity.update({
       where: { id },
-      data: { name: dto.name, description: dto.description },
+      data: {
+        name: dto.name,
+        description: dto.description,
+        autoCodePattern: dto.autoCodePattern, // <-- BỔ SUNG TRƯỜNG NÀY ĐỂ SỬA LỖI TRUYỀN PAYLOAD
+      },
     });
   }
 

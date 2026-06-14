@@ -19,6 +19,7 @@ model User {
   departmentId Int?       @map("department_id")
   roleId       Int?       @map("role_id")
   status       String     @default("ACTIVE")
+  userType     String     @default("INTERNAL") @map("user_type") // INTERNAL (Nhân sự), EXTERNAL (Khách hàng)
   createdAt    DateTime   @default(now()) @map("created_at")
   updatedAt    DateTime   @updatedAt @map("updated_at")
 
@@ -61,12 +62,13 @@ model Role {
 // BLOCK 2: METADATA ENGINE & PRINT TEMPLATES
 // ==========================================
 model Entity {
-  id          Int      @id @default(autoincrement())
-  name        String
-  code        String   @unique
-  description String?
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id              Int      @id @default(autoincrement())
+  name            String
+  code            String   @unique
+  description     String?
+  autoCodePattern String?  @map("auto_code_pattern") // Mẫu tự sinh mã, VD: "QTMS-{SEQ:4}"
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
 
   fields         FieldDefinition[]
   records        Record[]
@@ -111,6 +113,7 @@ model PrintTemplate {
 model Record {
   id          Int      @id @default(autoincrement())
   entityId    Int      @map("entity_id")
+  recordCode  String?  @unique @map("record_code") // Mã tự sinh nghiệp vụ thực tế, VD: "QTMS-0001"
   data        Json     @default("{}")
   createdBy   Int      @map("created_by")
   createdAt   DateTime @default(now()) @map("created_at")
@@ -119,7 +122,7 @@ model Record {
   entity      Entity   @relation(fields: [entityId], references: [id])
   instances   WorkflowInstance[]
 
-  @@index([entityId]) // Thêm Index để tối ưu truy vấn hàng triệu bản ghi
+  @@index([entityId])
   @@map("records")
 }
 
@@ -131,6 +134,7 @@ model Workflow {
   entityId    Int      @map("entity_id")
   name        String
   description String?
+  visibility  Json     @default("{}") // Phân quyền tầm nhìn: { "allowAll": true, "allowedDepartments": [1] }
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 

@@ -125,7 +125,9 @@ export class PrintTemplatesService {
         code: record.entity.code,
       },
       record: {
-        id: record.id,
+        // ĐỔI MỚI THÔNG MINH: Nếu bản ghi có mã tự sinh (recordCode), ưu tiên hiển thị mã đó lên giấy in,
+        // ngược lại mới hiển thị số ID thô (ví dụ: #1) để đảm bảo tính nhất quán nghiệp vụ
+        id: record.recordCode ? record.recordCode : `#${record.id}`,
         date: new Date(record.createdAt).toLocaleDateString('vi-VN'),
       },
       data: record.data,

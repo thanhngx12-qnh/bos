@@ -18,6 +18,16 @@ export class RecordsService {
     private readonly formulaEngine: FormulaEngineService, // <-- INJECT ĐỘNG CƠ CÔNG THỨC MỚI
   ) {}
 
+  // --- THUẬT TOÁN BIÊN DỊCH MẪU TỰ SINH MÃ (AUTO-CODE GENERATOR) ---
+  // Hỗ trợ tự động parse chuỗi cấu hình dạng: "PREFIX-{SEQ:X}-SUFFIX"
+  private generateRecordCode(pattern: string, count: number): string {
+    const regex = /\{SEQ:(\d+)\}/g;
+    return pattern.replace(regex, (match, length) => {
+      const padLength = parseInt(length, 10);
+      return String(count).padStart(padLength, '0'); // Điền đầy các số 0 ở trước (padding)
+    });
+  }
+
   async create(userId: number, dto: CreateRecordDto) {
     const entity = await this.prisma.entity.findUnique({
       where: { id: dto.entityId },
@@ -36,9 +46,23 @@ export class RecordsService {
     // Bước 2: Gọi Động cơ Công thức để tự động tính toán các trường FORMULA dựa trên cleanData
     const finalData = this.formulaEngine.calculate(entity.fields, cleanData);
 
+    // Bước 3: Tự sinh mã nghiệp vụ (recordCode) dựa trên mẫu autoCodePattern của Biểu mẫu
+    let recordCode: string | null = null;
+    if (entity.autoCodePattern) {
+      const recordCount = await this.prisma.record.count({
+        where: { entityId: entity.id },
+      });
+      // Số thứ tự thực tế = Tổng số lượng bản ghi của biểu mẫu này + 1
+      recordCode = this.generateRecordCode(
+        entity.autoCodePattern,
+        recordCount + 1,
+      );
+    }
+
     return this.prisma.record.create({
       data: {
         entityId: dto.entityId,
+        recordCode, // Lưu mã tự sinh nghiệp vụ (Ví dụ: QTMS-0001)
         data: finalData as any, // Lưu dữ liệu đã được tính toán công thức chuẩn xác
         createdBy: userId,
       },
