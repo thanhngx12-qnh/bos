@@ -7,13 +7,15 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateRecordDto } from './dto/create-record.dto';
 import { UpdateRecordDto } from './dto/update-record.dto';
-import { DynamicValidationService } from './dynamic-validation.service'; // <-- KÍCH HOẠT ĐỘNG CƠ MỚI
+import { DynamicValidationService } from './dynamic-validation.service'; // <-- KÍCH HOẠT ĐỘNG CƠ VALIDATE MỚI
+import { FormulaEngineService } from './formula-engine.service'; // <-- KÍCH HOẠT ĐỘNG CƠ CÔNG THỨC MỚI
 
 @Injectable()
 export class RecordsService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly dynamicValidator: DynamicValidationService, // <-- INJECT ĐỘNG CƠ VÀO ĐÂY
+    private readonly dynamicValidator: DynamicValidationService, // <-- INJECT ĐỘNG CƠ VALIDATE
+    private readonly formulaEngine: FormulaEngineService, // <-- INJECT ĐỘNG CƠ CÔNG THỨC MỚI
   ) {}
 
   async create(userId: number, dto: CreateRecordDto) {
@@ -25,16 +27,19 @@ export class RecordsService {
     if (!entity)
       throw new NotFoundException('Không tìm thấy Biểu mẫu (Entity).');
 
-    // Gọi Động cơ Validate VIP PRO xử lý dữ liệu
+    // Bước 1: Gọi Động cơ Validate VIP PRO xử lý và làm sạch dữ liệu
     const cleanData = this.dynamicValidator.validateAndSanitize(
       entity.fields,
       dto.data,
     );
 
+    // Bước 2: Gọi Động cơ Công thức để tự động tính toán các trường FORMULA dựa trên cleanData
+    const finalData = this.formulaEngine.calculate(entity.fields, cleanData);
+
     return this.prisma.record.create({
       data: {
         entityId: dto.entityId,
-        data: cleanData as any, // Tránh lỗi TypeScript JsonValue
+        data: finalData as any, // Lưu dữ liệu đã được tính toán công thức chuẩn xác
         createdBy: userId,
       },
     });
@@ -78,11 +83,14 @@ export class RecordsService {
       // Gộp data cũ và mới để validate lại toàn bộ
       const mergedData = { ...(currentRecord.data as object), ...dto.data };
 
-      // Gọi Động cơ Validate VIP PRO
-      dataToSave = this.dynamicValidator.validateAndSanitize(
+      // Bước 1: Validate & Làm sạch dữ liệu gộp
+      const cleanData = this.dynamicValidator.validateAndSanitize(
         entity.fields,
         mergedData,
       );
+
+      // Bước 2: Tính toán lại các công thức dựa trên dữ liệu mới gộp sạch
+      dataToSave = this.formulaEngine.calculate(entity.fields, cleanData);
     }
 
     return this.prisma.record.update({
