@@ -8,10 +8,26 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateFieldDto } from './dto/create-field.dto';
 import { UpdateFieldDto } from './dto/update-field.dto';
+import { RedisService } from '../redis/redis.service'; // <-- IMPORT REDIS
+import { tenantContext } from '../../prisma/tenant-context'; // <-- IMPORT CONTEXT
 
 @Injectable()
 export class FieldsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly redis: RedisService, // <-- INJECT REDIS SERVICE
+  ) {}
+
+  // --- HÀM TRỢ GIÚP: XÓA SẠCH CACHE CỦA ENTITY CHA KHI TRƯỜNG THAY ĐỔI ---
+  private async invalidateEntityCache(entityId: number) {
+    const store = tenantContext.getStore();
+    const tenantId = store?.tenantId || 0;
+    const cacheKey = `tenant:${tenantId}:entity:${entityId}`;
+    await this.redis.del(cacheKey);
+    console.log(
+      `[REDIS CACHE INVALIDATE] Da xoa Cache cho Entity ID ${entityId} vi danh sach Fields (Truong) co thay doi.`,
+    );
+  }
 
   async create(dto: CreateFieldDto) {
     // 1. Check Entity tồn tại
@@ -43,7 +59,7 @@ export class FieldsService {
       finalOrderIndex = lastField ? lastField.orderIndex + 1 : 1;
     }
 
-    return this.prisma.fieldDefinition.create({
+    const newField = await this.prisma.fieldDefinition.create({
       data: {
         entityId: dto.entityId,
         name: dto.name,
@@ -54,6 +70,11 @@ export class FieldsService {
         orderIndex: finalOrderIndex,
       },
     });
+
+    // KÍCH HOẠT XÓA CACHE ENTITY CHA
+    await this.invalidateEntityCache(dto.entityId);
+
+    return newField;
   }
 
   async findAllByEntity(entityId: number) {
@@ -72,9 +93,9 @@ export class FieldsService {
   }
 
   async update(id: number, dto: UpdateFieldDto) {
-    await this.findOne(id); // Check tồn tại
+    const current = await this.findOne(id); // Check tồn tại
 
-    return this.prisma.fieldDefinition.update({
+    const updatedField = await this.prisma.fieldDefinition.update({
       where: { id },
       data: {
         name: dto.name,
@@ -84,6 +105,11 @@ export class FieldsService {
         orderIndex: dto.orderIndex,
       },
     });
+
+    // KÍCH HOẠT XÓA CACHE ENTITY CHA
+    await this.invalidateEntityCache(updatedField.entityId);
+
+    return updatedField;
   }
 
   async remove(id: number) {
@@ -99,6 +125,13 @@ export class FieldsService {
       );
     }
 
-    return this.prisma.fieldDefinition.delete({ where: { id } });
+    const deletedField = await this.prisma.fieldDefinition.delete({
+      where: { id },
+    });
+
+    // KÍCH HOẠT XÓA CACHE ENTITY CHA
+    await this.invalidateEntityCache(deletedField.entityId);
+
+    return deletedField;
   }
 }
