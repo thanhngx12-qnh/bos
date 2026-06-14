@@ -4,7 +4,7 @@ import {
   ValidationPipe,
   NestModule,
   MiddlewareConsumer,
-} from '@nestjs/common'; // Thêm NestModule, MiddlewareConsumer
+} from '@nestjs/common';
 import { APP_PIPE } from '@nestjs/core';
 import { PrismaModule } from './prisma/prisma.module';
 import { OrganizationsModule } from './modules/organizations/organizations.module';
@@ -18,7 +18,8 @@ import { WorkflowsModule } from './modules/workflows/workflows.module';
 import { WorkflowStepsModule } from './modules/workflow-steps/workflow-steps.module';
 import { PrintTemplatesModule } from './modules/print-templates/print-templates.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
-import { TenantMiddleware } from './prisma/tenant.middleware'; // <-- IMPORT MIDDLEWARE
+import { TenantMiddleware } from './prisma/tenant.middleware';
+import { RedisModule } from './modules/redis/redis.module'; // <-- IMPORT REDIS MODULE
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { TenantMiddleware } from './prisma/tenant.middleware'; // <-- IMPORT MID
     WorkflowStepsModule,
     PrintTemplatesModule,
     AnalyticsModule,
+    RedisModule, // <-- KÍCH HOẠT REDIS MODULE TOÀN CỤC
   ],
   providers: [
     {
@@ -43,7 +45,6 @@ import { TenantMiddleware } from './prisma/tenant.middleware'; // <-- IMPORT MID
   ],
 })
 export class AppModule implements NestModule {
-  // Đăng ký Middleware áp dụng toàn cục cho tất cả API
   configure(consumer: MiddlewareConsumer) {
     consumer.apply(TenantMiddleware).forRoutes('*');
   }
