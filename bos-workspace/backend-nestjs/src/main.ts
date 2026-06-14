@@ -4,6 +4,8 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import * as fs from 'fs'; // <-- IMPORT THƯ VIỆN GHI FILE CỦA NODE.JS
+import * as path from 'path'; // <-- IMPORT THƯ VIỆN ĐƯỜNG DẪN CỦA NODE.JS
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -26,6 +28,13 @@ async function bootstrap() {
 
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api-docs', app, document); // Đường dẫn truy cập Swagger
+
+  // TỰ ĐỘNG XUẤT FILE OPENAPI SPEC KHI RUN DEV (Để đồng bộ Types cho Frontend)
+  if (process.env.NODE_ENV !== 'production') {
+    const outputPath = path.resolve(process.cwd(), 'openapi-spec.json');
+    fs.writeFileSync(outputPath, JSON.stringify(document, null, 2), 'utf-8');
+    console.log(`📝 [OPENAPI SPEC] Da tu dong xuat file tai: ${outputPath}`);
+  }
 
   // 4. Kích hoạt CORS cho Frontend
   app.enableCors();

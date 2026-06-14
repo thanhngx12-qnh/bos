@@ -1,0 +1,2406 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/api/v1/departments": {
+      "post": {
+        "operationId": "DepartmentsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDepartmentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Tạo mới phòng ban",
+        "tags": [
+          "Departments (Cơ cấu tổ chức)"
+        ]
+      }
+    },
+    "/api/v1/departments/tree": {
+      "get": {
+        "operationId": "DepartmentsController_getTree",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lấy toàn bộ sơ đồ tổ chức (Dạng Cây)",
+        "tags": [
+          "Departments (Cơ cấu tổ chức)"
+        ]
+      }
+    },
+    "/api/v1/departments/{id}": {
+      "get": {
+        "operationId": "DepartmentsController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lấy thông tin 1 phòng ban",
+        "tags": [
+          "Departments (Cơ cấu tổ chức)"
+        ]
+      },
+      "patch": {
+        "operationId": "DepartmentsController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateDepartmentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cập nhật phòng ban",
+        "tags": [
+          "Departments (Cơ cấu tổ chức)"
+        ]
+      },
+      "delete": {
+        "operationId": "DepartmentsController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Xóa phòng ban",
+        "tags": [
+          "Departments (Cơ cấu tổ chức)"
+        ]
+      }
+    },
+    "/api/v1/roles": {
+      "post": {
+        "operationId": "RolesController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRoleDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Tạo vai trò mới",
+        "tags": [
+          "Roles (Vai trò & Phân quyền)"
+        ]
+      },
+      "get": {
+        "operationId": "RolesController_findAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lấy danh sách vai trò",
+        "tags": [
+          "Roles (Vai trò & Phân quyền)"
+        ]
+      }
+    },
+    "/api/v1/roles/{id}": {
+      "get": {
+        "operationId": "RolesController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lấy thông tin 1 vai trò",
+        "tags": [
+          "Roles (Vai trò & Phân quyền)"
+        ]
+      },
+      "patch": {
+        "operationId": "RolesController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateRoleDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cập nhật vai trò",
+        "tags": [
+          "Roles (Vai trò & Phân quyền)"
+        ]
+      },
+      "delete": {
+        "operationId": "RolesController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Xóa vai trò",
+        "tags": [
+          "Roles (Vai trò & Phân quyền)"
+        ]
+      }
+    },
+    "/api/v1/users": {
+      "post": {
+        "operationId": "UsersController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUserDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Tạo tài khoản người dùng",
+        "tags": [
+          "Users (Người dùng)"
+        ]
+      },
+      "get": {
+        "operationId": "UsersController_findAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lấy danh sách người dùng",
+        "tags": [
+          "Users (Người dùng)"
+        ]
+      }
+    },
+    "/api/v1/users/{id}": {
+      "get": {
+        "operationId": "UsersController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lấy chi tiết 1 người dùng",
+        "tags": [
+          "Users (Người dùng)"
+        ]
+      },
+      "patch": {
+        "operationId": "UsersController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cập nhật thông tin",
+        "tags": [
+          "Users (Người dùng)"
+        ]
+      },
+      "delete": {
+        "operationId": "UsersController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Xóa tài khoản",
+        "tags": [
+          "Users (Người dùng)"
+        ]
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "operationId": "AuthController_login",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Trả về JWT Token"
+          },
+          "401": {
+            "description": "Sai tài khoản hoặc mật khẩu"
+          }
+        },
+        "summary": "Đăng nhập vào hệ thống",
+        "tags": [
+          "Auth (Xác thực)"
+        ]
+      }
+    },
+    "/api/v1/entities": {
+      "post": {
+        "operationId": "EntitiesController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateEntityDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Tạo Entity mới (VD: Phiếu xin nghỉ)",
+        "tags": [
+          "Metadata - Entities (Thực thể / Biểu mẫu)"
+        ]
+      },
+      "get": {
+        "operationId": "EntitiesController_findAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lấy danh sách các Entities",
+        "tags": [
+          "Metadata - Entities (Thực thể / Biểu mẫu)"
+        ]
+      }
+    },
+    "/api/v1/entities/{id}": {
+      "get": {
+        "operationId": "EntitiesController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lấy chi tiết Entity kèm danh sách các trường (Fields)",
+        "tags": [
+          "Metadata - Entities (Thực thể / Biểu mẫu)"
+        ]
+      },
+      "patch": {
+        "operationId": "EntitiesController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateEntityDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cập nhật thông tin Entity",
+        "tags": [
+          "Metadata - Entities (Thực thể / Biểu mẫu)"
+        ]
+      },
+      "delete": {
+        "operationId": "EntitiesController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Xóa Entity",
+        "tags": [
+          "Metadata - Entities (Thực thể / Biểu mẫu)"
+        ]
+      }
+    },
+    "/api/v1/fields": {
+      "post": {
+        "operationId": "FieldsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateFieldDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Tạo trường dữ liệu mới vào Entity",
+        "tags": [
+          "Metadata - Fields (Trường dữ liệu)"
+        ]
+      },
+      "get": {
+        "operationId": "FieldsController_findAllByEntity",
+        "parameters": [
+          {
+            "name": "entityId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lấy danh sách các trường dữ liệu của 1 Entity",
+        "tags": [
+          "Metadata - Fields (Trường dữ liệu)"
+        ]
+      }
+    },
+    "/api/v1/fields/{id}": {
+      "get": {
+        "operationId": "FieldsController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lấy chi tiết 1 trường dữ liệu",
+        "tags": [
+          "Metadata - Fields (Trường dữ liệu)"
+        ]
+      },
+      "patch": {
+        "operationId": "FieldsController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateFieldDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cập nhật trường dữ liệu",
+        "tags": [
+          "Metadata - Fields (Trường dữ liệu)"
+        ]
+      },
+      "delete": {
+        "operationId": "FieldsController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Xóa trường dữ liệu",
+        "tags": [
+          "Metadata - Fields (Trường dữ liệu)"
+        ]
+      }
+    },
+    "/api/v1/records": {
+      "post": {
+        "operationId": "RecordsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRecordDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Thêm mới một bản ghi (Submit Form)",
+        "tags": [
+          "Metadata - Records (Dữ liệu bản ghi)"
+        ]
+      },
+      "get": {
+        "operationId": "RecordsController_findAllByEntity",
+        "parameters": [
+          {
+            "name": "entityId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lấy danh sách các bản ghi của 1 Biểu mẫu",
+        "tags": [
+          "Metadata - Records (Dữ liệu bản ghi)"
+        ]
+      }
+    },
+    "/api/v1/records/{id}": {
+      "get": {
+        "operationId": "RecordsController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lấy chi tiết 1 bản ghi",
+        "tags": [
+          "Metadata - Records (Dữ liệu bản ghi)"
+        ]
+      },
+      "patch": {
+        "operationId": "RecordsController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateRecordDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cập nhật nội dung bản ghi (Tự động ghi Log Lịch sử)",
+        "tags": [
+          "Metadata - Records (Dữ liệu bản ghi)"
+        ]
+      },
+      "delete": {
+        "operationId": "RecordsController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Xóa bản ghi",
+        "tags": [
+          "Metadata - Records (Dữ liệu bản ghi)"
+        ]
+      }
+    },
+    "/api/v1/records/{id}/revisions": {
+      "get": {
+        "operationId": "RecordsController_getRevisions",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lấy lịch sử các lần chỉnh sửa dữ liệu (Audit Trail)",
+        "tags": [
+          "Metadata - Records (Dữ liệu bản ghi)"
+        ]
+      }
+    },
+    "/api/v1/workflows": {
+      "post": {
+        "operationId": "WorkflowsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateWorkflowDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Tạo mới một Quy trình",
+        "tags": [
+          "Workflow Engine (Cỗ máy Quy trình)"
+        ]
+      },
+      "get": {
+        "operationId": "WorkflowsController_findAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lấy danh sách Quy trình (Đã lọc theo tầm nhìn phân quyền)",
+        "tags": [
+          "Workflow Engine (Cỗ máy Quy trình)"
+        ]
+      }
+    },
+    "/api/v1/workflows/{id}": {
+      "get": {
+        "operationId": "WorkflowsController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lấy chi tiết Quy trình kèm các Phiên bản",
+        "tags": [
+          "Workflow Engine (Cỗ máy Quy trình)"
+        ]
+      },
+      "patch": {
+        "operationId": "WorkflowsController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateWorkflowDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cập nhật tên/mô tả Quy trình",
+        "tags": [
+          "Workflow Engine (Cỗ máy Quy trình)"
+        ]
+      },
+      "delete": {
+        "operationId": "WorkflowsController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Xóa Quy trình",
+        "tags": [
+          "Workflow Engine (Cỗ máy Quy trình)"
+        ]
+      }
+    },
+    "/api/v1/workflows/{id}/versions/{versionId}/clone": {
+      "post": {
+        "operationId": "WorkflowsController_cloneVersion",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "versionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Nhân bản một Version thành Version mới",
+        "tags": [
+          "Workflow Engine (Cỗ máy Quy trình)"
+        ]
+      }
+    },
+    "/api/v1/workflows/{id}/versions/{versionId}/status": {
+      "patch": {
+        "operationId": "WorkflowsController_updateVersionStatus",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "versionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cập nhật trạng thái Version",
+        "tags": [
+          "Workflow Engine (Cỗ máy Quy trình)"
+        ]
+      }
+    },
+    "/api/v1/workflows/instances/start": {
+      "post": {
+        "operationId": "WorkflowsController_startInstance",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateInstanceDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Khởi chạy luồng quy trình cho 1 bản ghi (Trình ký phiếu)",
+        "tags": [
+          "Workflow Engine (Cỗ máy Quy trình)"
+        ]
+      }
+    },
+    "/api/v1/workflows/instances/{id}/action": {
+      "post": {
+        "operationId": "WorkflowsController_handleAction",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowActionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Thực hiện Phê duyệt hoặc Từ chối phiếu",
+        "tags": [
+          "Workflow Engine (Cỗ máy Quy trình)"
+        ]
+      }
+    },
+    "/api/v1/workflows/instances/{id}/logs": {
+      "get": {
+        "operationId": "WorkflowsController_getInstanceLogs",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lấy lịch sử Audit Log phê duyệt của lượt chạy",
+        "tags": [
+          "Workflow Engine (Cỗ máy Quy trình)"
+        ]
+      }
+    },
+    "/api/v1/workflow-pipeline/steps": {
+      "post": {
+        "operationId": "WorkflowStepsController_createStep",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateStepDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Tạo bước duyệt mới vào Version DRAFT",
+        "tags": [
+          "Workflow Pipeline (Vẽ luồng quy trình)"
+        ]
+      }
+    },
+    "/api/v1/workflow-pipeline/steps/{id}": {
+      "patch": {
+        "operationId": "WorkflowStepsController_updateStep",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateStepDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cập nhật bước duyệt",
+        "tags": [
+          "Workflow Pipeline (Vẽ luồng quy trình)"
+        ]
+      },
+      "delete": {
+        "operationId": "WorkflowStepsController_removeStep",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Xóa bước duyệt",
+        "tags": [
+          "Workflow Pipeline (Vẽ luồng quy trình)"
+        ]
+      }
+    },
+    "/api/v1/workflow-pipeline/transitions": {
+      "post": {
+        "operationId": "WorkflowStepsController_createTransition",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTransitionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Tạo đường rẽ nhánh giữa 2 Bước",
+        "tags": [
+          "Workflow Pipeline (Vẽ luồng quy trình)"
+        ]
+      }
+    },
+    "/api/v1/workflow-pipeline/transitions/{id}": {
+      "patch": {
+        "operationId": "WorkflowStepsController_updateTransition",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTransitionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cập nhật logic rẽ nhánh",
+        "tags": [
+          "Workflow Pipeline (Vẽ luồng quy trình)"
+        ]
+      },
+      "delete": {
+        "operationId": "WorkflowStepsController_removeTransition",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Xóa đường rẽ nhánh",
+        "tags": [
+          "Workflow Pipeline (Vẽ luồng quy trình)"
+        ]
+      }
+    },
+    "/api/v1/workflow-pipeline/versions/{versionId}": {
+      "get": {
+        "operationId": "WorkflowStepsController_getPipeline",
+        "parameters": [
+          {
+            "name": "versionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lấy toàn bộ sơ đồ các bước và rẽ nhánh",
+        "tags": [
+          "Workflow Pipeline (Vẽ luồng quy trình)"
+        ]
+      }
+    },
+    "/api/v1/print-templates": {
+      "post": {
+        "operationId": "PrintTemplatesController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTemplateDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Tạo mới một mẫu in cho Biểu mẫu",
+        "tags": [
+          "Metadata - Print Templates (Mẫu in động)"
+        ]
+      }
+    },
+    "/api/v1/print-templates/{id}": {
+      "get": {
+        "operationId": "PrintTemplatesController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lấy chi tiết cấu hình mẫu in",
+        "tags": [
+          "Metadata - Print Templates (Mẫu in động)"
+        ]
+      },
+      "patch": {
+        "operationId": "PrintTemplatesController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTemplateDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cập nhật mẫu in",
+        "tags": [
+          "Metadata - Print Templates (Mẫu in động)"
+        ]
+      },
+      "delete": {
+        "operationId": "PrintTemplatesController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Xóa mẫu in",
+        "tags": [
+          "Metadata - Print Templates (Mẫu in động)"
+        ]
+      }
+    },
+    "/api/v1/print-templates/{id}/render/{recordId}": {
+      "get": {
+        "operationId": "PrintTemplatesController_renderTemplate",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "recordId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Biên dịch dữ liệu bản ghi vào Mẫu in ra mã HTML hoàn chỉnh",
+        "tags": [
+          "Metadata - Print Templates (Mẫu in động)"
+        ]
+      }
+    },
+    "/api/v1/analytics/entities-summary": {
+      "get": {
+        "operationId": "AnalyticsController_getEntitiesSummary",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Thống kê lượng bản ghi (phiếu) theo từng biểu mẫu",
+        "tags": [
+          "Macro Analytics (Báo cáo Thống kê Vĩ mô)"
+        ]
+      }
+    },
+    "/api/v1/analytics/workflows-summary": {
+      "get": {
+        "operationId": "AnalyticsController_getWorkflowsSummary",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Thống kê trạng thái phê duyệt của các quy trình",
+        "tags": [
+          "Macro Analytics (Báo cáo Thống kê Vĩ mô)"
+        ]
+      }
+    },
+    "/api/v1/analytics/spending-by-department": {
+      "get": {
+        "operationId": "AnalyticsController_getSpendingByDepartment",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Báo cáo vĩ mô: Thống kê tổng ngân sách đề xuất theo từng Phòng ban (Bóc tách JSONB)",
+        "tags": [
+          "Macro Analytics (Báo cáo Thống kê Vĩ mô)"
+        ]
+      }
+    },
+    "/api/v1/attachments/upload": {
+      "post": {
+        "operationId": "AttachmentsController_uploadFile",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "recordId": {
+                    "type": "number",
+                    "description": "ID của Bản ghi (Không bắt buộc)"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Tải tệp đính kèm lên Cloudflare R2 / S3",
+        "tags": [
+          "Metadata - Attachments (Quản lý tệp tin S3/MinIO)"
+        ]
+      }
+    },
+    "/api/v1/attachments/{id}/view": {
+      "get": {
+        "operationId": "AttachmentsController_getPresignedUrl",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lấy đường dẫn có chữ ký số (Presigned URL) có hiệu lực 15 phút",
+        "tags": [
+          "Metadata - Attachments (Quản lý tệp tin S3/MinIO)"
+        ]
+      }
+    },
+    "/api/v1/attachments/{id}": {
+      "delete": {
+        "operationId": "AttachmentsController_removeFile",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Xóa tệp tin",
+        "tags": [
+          "Metadata - Attachments (Quản lý tệp tin S3/MinIO)"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "BOS Core Engine API",
+    "description": "Tài liệu API cho Nền tảng Quản trị Doanh nghiệp (BOS v2.0)",
+    "version": "1.0",
+    "contact": {}
+  },
+  "tags": [],
+  "servers": [],
+  "components": {
+    "securitySchemes": {
+      "bearer": {
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "type": "http"
+      }
+    },
+    "schemas": {
+      "CreateDepartmentDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Tên phòng ban",
+            "example": "Phòng Kỹ thuật"
+          },
+          "parentId": {
+            "type": "number",
+            "description": "ID của phòng ban cha (nếu có)",
+            "example": 1
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "UpdateDepartmentDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Tên phòng ban",
+            "example": "Phòng Kỹ thuật"
+          },
+          "parentId": {
+            "type": "number",
+            "description": "ID của phòng ban cha (nếu có)",
+            "example": 1
+          }
+        }
+      },
+      "CreateRoleDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Tên vai trò",
+            "example": "System Admin"
+          },
+          "permissions": {
+            "type": "object",
+            "description": "Cấu hình quyền dạng JSON",
+            "example": {
+              "users": [
+                "CREATE",
+                "READ",
+                "UPDATE",
+                "DELETE"
+              ],
+              "workflows": [
+                "READ"
+              ]
+            }
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "UpdateRoleDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Tên vai trò",
+            "example": "System Admin"
+          },
+          "permissions": {
+            "type": "object",
+            "description": "Cấu hình quyền dạng JSON",
+            "example": {
+              "users": [
+                "CREATE",
+                "READ",
+                "UPDATE",
+                "DELETE"
+              ],
+              "workflows": [
+                "READ"
+              ]
+            }
+          }
+        }
+      },
+      "CreateUserDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "admin@bos.com",
+            "description": "Email đăng nhập"
+          },
+          "password": {
+            "type": "string",
+            "example": "Admin@123",
+            "description": "Mật khẩu (tối thiểu 6 ký tự)"
+          },
+          "fullName": {
+            "type": "string",
+            "example": "Nguyễn Văn Admin",
+            "description": "Họ và tên"
+          },
+          "departmentId": {
+            "type": "number",
+            "example": 1,
+            "description": "ID Phòng ban"
+          },
+          "roleId": {
+            "type": "number",
+            "example": 1,
+            "description": "ID Vai trò"
+          }
+        },
+        "required": [
+          "email",
+          "password",
+          "fullName"
+        ]
+      },
+      "UpdateUserDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "admin@bos.com",
+            "description": "Email đăng nhập"
+          },
+          "fullName": {
+            "type": "string",
+            "example": "Nguyễn Văn Admin",
+            "description": "Họ và tên"
+          },
+          "departmentId": {
+            "type": "number",
+            "example": 1,
+            "description": "ID Phòng ban"
+          },
+          "roleId": {
+            "type": "number",
+            "example": 1,
+            "description": "ID Vai trò"
+          }
+        }
+      },
+      "LoginDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "admin@bos.com",
+            "description": "Email đăng nhập"
+          },
+          "password": {
+            "type": "string",
+            "example": "Password@123",
+            "description": "Mật khẩu"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ]
+      },
+      "CreateEntityDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Tên hiển thị của Entity",
+            "example": "Phiếu đề xuất mua sắm"
+          },
+          "code": {
+            "type": "string",
+            "description": "Mã code duy nhất, viết hoa không dấu",
+            "example": "PURCHASE_REQUEST"
+          },
+          "description": {
+            "type": "string",
+            "description": "Mô tả chi tiết"
+          },
+          "autoCodePattern": {
+            "type": "string",
+            "description": "Mẫu tự sinh mã nghiệp vụ (Hỗ trợ cấu hình dạng SEQ)",
+            "example": "QTMS-{SEQ:4}"
+          }
+        },
+        "required": [
+          "name",
+          "code"
+        ]
+      },
+      "UpdateEntityDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Tên hiển thị của Entity",
+            "example": "Phiếu đề xuất mua sắm"
+          },
+          "code": {
+            "type": "string",
+            "description": "Mã code duy nhất, viết hoa không dấu",
+            "example": "PURCHASE_REQUEST"
+          },
+          "description": {
+            "type": "string",
+            "description": "Mô tả chi tiết"
+          },
+          "autoCodePattern": {
+            "type": "string",
+            "description": "Mẫu tự sinh mã nghiệp vụ (Hỗ trợ cấu hình dạng SEQ)",
+            "example": "QTMS-{SEQ:4}"
+          }
+        }
+      },
+      "CreateFieldDto": {
+        "type": "object",
+        "properties": {
+          "entityId": {
+            "type": "number",
+            "description": "ID của Entity (Biểu mẫu) chứa trường này",
+            "example": 1
+          },
+          "name": {
+            "type": "string",
+            "description": "Tên hiển thị",
+            "example": "Tổng tiền"
+          },
+          "code": {
+            "type": "string",
+            "description": "Mã trường (snake_case chữ thường)",
+            "example": "total_amount"
+          },
+          "type": {
+            "type": "string",
+            "description": "Loại trường dữ liệu (TEXT, NUMBER, DATE, SELECT, FORMULA...)",
+            "example": "NUMBER"
+          },
+          "isRequired": {
+            "type": "boolean",
+            "description": "Bắt buộc nhập hay không",
+            "default": false
+          },
+          "options": {
+            "type": "object",
+            "description": "Cấu hình JSON siêu chi tiết theo loại trường. Hỗ trợ requiredIf, showIf, min, max, regexPattern...",
+            "example": {
+              "placeholder": "Nhập số tiền...",
+              "min": 1000,
+              "requiredIf": {
+                "field": "category",
+                "operator": "==",
+                "value": "IT"
+              }
+            }
+          },
+          "orderIndex": {
+            "type": "number",
+            "description": "Thứ tự hiển thị trên giao diện",
+            "default": 0
+          }
+        },
+        "required": [
+          "entityId",
+          "name",
+          "code",
+          "type"
+        ]
+      },
+      "UpdateFieldDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Tên hiển thị",
+            "example": "Tổng tiền"
+          },
+          "type": {
+            "type": "string",
+            "description": "Loại trường dữ liệu (TEXT, NUMBER, DATE, SELECT, FORMULA...)",
+            "example": "NUMBER"
+          },
+          "isRequired": {
+            "type": "boolean",
+            "description": "Bắt buộc nhập hay không",
+            "default": false
+          },
+          "options": {
+            "type": "object",
+            "description": "Cấu hình JSON siêu chi tiết theo loại trường. Hỗ trợ requiredIf, showIf, min, max, regexPattern...",
+            "example": {
+              "placeholder": "Nhập số tiền...",
+              "min": 1000,
+              "requiredIf": {
+                "field": "category",
+                "operator": "==",
+                "value": "IT"
+              }
+            }
+          },
+          "orderIndex": {
+            "type": "number",
+            "description": "Thứ tự hiển thị trên giao diện",
+            "default": 0
+          }
+        }
+      },
+      "CreateRecordDto": {
+        "type": "object",
+        "properties": {
+          "entityId": {
+            "type": "number",
+            "description": "ID của Entity (Biểu mẫu)",
+            "example": 1
+          },
+          "data": {
+            "type": "object",
+            "description": "Dữ liệu thực tế người dùng nhập (JSON)",
+            "example": {
+              "reason": "Mua máy chiếu",
+              "total_amount": 15000000,
+              "category": "Thiết bị IT"
+            }
+          }
+        },
+        "required": [
+          "entityId",
+          "data"
+        ]
+      },
+      "UpdateRecordDto": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "description": "Dữ liệu cập nhật dạng JSON",
+            "example": {
+              "reason": "Mua Macbook Pro M3 Max cấu hình cao",
+              "total_amount": 50000000
+            }
+          }
+        }
+      },
+      "CreateWorkflowDto": {
+        "type": "object",
+        "properties": {
+          "entityId": {
+            "type": "number",
+            "description": "ID của Entity (Biểu mẫu) gắn với quy trình này",
+            "example": 1
+          },
+          "name": {
+            "type": "string",
+            "description": "Tên quy trình",
+            "example": "Quy trình xét duyệt mua sắm"
+          },
+          "description": {
+            "type": "string",
+            "description": "Mô tả chung"
+          },
+          "visibility": {
+            "type": "object",
+            "description": "Cấu hình phân quyền tầm nhìn",
+            "example": {
+              "allowAll": false,
+              "allowedDepartments": [
+                1
+              ]
+            }
+          }
+        },
+        "required": [
+          "entityId",
+          "name"
+        ]
+      },
+      "UpdateWorkflowDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Tên quy trình",
+            "example": "Quy trình xét duyệt mua sắm"
+          },
+          "description": {
+            "type": "string",
+            "description": "Mô tả chung"
+          },
+          "visibility": {
+            "type": "object",
+            "description": "Cấu hình phân quyền tầm nhìn",
+            "example": {
+              "allowAll": false,
+              "allowedDepartments": [
+                1
+              ]
+            }
+          }
+        }
+      },
+      "CreateInstanceDto": {
+        "type": "object",
+        "properties": {
+          "recordId": {
+            "type": "number",
+            "description": "ID của Bản ghi dữ liệu (Form đã submit)",
+            "example": 1
+          },
+          "versionId": {
+            "type": "number",
+            "description": "ID của Workflow Version muốn áp dụng",
+            "example": 2
+          }
+        },
+        "required": [
+          "recordId",
+          "versionId"
+        ]
+      },
+      "WorkflowActionDto": {
+        "type": "object",
+        "properties": {
+          "transitionId": {
+            "type": "number",
+            "description": "ID của đường nối (Nút bấm) mà người dùng chọn kích hoạt",
+            "example": 1
+          },
+          "comment": {
+            "type": "string",
+            "description": "Ý kiến phê duyệt",
+            "example": "Đồng ý chuyển tiếp hồ sơ."
+          },
+          "signatureData": {
+            "type": "string",
+            "description": "Mã chữ ký điện tử hoặc chuỗi nét vẽ Base64 (Nếu nút yêu cầu ký duyệt)",
+            "example": "SIGNED_BY_ADMIN_MD5_789abc"
+          }
+        },
+        "required": [
+          "transitionId"
+        ]
+      },
+      "CreateStepDto": {
+        "type": "object",
+        "properties": {
+          "versionId": {
+            "type": "number",
+            "description": "ID của Workflow Version",
+            "example": 2
+          },
+          "name": {
+            "type": "string",
+            "description": "Tên bước",
+            "example": "Trưởng phòng phê duyệt"
+          },
+          "stepType": {
+            "type": "string",
+            "description": "Loại bước (USER_TASK, SYSTEM_TASK)",
+            "default": "USER_TASK"
+          },
+          "permissions": {
+            "type": "object",
+            "description": "Quyền xem/sửa dữ liệu tại bước này (Step-level RBAC)",
+            "example": {
+              "total_amount": "READ",
+              "reason": "WRITE",
+              "note": "HIDDEN"
+            }
+          },
+          "orderIndex": {
+            "type": "number",
+            "description": "Thứ tự hiển thị trên sơ đồ",
+            "default": 0
+          }
+        },
+        "required": [
+          "versionId",
+          "name"
+        ]
+      },
+      "UpdateStepDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Tên bước",
+            "example": "Trưởng phòng phê duyệt"
+          },
+          "stepType": {
+            "type": "string",
+            "description": "Loại bước (USER_TASK, SYSTEM_TASK)",
+            "default": "USER_TASK"
+          },
+          "permissions": {
+            "type": "object",
+            "description": "Quyền xem/sửa dữ liệu tại bước này (Step-level RBAC)",
+            "example": {
+              "total_amount": "READ",
+              "reason": "WRITE",
+              "note": "HIDDEN"
+            }
+          },
+          "orderIndex": {
+            "type": "number",
+            "description": "Thứ tự hiển thị trên sơ đồ",
+            "default": 0
+          }
+        }
+      },
+      "CreateTransitionDto": {
+        "type": "object",
+        "properties": {
+          "fromStepId": {
+            "type": "number",
+            "description": "Từ Bước (ID)",
+            "example": 1
+          },
+          "toStepId": {
+            "type": "number",
+            "description": "Tới Bước (ID)",
+            "example": 2
+          },
+          "conditionLogic": {
+            "type": "object",
+            "description": "Logic rẽ nhánh (VD: total_amount > 20000000)",
+            "example": {
+              "field": "total_amount",
+              "operator": ">",
+              "value": 20000000
+            }
+          },
+          "autoSkip": {
+            "type": "boolean",
+            "description": "Có tự động bỏ qua nếu thỏa mãn logic không?",
+            "default": false
+          }
+        },
+        "required": [
+          "fromStepId",
+          "toStepId"
+        ]
+      },
+      "UpdateTransitionDto": {
+        "type": "object",
+        "properties": {
+          "conditionLogic": {
+            "type": "object",
+            "description": "Logic rẽ nhánh (VD: total_amount > 20000000)",
+            "example": {
+              "field": "total_amount",
+              "operator": ">",
+              "value": 20000000
+            }
+          },
+          "autoSkip": {
+            "type": "boolean",
+            "description": "Có tự động bỏ qua nếu thỏa mãn logic không?",
+            "default": false
+          }
+        }
+      },
+      "CreateTemplateDto": {
+        "type": "object",
+        "properties": {
+          "entityId": {
+            "type": "number",
+            "description": "ID của Entity (Biểu mẫu)",
+            "example": 1
+          },
+          "name": {
+            "type": "string",
+            "description": "Tên mẫu in",
+            "example": "Mẫu quyết định mua sắm trang thiết bị"
+          },
+          "template": {
+            "type": "object",
+            "description": "Cấu hình mẫu in chứa HTML (Lưu trong Json)",
+            "example": {
+              "html": "<h1>PHIẾU ĐỀ XUẤT MUA SẮM</h1><p>Lý do: {{data.reason}}</p>"
+            }
+          }
+        },
+        "required": [
+          "entityId",
+          "name",
+          "template"
+        ]
+      },
+      "UpdateTemplateDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Tên mẫu in",
+            "example": "Mẫu quyết định mua sắm trang thiết bị"
+          },
+          "template": {
+            "type": "object",
+            "description": "Cấu hình mẫu in chứa HTML (Lưu trong Json)",
+            "example": {
+              "html": "<h1>PHIẾU ĐỀ XUẤT MUA SẮM</h1><p>Lý do: {{data.reason}}</p>"
+            }
+          }
+        }
+      }
+    }
+  }
+}
