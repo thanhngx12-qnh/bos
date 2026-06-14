@@ -11,9 +11,12 @@ datasource db {
 // ==========================================
 // BLOCK 1: AUTH & ORGANIZATION (TỔ CHỨC & PHÂN QUYỀN)
 // ==========================================
+// File: bos-workspace/backend-nestjs/prisma/schema.prisma
+
 model User {
   id           Int        @id @default(autoincrement())
   email        String     @unique
+  password     String     // <-- TRƯỜNG MỚI ĐƯỢC THÊM VÀO ĐÂY
   fullName     String     @map("full_name")
   departmentId Int?       @map("department_id")
   roleId       Int?       @map("role_id")
@@ -23,7 +26,7 @@ model User {
 
   department   Department? @relation(fields: [departmentId], references: [id])
   role         Role?       @relation(fields: [roleId], references: [id])
-  instances    WorkflowInstance[] // Các lượt chạy quy trình đang được giao cho user này
+  instances    WorkflowInstance[]
 
   @@map("users")
 }
