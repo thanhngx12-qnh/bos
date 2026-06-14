@@ -14,15 +14,16 @@ import { WorkflowActionDto } from './dto/workflow-action.dto';
 export class WorkflowsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  // --- 1. HÀM TRỢ GIÚP: ĐÁNH GIÁ ĐIỀU KIỆN RẼ NHÁNH ---
+  // --- HÀM TRỢ GIÚP: ĐÁNH GIÁ ĐIỀU KIỆN RẼ NHÁNH ---
   private evaluateTransitionCondition(logic: any, recordData: any): boolean {
-    // Nếu đường nối không có điều kiện -> Luôn đúng (Mặc định đi đường này)
-    if (!logic || !logic.field) return true;
+    const rules = logic?.rules;
+    // Nếu rẽ nhánh không cấu hình logic rẽ nhánh cụ thể -> Mặc định coi là thỏa mãn điều kiện
+    if (!rules || !rules.field) return true;
 
-    const actualVal = recordData[logic.field];
-    const targetVal = logic.value;
+    const actualVal = recordData[rules.field];
+    const targetVal = rules.value;
 
-    switch (logic.operator) {
+    switch (rules.operator) {
       case '==':
         return actualVal === targetVal;
       case '!=':
@@ -40,7 +41,7 @@ export class WorkflowsService {
     }
   }
 
-  // --- 2. CÁC API CŨ VẪN GIỮ NGUYÊN ---
+  // --- CÁC API CƠ BẢN ---
   async create(dto: CreateWorkflowDto) {
     const entity = await this.prisma.entity.findUnique({
       where: { id: dto.entityId },
@@ -131,7 +132,6 @@ export class WorkflowsService {
     );
 
     return this.prisma.$transaction(async (tx) => {
-      // 1. Tạo vỏ Version mới
       const newVersion = await tx.workflowVersion.create({
         data: {
           workflowId,
@@ -140,7 +140,6 @@ export class WorkflowsService {
         },
       });
 
-      // 2. Nhân bản toàn bộ các bước (Steps) của version cũ sang version mới
       for (const step of sourceVersion.steps) {
         await tx.workflowStep.create({
           data: {
@@ -180,11 +179,7 @@ export class WorkflowsService {
     });
   }
 
-  // ====================================================
-  // 3. ĐỘNG CƠ THỰC THI QUY TRÌNH (STATE MACHINE ENGINE)
-  // ====================================================
-
-  // --- KHỞI CHẠY QUY TRÌNH (SUBMIT PHIẾU) ---
+  // --- KHỞI CHẠY QUY TRÌNH ---
   async startInstance(userId: number, dto: CreateInstanceDto) {
     const record = await this.prisma.record.findUnique({
       where: { id: dto.recordId },
@@ -204,7 +199,6 @@ export class WorkflowsService {
       );
     }
 
-    // Kiểm tra xem phiếu này đã chạy quy trình nào đang dang dở chưa
     const activeInstance = await this.prisma.workflowInstance.findFirst({
       where: { recordId: dto.recordId, status: 'IN_PROGRESS' },
     });
@@ -214,7 +208,7 @@ export class WorkflowsService {
       );
     }
 
-    const firstStep = version.steps[0]; // Trạm đầu tiên (orderIndex nhỏ nhất)
+    const firstStep = version.steps[0];
 
     return this.prisma.$transaction(async (tx) => {
       const instance = await tx.workflowInstance.create({
@@ -226,7 +220,6 @@ export class WorkflowsService {
         },
       });
 
-      // Tạo Audit Log ghi nhận hành động trình ký
       await tx.workflowLog.create({
         data: {
           instanceId: instance.id,
@@ -241,7 +234,9 @@ export class WorkflowsService {
     });
   }
 
-  // --- XỬ LÝ DUYỆT / TỪ CHỐI (APPROVE / REJECT) ---
+  // ==========================================
+  // HÀM LÕI: XỬ LÝ PHÊ DUYỆT ĐA HÌNH & SONG SONG
+  // ==========================================
   async handleAction(
     instanceId: number,
     userId: number,
@@ -253,11 +248,7 @@ export class WorkflowsService {
         record: true,
         version: {
           include: {
-            steps: {
-              include: {
-                transitionsOut: true, // Lấy các đường rẽ nhánh đi ra từ bước hiện tại
-              },
-            },
+            steps: true,
           },
         },
       },
@@ -266,101 +257,125 @@ export class WorkflowsService {
     if (!instance)
       throw new NotFoundException('Không tìm thấy lượt chạy quy trình.');
     if (instance.status !== 'IN_PROGRESS') {
+      throw new BadRequestException('Lượt chạy quy trình này đã kết thúc.');
+    }
+
+    // 1. Tìm thông tin đường rẽ nhánh (Transition / Nút bấm động) mà người dùng kích hoạt
+    const transition = await this.prisma.workflowTransition.findUnique({
+      where: { id: dto.transitionId },
+      include: { fromStep: true, toStep: true },
+    });
+
+    if (!transition)
+      throw new NotFoundException(
+        'Không tìm thấy đường nối quy trình (Nút bấm).',
+      );
+    if (transition.fromStepId !== instance.currentStep) {
       throw new BadRequestException(
-        'Lượt chạy quy trình này đã kết thúc hoặc bị hủy.',
+        'Đường nối không thuộc về bước duyệt hiện tại của phiếu.',
       );
     }
 
-    const currentStepObj = instance.version.steps.find(
-      (s) => s.id === instance.currentStep,
-    );
-    if (!currentStepObj)
-      throw new NotFoundException('Không tìm thấy bước duyệt hiện tại.');
+    const currentStepObj = transition.fromStep;
+    const nextStepObj = transition.toStep;
 
-    // TRƯỜNG HỢP 1: TỪ CHỐI (REJECT) -> Bẻ gãy quy trình lập tức
-    if (dto.action === 'REJECT') {
-      return this.prisma.$transaction(async (tx) => {
-        const updated = await tx.workflowInstance.update({
-          where: { id: instanceId },
-          data: { status: 'REJECTED' },
-        });
+    // Đọc cấu hình phê duyệt của bước hiện tại (permissions JSONB)
+    const stepConfig: any = currentStepObj.permissions || {};
+    const approverType = stepConfig.approverType || 'SINGLE'; // Chế độ duyệt: SINGLE, ALL_OF (Đồng thuận), ANY_OF (Đại diện)
+    const candidateUsers = stepConfig.candidateUsers || []; // Danh sách ID người được duyệt tại trạm này
 
-        await tx.workflowLog.create({
-          data: {
-            instanceId,
-            stepId: instance.currentStep,
-            userId,
-            action: 'REJECT',
-            comment: dto.comment || 'Từ chối phê duyệt quy trình.',
-          },
-        });
-
-        return updated;
-      });
-    }
-
-    // TRƯỜNG HỢP 2: PHÊ DUYỆT (APPROVE) -> Kích hoạt Rule Engine
-    const recordData = instance.record.data as any;
-    const transitions = currentStepObj.transitionsOut;
-    let nextStepId: number | null = null;
-    let isAutoSkip = false;
-
-    // Duyệt qua các đường rẽ nhánh của bước hiện tại để tìm đường đi hợp lệ đầu tiên
-    for (const trans of transitions) {
-      const isMatch = this.evaluateTransitionCondition(
-        trans.conditionLogic,
-        recordData,
+    // Kiểm tra quyền: Nếu có cấu hình danh sách người duyệt cụ thể, tài khoản thực thi phải nằm trong danh sách
+    if (candidateUsers.length > 0 && !candidateUsers.includes(userId)) {
+      throw new BadRequestException(
+        'Tài khoản của bạn không được phân quyền thực hiện hành động tại bước này.',
       );
-      if (isMatch) {
-        nextStepId = trans.toStepId;
-        isAutoSkip = trans.autoSkip;
-        break; // Tìm thấy đường đi thỏa mãn -> Thoát vòng lặp
-      }
     }
 
+    // Đọc cấu hình Nút bấm động được lưu trong logic rẽ nhánh (conditionLogic JSONB)
+    const transLogic: any = transition.conditionLogic || {};
+    const actionLabel = transLogic.actionLabel || 'Phê duyệt'; // Tên nút bấm động (VD: "Đồng ý chuyển tiếp", "Ký duyệt")
+    const requiresSignature = transLogic.requiresSignature || false; // Nút này có bắt buộc ký tên không
+
+    if (requiresSignature && !dto.signatureData) {
+      throw new BadRequestException(
+        `Nút bấm '${actionLabel}' yêu cầu bạn phải thực hiện Chữ ký điện tử.`,
+      );
+    }
+
+    // 2. Chạy cơ chế Phê duyệt song song / Đồng thuận trong Transaction
     return this.prisma.$transaction(async (tx) => {
-      let finalStatus = 'IN_PROGRESS';
-      let commentLog = dto.comment || 'Đã phê duyệt.';
-
-      if (!nextStepId) {
-        // Nếu không tìm thấy đường đi tiếp theo -> Đã là bước cuối cùng -> Hoàn thành luồng!
-        finalStatus = 'COMPLETED';
-        nextStepId = instance.currentStep; // Giữ nguyên ID bước cuối
-      } else {
-        // Kiểm tra xem bước tiếp theo có phải SYSTEM_TASK hoặc được bật AutoSkip không
-        const nextStepObj = instance.version.steps.find(
-          (s) => s.id === nextStepId,
-        );
-        if (nextStepObj?.stepType === 'SYSTEM_TASK' || isAutoSkip) {
-          finalStatus = 'COMPLETED'; // Chuyển thẳng trạng thái về Hoàn thành
-          commentLog += ` (Hệ thống tự động chuyển tiếp và hoàn thành qua trạm: ${nextStepObj?.name})`;
-        }
-      }
-
-      const updated = await tx.workflowInstance.update({
-        where: { id: instanceId },
-        data: {
-          currentStep: nextStepId,
-          status: finalStatus,
-        },
-      });
-
-      // Ghi Audit Log lưu vết
+      // Lưu lại vết phê duyệt hiện tại vào Audit Log trước
+      // Ghi nhận lượt duyệt hiện tại vào Audit Log trước
       await tx.workflowLog.create({
         data: {
           instanceId,
           stepId: instance.currentStep,
           userId,
-          action: 'APPROVE',
-          comment: commentLog,
+          action: actionLabel, // Lưu đúng tên nút bấm động
+          comment: dto.comment || `Đã thực hiện hành động: ${actionLabel}`,
+          snapshot: dto.signatureData
+            ? ({ signature: dto.signatureData } as any)
+            : undefined, // <-- SỬA LỖI TẠI ĐÂY
         },
       });
 
-      return updated;
+      let shouldTransition = true;
+
+      // XỬ LÝ DUYỆT ĐỒNG THUẬN SONG SONG (ALL_OF)
+      if (approverType === 'ALL_OF' && candidateUsers.length > 1) {
+        // Đếm xem trong lịch sử duyệt của bước hiện tại, đã có bao nhiêu người trong nhóm duyệt rồi
+        const approvedLogs = await tx.workflowLog.findMany({
+          where: {
+            instanceId,
+            stepId: instance.currentStep,
+            action: actionLabel,
+          },
+        });
+
+        const approvedUserIds = approvedLogs.map((l) => l.userId);
+
+        // Kiểm tra xem tất cả những người được giao nhiệm vụ duyệt (candidateUsers) đã thực thi đầy đủ chưa
+        const allApproved = candidateUsers.every((uid) =>
+          approvedUserIds.includes(uid),
+        );
+
+        if (!allApproved) {
+          shouldTransition = false; // Chưa đủ người đồng thuận -> Phiếu vẫn giữ nguyên tại trạm cũ!
+        }
+      }
+
+      // 3. Nếu đủ điều kiện chuyển trạm -> Thực hiện chuyển dịch trạng thái
+      if (shouldTransition) {
+        let finalStatus = 'IN_PROGRESS';
+        let nextStepId: number | null = transition.toStepId;
+
+        // Nếu trạm tiếp theo là SYSTEM_TASK (Tự động hoàn thành) hoặc đường nối bật AutoSkip -> Hoàn thành luồng luôn
+        if (nextStepObj.stepType === 'SYSTEM_TASK' || transition.autoSkip) {
+          finalStatus = 'COMPLETED';
+        }
+
+        const updated = await tx.workflowInstance.update({
+          where: { id: instanceId },
+          data: {
+            currentStep: nextStepId,
+            status: finalStatus,
+          },
+        });
+
+        return { ...updated, transitioned: true, actionExecuted: actionLabel };
+      }
+
+      // Trả về thông báo phiếu vẫn ở trạm cũ chờ đồng thuận
+      return {
+        ...instance,
+        transitioned: false,
+        actionExecuted: actionLabel,
+        message:
+          'Lượt phê duyệt đã được ghi nhận. Hệ thống đang chờ các thành viên khác phê duyệt đồng thuận để chuyển trạm.',
+      };
     });
   }
 
-  // Lấy lịch sử Audit Log của 1 lượt chạy (Cho Ban Giám Đốc xem)
   async getInstanceLogs(instanceId: number) {
     return this.prisma.workflowLog.findMany({
       where: { instanceId },
@@ -368,7 +383,7 @@ export class WorkflowsService {
         step: { select: { name: true } },
         user: { select: { fullName: true, email: true } },
       },
-      orderBy: { createdAt: 'asc' }, // Ghi nhận theo tiến trình thời gian
+      orderBy: { createdAt: 'asc' },
     });
   }
 }

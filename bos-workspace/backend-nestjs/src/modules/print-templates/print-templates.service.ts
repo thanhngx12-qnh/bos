@@ -90,7 +90,6 @@ export class PrintTemplatesService {
       orderBy: { id: 'desc' },
     });
 
-    // FIX LỖI TẠI ĐÂY: Chỉ định rõ kiểu dữ liệu any[] thay vì để [] mặc định
     let approvals: any[] = [];
     if (instance) {
       const logs = await this.prisma.workflowLog.findMany({
@@ -102,13 +101,22 @@ export class PrintTemplatesService {
         orderBy: { createdAt: 'asc' },
       });
 
-      approvals = logs.map((l) => ({
-        step: l.step?.name || 'Khởi tạo',
-        user: l.user?.fullName || 'Hệ thống',
-        action: l.action,
-        comment: l.comment || '',
-        date: new Date(l.createdAt).toLocaleDateString('vi-VN'),
-      }));
+      approvals = logs.map((l) => {
+        const snapshotObj: any = l.snapshot || {};
+        // BỐ TRÍ CHỮ KÝ ĐIỆN TỬ: Tự động vẽ khung chữ ký nếu log phê duyệt có lưu signatureData
+        const signatureHtml = snapshotObj.signature
+          ? `<div style="border: 1px dashed green; color: green; padding: 5px; width: fit-content; font-size: 11px; margin-top: 5px; font-family: monospace; background-color: #f6fff6;">[KÝ ĐIỆN TỬ THÀNH CÔNG]<br/>Mã xác thực: ${snapshotObj.signature}<br/>Người ký: ${l.user?.fullName}</div>`
+          : `<span style="color: blue;">(Đã duyệt qua hệ thống)</span>`;
+
+        return {
+          step: l.step?.name || 'Khởi tạo',
+          user: l.user?.fullName || 'Hệ thống',
+          action: l.action,
+          comment: l.comment || '',
+          signature: signatureHtml, // Trả về thẻ chữ ký động để render xuống HTML
+          date: new Date(l.createdAt).toLocaleDateString('vi-VN'),
+        };
+      });
     }
 
     const context = {
@@ -121,7 +129,7 @@ export class PrintTemplatesService {
         date: new Date(record.createdAt).toLocaleDateString('vi-VN'),
       },
       data: record.data,
-      approvals: approvals,
+      approvals: approvals, // Đóng gói mảng approvals chứa chữ ký điện tử
     };
 
     const templateObj = printTemplate.template as any;

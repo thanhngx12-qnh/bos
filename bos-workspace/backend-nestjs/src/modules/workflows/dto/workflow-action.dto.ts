@@ -1,25 +1,30 @@
 // File: src/modules/workflows/dto/workflow-action.dto.ts
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, IsOptional, IsIn } from 'class-validator';
+import { IsInt, IsNotEmpty, IsString, IsOptional } from 'class-validator';
 
 export class WorkflowActionDto {
   @ApiProperty({
-    description: 'Hành động phê duyệt',
-    example: 'APPROVE',
-    enum: ['APPROVE', 'REJECT'],
+    description: 'ID của đường nối (Nút bấm) mà người dùng chọn kích hoạt',
+    example: 1,
   })
-  @IsString()
+  @IsInt()
   @IsNotEmpty()
-  @IsIn(['APPROVE', 'REJECT'], {
-    message: 'Hành động phải là APPROVE hoặc REJECT',
-  })
-  action: 'APPROVE' | 'REJECT';
+  transitionId: number;
 
   @ApiPropertyOptional({
     description: 'Ý kiến phê duyệt',
-    example: 'Đồng ý cấp ngân sách.',
+    example: 'Đồng ý chuyển tiếp hồ sơ.',
   })
   @IsString()
   @IsOptional()
   comment?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Mã chữ ký điện tử hoặc chuỗi nét vẽ Base64 (Nếu nút yêu cầu ký duyệt)',
+    example: 'SIGNED_BY_ADMIN_MD5_789abc',
+  })
+  @IsString()
+  @IsOptional()
+  signatureData?: string;
 }
