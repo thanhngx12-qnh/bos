@@ -1,0 +1,174 @@
+// File: bos-workspace/backend-nestjs/prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ==========================================
+// BLOCK 1: AUTH & ORGANIZATION (TỔ CHỨC & PHÂN QUYỀN)
+// ==========================================
+model User {
+  id           Int        @id @default(autoincrement())
+  email        String     @unique
+  fullName     String     @map("full_name")
+  departmentId Int?       @map("department_id")
+  roleId       Int?       @map("role_id")
+  status       String     @default("ACTIVE") // ACTIVE, INACTIVE
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  department   Department? @relation(fields: [departmentId], references: [id])
+  role         Role?       @relation(fields: [roleId], references: [id])
+  instances    WorkflowInstance[] // Các lượt chạy quy trình đang được giao cho user này
+
+  @@map("users")
+}
+
+model Department {
+  id          Int      @id @default(autoincrement())
+  name        String
+  parentId    Int?     @map("parent_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  parent      Department?  @relation("DepartmentHierarchy", fields: [parentId], references: [id])
+  children    Department[] @relation("DepartmentHierarchy")
+  users       User[]
+
+  @@map("departments")
+}
+
+model Role {
+  id          Int      @id @default(autoincrement())
+  name        String
+  permissions Json     @default("{}") // Quản lý RBAC Matrix (JSONB)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  users       User[]
+
+  @@map("roles")
+}
+
+// ==========================================
+// BLOCK 2: METADATA ENGINE (ĐỘNG CƠ CẤU HÌNH TRƯỜNG DỮ LIỆU)
+// ==========================================
+model Entity {
+  id          Int      @id @default(autoincrement())
+  name        String   // VD: "Phiếu đề xuất mua sắm"
+  code        String   @unique // VD: "PURCHASE_REQUEST"
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  fields      FieldDefinition[]
+  records     Record[]
+  workflows   Workflow[]
+
+  @@map("entities")
+}
+
+model FieldDefinition {
+  id          Int      @id @default(autoincrement())
+  entityId    Int      @map("entity_id")
+  name        String   // Tên hiển thị VD: "Tổng tiền"
+  code        String   // Mã trường VD: "total_amount"
+  type        String   // TEXT, NUMBER, DATE, SELECT, SUB_TASK, FORMULA, AUTO_CODE...
+  isRequired  Boolean  @default(false) @map("is_required")
+  options     Json     @default("{}") // JSONB: Lưu trữ cấu hình 20+ loại trường (Công thức, Tùy chọn dropdown...)
+  orderIndex  Int      @default(0) @map("order_index")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  entity      Entity   @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@unique([entityId, code])
+  @@map("field_definitions")
+}
+
+// ==========================================
+// BLOCK 3: DYNAMIC DATA STORAGE (LƯU TRỮ DỮ LIỆU ĐỘNG)
+// ==========================================
+model Record {
+  id          Int      @id @default(autoincrement())
+  entityId    Int      @map("entity_id")
+  data        Json     @default("{}") // JSONB: Lưu trữ Payload thực tế dựa trên FieldDefinition
+  createdBy   Int      @map("created_by")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  entity      Entity   @relation(fields: [entityId], references: [id])
+  instances   WorkflowInstance[]
+
+  @@map("records")
+}
+
+// ==========================================
+// BLOCK 4: WORKFLOW & VERSIONING ENGINE (ĐỘNG CƠ QUY TRÌNH & PHIÊN BẢN)
+// ==========================================
+model Workflow {
+  id          Int      @id @default(autoincrement())
+  entityId    Int      @map("entity_id")
+  name        String   // Tên quy trình
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  entity      Entity   @relation(fields: [entityId], references: [id])
+  versions    WorkflowVersion[]
+
+  @@map("workflows")
+}
+
+model WorkflowVersion {
+  id          Int      @id @default(autoincrement())
+  workflowId  Int      @map("workflow_id")
+  version     Int      @default(1) // Quản lý phiên bản (V1, V2, V3)
+  status      String   @default("DRAFT") // DRAFT, PUBLISHED, ARCHIVED
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  workflow    Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  steps       WorkflowStep[]
+  instances   WorkflowInstance[]
+
+  @@unique([workflowId, version])
+  @@map("workflow_versions")
+}
+
+model WorkflowStep {
+  id                Int      @id @default(autoincrement())
+  versionId         Int      @map("version_id")
+  name              String   // VD: "Trưởng phòng phê duyệt"
+  stepType          String   @default("USER_TASK") // USER_TASK, SYSTEM_TASK, CONDITION
+  permissions       Json     @default("{}") // JSONB: Phân quyền xem/sửa Field tại bước này (Step-level RBAC)
+  transitionRules   Json     @default("{}") // JSONB: Logic rẽ nhánh, Auto-skip sang bước tiếp theo
+  orderIndex        Int      @default(0) @map("order_index")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+  
+  version           WorkflowVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+
+  @@map("workflow_steps")
+}
+
+model WorkflowInstance {
+  id          Int      @id @default(autoincrement())
+  versionId   Int      @map("version_id")
+  recordId    Int      @map("record_id")
+  currentStep Int      @map("current_step")
+  status      String   @default("IN_PROGRESS") // IN_PROGRESS, COMPLETED, CANCELLED, REJECTED
+  assigneeId  Int?     @map("assignee_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  version     WorkflowVersion @relation(fields: [versionId], references: [id])
+  record      Record          @relation(fields: [recordId], references: [id])
+  assignee    User?           @relation(fields: [assigneeId], references: [id])
+
+  @@map("workflow_instances")
+}
