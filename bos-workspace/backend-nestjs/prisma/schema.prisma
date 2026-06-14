@@ -9,6 +9,24 @@ datasource db {
 }
 
 // ==========================================
+// BLOCK 0: SAAS MULTI-TENANCY
+// ==========================================
+model Tenant {
+  id        Int      @id @default(autoincrement())
+  name      String
+  code      String   @unique // VD: "company_a", "company_b"
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  users     User[]
+  entities  Entity[]
+  records   Record[]
+  workflows Workflow[]
+
+  @@map("tenants")
+}
+
+// ==========================================
 // BLOCK 1: AUTH & ORGANIZATION
 // ==========================================
 model User {
@@ -18,13 +36,15 @@ model User {
   fullName     String     @map("full_name")
   departmentId Int?       @map("department_id")
   roleId       Int?       @map("role_id")
+  tenantId     Int?       @map("tenant_id") // Khóa ngoại Tenant
   status       String     @default("ACTIVE")
-  userType     String     @default("INTERNAL") @map("user_type") // INTERNAL (Nhân sự), EXTERNAL (Khách hàng)
+  userType     String     @default("INTERNAL") @map("user_type")
   createdAt    DateTime   @default(now()) @map("created_at")
   updatedAt    DateTime   @updatedAt @map("updated_at")
 
   department   Department? @relation(fields: [departmentId], references: [id])
   role         Role?       @relation(fields: [roleId], references: [id])
+  tenant       Tenant?     @relation(fields: [tenantId], references: [id])
   instances    WorkflowInstance[]
   workflowLogs WorkflowLog[]
   participations WorkflowParticipant[]
@@ -66,10 +86,12 @@ model Entity {
   name            String
   code            String   @unique
   description     String?
-  autoCodePattern String?  @map("auto_code_pattern") // Mẫu tự sinh mã, VD: "QTMS-{SEQ:4}"
+  autoCodePattern String?  @map("auto_code_pattern")
+  tenantId        Int?     @map("tenant_id") // Khóa ngoại Tenant
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
+  tenant         Tenant?  @relation(fields: [tenantId], references: [id])
   fields         FieldDefinition[]
   records        Record[]
   workflows      Workflow[]
@@ -100,7 +122,7 @@ model PrintTemplate {
   id          Int      @id @default(autoincrement())
   entityId    Int      @map("entity_id")
   name        String
-  template    Json     // Lưu cấu trúc layout mẫu in (HTML/JSON)
+  template    Json
   createdAt   DateTime @default(now()) @map("created_at")
   
   entity      Entity   @relation(fields: [entityId], references: [id])
@@ -113,13 +135,15 @@ model PrintTemplate {
 model Record {
   id          Int      @id @default(autoincrement())
   entityId    Int      @map("entity_id")
-  recordCode  String?  @unique @map("record_code") // Mã tự sinh nghiệp vụ thực tế, VD: "QTMS-0001"
+  recordCode  String?  @unique @map("record_code")
   data        Json     @default("{}")
   createdBy   Int      @map("created_by")
+  tenantId    Int?     @map("tenant_id") // Khóa ngoại Tenant
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   entity      Entity   @relation(fields: [entityId], references: [id])
+  tenant      Tenant?  @relation(fields: [tenantId], references: [id])
   instances   WorkflowInstance[]
 
   @@index([entityId])
@@ -134,11 +158,13 @@ model Workflow {
   entityId    Int      @map("entity_id")
   name        String
   description String?
-  visibility  Json     @default("{}") // Phân quyền tầm nhìn: { "allowAll": true, "allowedDepartments": [1] }
+  visibility  Json     @default("{}")
+  tenantId    Int?     @map("tenant_id") // Khóa ngoại Tenant
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   entity      Entity   @relation(fields: [entityId], references: [id])
+  tenant      Tenant?  @relation(fields: [tenantId], references: [id])
   versions    WorkflowVersion[]
 
   @@map("workflows")
@@ -183,7 +209,7 @@ model WorkflowTransition {
   id              Int     @id @default(autoincrement())
   fromStepId      Int     @map("from_step_id")
   toStepId        Int     @map("to_step_id")
-  conditionLogic  Json    // Lưu cấu trúc JSON Logic (VD: {"total": {">": 1000}})
+  conditionLogic  Json
   autoSkip        Boolean @default(false) @map("auto_skip")
   
   fromStep        WorkflowStep @relation("FromStep", fields: [fromStepId], references: [id])
@@ -215,7 +241,7 @@ model WorkflowParticipant {
   id          Int    @id @default(autoincrement())
   instanceId  Int    @map("instance_id")
   userId      Int    @map("user_id")
-  role        String // APPROVER, VIEWER, EDITOR
+  role        String
   
   instance    WorkflowInstance @relation(fields: [instanceId], references: [id])
   user        User             @relation(fields: [userId], references: [id])
@@ -227,9 +253,9 @@ model WorkflowLog {
   instanceId  Int      @map("instance_id")
   stepId      Int?     @map("step_id")
   userId      Int?     @map("user_id")
-  action      String   // APPROVE, REJECT, SKIP, COMMENT
+  action      String
   comment     String?
-  snapshot    Json?    // Lưu trạng thái dữ liệu tại thời điểm thao tác
+  snapshot    Json?
   createdAt   DateTime @default(now()) @map("created_at")
 
   instance    WorkflowInstance @relation(fields: [instanceId], references: [id])
