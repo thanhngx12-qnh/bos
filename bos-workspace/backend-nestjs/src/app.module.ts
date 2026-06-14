@@ -9,7 +9,8 @@ import { AuthModule } from './modules/auth/auth.module';
 import { EntitiesModule } from './modules/entities/entities.module';
 import { FieldsModule } from './modules/fields/fields.module';
 import { RecordsModule } from './modules/records/records.module';
-import { WorkflowsModule } from './modules/workflows/workflows.module'; // <-- Import mới
+import { WorkflowsModule } from './modules/workflows/workflows.module';
+import { WorkflowStepsModule } from './modules/workflow-steps/workflow-steps.module'; // <-- IMPORT MỚI
 
 @Module({
   imports: [
@@ -21,7 +22,8 @@ import { WorkflowsModule } from './modules/workflows/workflows.module'; // <-- I
     EntitiesModule,
     FieldsModule,
     RecordsModule,
-    WorkflowsModule, // <-- Kích hoạt module
+    WorkflowsModule,
+    WorkflowStepsModule, // <-- KÍCH HOẠT VÀO ĐÂY
   ],
   providers: [
     {
