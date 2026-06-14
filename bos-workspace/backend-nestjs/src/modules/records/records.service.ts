@@ -19,13 +19,36 @@ export class RecordsService {
   ) {}
 
   // --- THUẬT TOÁN BIÊN DỊCH MẪU TỰ SINH MÃ (AUTO-CODE GENERATOR) ---
-  // Hỗ trợ tự động parse chuỗi cấu hình dạng: "PREFIX-{SEQ:X}-SUFFIX"
   private generateRecordCode(pattern: string, count: number): string {
     const regex = /\{SEQ:(\d+)\}/g;
     return pattern.replace(regex, (match, length) => {
       const padLength = parseInt(length, 10);
-      return String(count).padStart(padLength, '0'); // Điền đầy các số 0 ở trước (padding)
+      return String(count).padStart(padLength, '0');
     });
+  }
+
+  // --- THUẬT TOÁN JSON DIFF (TÌM SỰ KHÁC BIỆT DỮ LIỆU) ---
+  private calculateDiff(
+    oldData: any,
+    newData: any,
+  ): Record<string, { old: any; new: any }> {
+    const diff: Record<string, { old: any; new: any }> = {};
+    const oldObj = oldData as Record<string, any>;
+    const newObj = newData as Record<string, any>;
+    const allKeys = new Set([
+      ...Object.keys(oldObj || {}),
+      ...Object.keys(newObj || {}),
+    ]);
+
+    for (const key of allKeys) {
+      const oldVal = oldObj[key];
+      const newVal = newObj[key];
+
+      if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
+        diff[key] = { old: oldVal, new: newVal };
+      }
+    }
+    return diff;
   }
 
   async create(userId: number, dto: CreateRecordDto) {
@@ -37,22 +60,18 @@ export class RecordsService {
     if (!entity)
       throw new NotFoundException('Không tìm thấy Biểu mẫu (Entity).');
 
-    // Bước 1: Gọi Động cơ Validate VIP PRO xử lý và làm sạch dữ liệu
     const cleanData = this.dynamicValidator.validateAndSanitize(
       entity.fields,
       dto.data,
     );
 
-    // Bước 2: Gọi Động cơ Công thức để tự động tính toán các trường FORMULA dựa trên cleanData
     const finalData = this.formulaEngine.calculate(entity.fields, cleanData);
 
-    // Bước 3: Tự sinh mã nghiệp vụ (recordCode) dựa trên mẫu autoCodePattern của Biểu mẫu
     let recordCode: string | null = null;
     if (entity.autoCodePattern) {
       const recordCount = await this.prisma.record.count({
         where: { entityId: entity.id },
       });
-      // Số thứ tự thực tế = Tổng số lượng bản ghi của biểu mẫu này + 1
       recordCode = this.generateRecordCode(
         entity.autoCodePattern,
         recordCount + 1,
@@ -62,8 +81,8 @@ export class RecordsService {
     return this.prisma.record.create({
       data: {
         entityId: dto.entityId,
-        recordCode, // Lưu mã tự sinh nghiệp vụ (Ví dụ: QTMS-0001)
-        data: finalData as any, // Lưu dữ liệu đã được tính toán công thức chuẩn xác
+        recordCode,
+        data: finalData as any,
         createdBy: userId,
       },
     });
@@ -93,35 +112,94 @@ export class RecordsService {
     return record;
   }
 
-  async update(id: number, dto: UpdateRecordDto) {
+  // --- HÀM NÂNG CẤP KÈM LOG CHẨN ĐOÁN CHI TIẾT ---
+  async update(userId: number, id: number, dto: UpdateRecordDto) {
+    console.log('====================================');
+    console.log('=== [DEBUG] bat dau recordsService.update ===');
+    console.log('userId nhan duoc:', userId);
+    console.log('recordId nhan duoc:', id);
+    console.log('dto nhan duoc:', JSON.stringify(dto));
+
     const currentRecord = await this.findOne(id);
+    console.log(
+      'Du lieu record hien tai trong DB:',
+      JSON.stringify(currentRecord.data),
+    );
 
     const entity = await this.prisma.entity.findUnique({
       where: { id: currentRecord.entityId },
       include: { fields: true },
     });
+    console.log('Tong so truong cua Entity:', entity?.fields?.length);
 
     let dataToSave = currentRecord.data;
+    let patchData = {};
 
     if (entity && dto.data) {
-      // Gộp data cũ và mới để validate lại toàn bộ
+      console.log('Phat hien dto.data hop le. Tien hanh gop du lieu...');
       const mergedData = { ...(currentRecord.data as object), ...dto.data };
+      console.log(
+        'Du lieu sau khi gop (mergedData):',
+        JSON.stringify(mergedData),
+      );
 
       // Bước 1: Validate & Làm sạch dữ liệu gộp
       const cleanData = this.dynamicValidator.validateAndSanitize(
         entity.fields,
         mergedData,
       );
+      console.log(
+        'Du lieu sau khi validate/sanitize (cleanData):',
+        JSON.stringify(cleanData),
+      );
 
-      // Bước 2: Tính toán lại các công thức dựa trên dữ liệu mới gộp sạch
+      // Bước 2: Tính toán lại các công thức
       dataToSave = this.formulaEngine.calculate(entity.fields, cleanData);
+      console.log(
+        'Du lieu sau khi chay qua Formula Engine (dataToSave):',
+        JSON.stringify(dataToSave),
+      );
+
+      // Bước 3: Tính toán Bản vá (Diff)
+      patchData = this.calculateDiff(currentRecord.data, dataToSave);
+      console.log(
+        'Ban va tinh ra duoc (patchData):',
+        JSON.stringify(patchData),
+      );
+    } else {
+      console.log(
+        'Bo qua khoi update vi entity hoac dto.data bi rong. dto.data =',
+        dto.data,
+      );
     }
 
-    return this.prisma.record.update({
-      where: { id },
-      data: {
-        data: dataToSave as any, // Tránh lỗi TypeScript
-      },
+    if (Object.keys(patchData).length === 0) {
+      console.log(
+        'Khong co thay doi du lieu thuc te -> Thoat som, tra ve ban ghi cu.',
+      );
+      return currentRecord;
+    }
+
+    console.log('Bat dau chay Prisma $transaction de ghi xuong DB...');
+    return this.prisma.$transaction(async (tx) => {
+      const updatedRecord = await tx.record.update({
+        where: { id },
+        data: {
+          data: dataToSave as any,
+        },
+      });
+
+      // Tạo lịch sử sửa (Revision)
+      await tx.recordRevision.create({
+        data: {
+          recordId: id,
+          userId: userId,
+          patchData: patchData as any,
+        },
+      });
+
+      console.log('=== GHI DB THANH CONG! ===');
+      return updatedRecord;
     });
   }
 
@@ -136,5 +214,16 @@ export class RecordsService {
       );
     }
     return this.prisma.record.delete({ where: { id } });
+  }
+
+  // Lấy lịch sử chỉnh sửa
+  async getRecordRevisions(recordId: number) {
+    return this.prisma.recordRevision.findMany({
+      where: { recordId },
+      include: {
+        user: { select: { fullName: true, email: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
   }
 }

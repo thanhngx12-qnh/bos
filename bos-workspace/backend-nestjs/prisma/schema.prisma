@@ -48,6 +48,7 @@ model User {
   instances    WorkflowInstance[]
   workflowLogs WorkflowLog[]
   participations WorkflowParticipant[]
+  recordRevisions RecordRevision[] // Quan hệ với bảng lưu lịch sử sửa biểu mẫu
 
   @@map("users")
 }
@@ -122,7 +123,7 @@ model PrintTemplate {
   id          Int      @id @default(autoincrement())
   entityId    Int      @map("entity_id")
   name        String
-  template    Json
+  template    Json     // Lưu cấu trúc layout mẫu in (HTML/JSON)
   createdAt   DateTime @default(now()) @map("created_at")
   
   entity      Entity   @relation(fields: [entityId], references: [id])
@@ -130,7 +131,7 @@ model PrintTemplate {
 }
 
 // ==========================================
-// BLOCK 3: DYNAMIC DATA STORAGE
+// BLOCK 3: DYNAMIC DATA STORAGE & REVISIONS
 // ==========================================
 model Record {
   id          Int      @id @default(autoincrement())
@@ -145,9 +146,25 @@ model Record {
   entity      Entity   @relation(fields: [entityId], references: [id])
   tenant      Tenant?  @relation(fields: [tenantId], references: [id])
   instances   WorkflowInstance[]
+  revisions   RecordRevision[] // Quan hệ với bảng lưu lịch sử sửa
 
   @@index([entityId])
   @@map("records")
+}
+
+// BẢNG MỚI: LƯU VẾT LỊCH SỬ CHỈNH SỬA BẢN GHI (AUDIT TRAIL)
+model RecordRevision {
+  id          Int      @id @default(autoincrement())
+  recordId    Int      @map("record_id")
+  userId      Int      @map("user_id") // Người thực hiện sửa
+  patchData   Json     @map("patch_data") // Dữ liệu chứa các trường bị thay đổi { fieldCode: { old: value, new: value } }
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  record      Record   @relation(fields: [recordId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id])
+
+  @@index([recordId])
+  @@map("record_revisions")
 }
 
 // ==========================================

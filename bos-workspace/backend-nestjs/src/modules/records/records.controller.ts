@@ -33,7 +33,6 @@ export class RecordsController {
   @Post()
   @ApiOperation({ summary: 'Thêm mới một bản ghi (Submit Form)' })
   create(@Request() req, @Body() dto: CreateRecordDto) {
-    // req.user được Inject tự động từ JwtStrategy
     const userId = req.user.userId;
     return this.recordsService.create(userId, dto);
   }
@@ -52,14 +51,29 @@ export class RecordsController {
   }
 
   @Patch(':id')
-  @ApiOperation({ summary: 'Cập nhật nội dung bản ghi' })
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateRecordDto) {
-    return this.recordsService.update(id, dto);
+  @ApiOperation({
+    summary: 'Cập nhật nội dung bản ghi (Tự động ghi Log Lịch sử)',
+  })
+  update(
+    @Request() req,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateRecordDto,
+  ) {
+    const userId = req.user.userId; // Trích xuất ID người sửa từ JWT
+    return this.recordsService.update(userId, id, dto); // Truyền đúng thứ tự: userId trước, sau đó là id và dto
   }
 
   @Delete(':id')
   @ApiOperation({ summary: 'Xóa bản ghi' })
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.recordsService.remove(id);
+  }
+
+  @Get(':id/revisions')
+  @ApiOperation({
+    summary: 'Lấy lịch sử các lần chỉnh sửa dữ liệu (Audit Trail)',
+  })
+  getRevisions(@Param('id', ParseIntPipe) id: number) {
+    return this.recordsService.getRecordRevisions(id);
   }
 }
