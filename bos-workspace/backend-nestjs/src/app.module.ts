@@ -6,7 +6,8 @@ import { OrganizationsModule } from './modules/organizations/organizations.modul
 import { RolesModule } from './modules/roles/roles.module';
 import { UsersModule } from './modules/users/users.module';
 import { AuthModule } from './modules/auth/auth.module';
-import { EntitiesModule } from './modules/entities/entities.module'; // <-- Import
+import { EntitiesModule } from './modules/entities/entities.module';
+import { FieldsModule } from './modules/fields/fields.module'; // <-- Import FieldsModule
 
 @Module({
   imports: [
@@ -15,7 +16,8 @@ import { EntitiesModule } from './modules/entities/entities.module'; // <-- Impo
     RolesModule,
     UsersModule,
     AuthModule,
-    EntitiesModule, // <-- Kích hoạt
+    EntitiesModule,
+    FieldsModule, // <-- Kích hoạt
   ],
   providers: [
     {
