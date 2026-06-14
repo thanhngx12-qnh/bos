@@ -1,19 +1,35 @@
 // File: src/modules/organizations/departments.controller.ts
-import { Controller, Post, Get, Patch, Delete, Body, Param, ParseIntPipe } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  Controller,
+  Post,
+  Get,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  ParseIntPipe,
+  UseGuards,
+} from '@nestjs/common';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 import { DepartmentsService } from './departments.service';
 import { CreateDepartmentDto } from './dto/create-department.dto';
 import { UpdateDepartmentDto } from './dto/update-department.dto';
+import { JwtAuthGuard } from '../../core/guards/jwt-auth.guard'; // <-- Import ổ khóa
 
 @ApiTags('Departments (Cơ cấu tổ chức)')
-// @ApiBearerAuth() // (Sẽ mở comment khi áp dụng JWT Guard)
-@Controller('departments') // Tiền tố /api/v1 đã được set ở main.ts
+@ApiBearerAuth() // <-- Mở nút nhập Token trên Swagger
+@UseGuards(JwtAuthGuard) // <-- BẬT Ổ KHÓA BẢO MẬT
+@Controller('departments')
 export class DepartmentsController {
   constructor(private readonly departmentsService: DepartmentsService) {}
 
   @Post()
   @ApiOperation({ summary: 'Tạo mới phòng ban' })
-  @ApiResponse({ status: 201, description: 'Tạo thành công' })
   create(@Body() dto: CreateDepartmentDto) {
     return this.departmentsService.create(dto);
   }
@@ -32,7 +48,10 @@ export class DepartmentsController {
 
   @Patch(':id')
   @ApiOperation({ summary: 'Cập nhật phòng ban' })
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateDepartmentDto) {
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateDepartmentDto,
+  ) {
     return this.departmentsService.update(id, dto);
   }
 
