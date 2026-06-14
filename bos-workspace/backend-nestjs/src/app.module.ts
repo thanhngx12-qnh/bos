@@ -10,7 +10,8 @@ import { EntitiesModule } from './modules/entities/entities.module';
 import { FieldsModule } from './modules/fields/fields.module';
 import { RecordsModule } from './modules/records/records.module';
 import { WorkflowsModule } from './modules/workflows/workflows.module';
-import { WorkflowStepsModule } from './modules/workflow-steps/workflow-steps.module'; // <-- IMPORT MỚI
+import { WorkflowStepsModule } from './modules/workflow-steps/workflow-steps.module';
+import { PrintTemplatesModule } from './modules/print-templates/print-templates.module'; // <-- IMPORT MỚI
 
 @Module({
   imports: [
@@ -23,7 +24,8 @@ import { WorkflowStepsModule } from './modules/workflow-steps/workflow-steps.mod
     FieldsModule,
     RecordsModule,
     WorkflowsModule,
-    WorkflowStepsModule, // <-- KÍCH HOẠT VÀO ĐÂY
+    WorkflowStepsModule,
+    PrintTemplatesModule, // <-- KÍCH HOẠT
   ],
   providers: [
     {
