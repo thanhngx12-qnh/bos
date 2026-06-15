@@ -27,6 +27,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { AuditLogsModule } from './modules/audit-logs/audit-logs.module';
 import { AuditLogInterceptor } from './core/interceptors/audit-log.interceptor';
 import { TenantsModule } from './modules/tenants/tenants.module';
+import { MailerModule } from './modules/mailer/mailer.module';
 
 @Module({
   imports: [
@@ -59,6 +60,7 @@ import { TenantsModule } from './modules/tenants/tenants.module';
     NotificationsModule,
     AuditLogsModule,
     TenantsModule,
+    MailerModule,
   ],
   providers: [
     {

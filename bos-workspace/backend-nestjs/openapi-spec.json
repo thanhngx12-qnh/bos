@@ -2391,6 +2391,21 @@
           "Tenants (Quản lý Doanh nghiệp SaaS - Chỉ Super Admin)"
         ]
       }
+    },
+    "/api/v1/mailer/test": {
+      "post": {
+        "operationId": "MailerController_testEmail",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Gửi email test đến địa chỉ thật",
+        "tags": [
+          "Mailer (Kiểm thử Gửi Email)"
+        ]
+      }
     }
   },
   "info": {

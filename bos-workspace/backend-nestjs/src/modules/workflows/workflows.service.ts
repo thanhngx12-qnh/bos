@@ -161,11 +161,18 @@ export class WorkflowsService {
     return this.prisma.workflow.delete({ where: { id } });
   }
 
+  // File: src/modules/workflows/workflows.service.ts
+
   async cloneVersion(workflowId: number, sourceVersionId: number) {
     const workflow = await this.findOne(workflowId);
+    // Lấy kèm toàn bộ Steps và Transitions của phiên bản gốc
     const sourceVersion = await this.prisma.workflowVersion.findUnique({
       where: { id: sourceVersionId },
-      include: { steps: true },
+      include: {
+        steps: {
+          include: { transitionsOut: true },
+        },
+      },
     });
 
     if (!sourceVersion || sourceVersion.workflowId !== workflowId) {
@@ -178,6 +185,7 @@ export class WorkflowsService {
     );
 
     return this.prisma.$transaction(async (tx) => {
+      // 1. Tạo vỏ Version mới
       const newVersion = await tx.workflowVersion.create({
         data: {
           workflowId,
@@ -186,16 +194,33 @@ export class WorkflowsService {
         },
       });
 
-      for (const step of sourceVersion.steps) {
-        await tx.workflowStep.create({
+      // 2. Clone sâu (Deep Clone) toàn bộ Steps và Transitions
+      const oldToNewStepIdMap = new Map<number, number>();
+
+      for (const oldStep of sourceVersion.steps) {
+        const newStep = await tx.workflowStep.create({
           data: {
             versionId: newVersion.id,
-            name: step.name,
-            stepType: step.stepType,
-            permissions: step.permissions || {},
-            orderIndex: step.orderIndex,
+            name: oldStep.name,
+            stepType: oldStep.stepType,
+            permissions: oldStep.permissions || {},
+            orderIndex: oldStep.orderIndex,
           },
         });
+        oldToNewStepIdMap.set(oldStep.id, newStep.id);
+      }
+
+      for (const oldStep of sourceVersion.steps) {
+        for (const oldTransition of oldStep.transitionsOut) {
+          await tx.workflowTransition.create({
+            data: {
+              fromStepId: oldToNewStepIdMap.get(oldTransition.fromStepId)!,
+              toStepId: oldToNewStepIdMap.get(oldTransition.toStepId)!,
+              conditionLogic: oldTransition.conditionLogic || {},
+              autoSkip: oldTransition.autoSkip,
+            },
+          });
+        }
       }
 
       return newVersion;
@@ -225,6 +250,7 @@ export class WorkflowsService {
     });
   }
 
+  // Thay thế hàm startInstance() cũ trong workflows.service.ts
   async startInstance(userId: number, dto: CreateInstanceDto) {
     const record = await this.prisma.record.findUnique({
       where: { id: dto.recordId },
@@ -278,7 +304,7 @@ export class WorkflowsService {
       return newInstance;
     });
 
-    // --- BẮN THÔNG BÁO THỜI GIAN THỰC ĐẾN NGƯỜI DUYỆT TRẠM 1 ---
+    // --- TỰ ĐỘNG BẮN EMAIL & THÔNG BÁO SSE ---
     const firstStepConfig: any = firstStep.permissions || {};
     const candidateUsers: number[] = firstStepConfig.candidateUsers || [];
 
@@ -289,10 +315,24 @@ export class WorkflowsService {
     const recordCode = record.recordCode || `#${record.id}`;
 
     for (const candidateId of candidateUsers) {
+      const recipient = await this.prisma.user.findUnique({
+        where: { id: candidateId },
+      });
+
+      // Gửi thông báo In-app và Email đồng thời
       await this.notificationsService.createNotification(
         candidateId,
         'Yêu cầu phê duyệt mới',
         `Phiếu đề xuất ${recordCode} vừa được trình ký bởi ${initiatorName} đang chờ bạn phê duyệt tại bước: ${firstStep.name}.`,
+        {
+          emailJobName: 'send-new-approval-request',
+          emailPayload: {
+            recipientName: recipient?.fullName || 'Thành viên',
+            recordCode,
+            initiatorName,
+            stepName: firstStep.name,
+          },
+        },
       );
     }
 
@@ -302,11 +342,15 @@ export class WorkflowsService {
   // ====================================================
   // BẢN NÂNG CẤP HOÀN HẢO: HÀM LÕI PHÊ DUYỆT TÍCH HỢP HÀNG ĐỢI WEBHOOK ĐỘNG & THÔNG BÁO LÕI
   // ====================================================
+  // ====================================================
+  // BẢN NÂNG CẤP HOÀN HẢO: HÀM LÕI PHÊ DUYỆT TÍCH HỢP HÀNG ĐỢI WEBHOOK ĐỘNG & THÔNG BÁO LÕI
+  // ====================================================
   async handleAction(
     instanceId: number,
     userId: number,
     dto: WorkflowActionDto,
   ) {
+    // 1. Chạy Transaction cô lập dòng dữ liệu và phê duyệt
     const result = await this.prisma.$transaction(async (tx) => {
       await tx.$queryRawUnsafe(
         `SELECT id FROM workflow_instances WHERE id = $1 FOR UPDATE`,
@@ -320,7 +364,7 @@ export class WorkflowsService {
           version: {
             include: {
               steps: true,
-              workflow: { select: { name: true } },
+              workflow: { select: { name: true } }, // Lấy thêm tên quy trình để bắn webhook
             },
           },
         },
@@ -452,10 +496,22 @@ export class WorkflowsService {
 
     // --- 3. ĐỘNG CƠ THÔNG BÁO THỜI GIAN THỰC (REAL-TIME NOTIFICATION COCK) ---
     if (result.isCompleted) {
+      const initiator = await this.prisma.user.findUnique({
+        where: { id: result.initiatorId },
+      });
       await this.notificationsService.createNotification(
         result.initiatorId,
         'Quy trình phê duyệt hoàn tất',
         `Hồ sơ ${result.recordCode} của bạn đã được PHÊ DUYỆT HOÀN TẤT qua tất cả các cấp!`,
+        {
+          // Có thể tạo Job email 'send-workflow-completed' riêng
+          emailJobName: 'send-workflow-completed', // Giả sử chúng ta sẽ tạo template cho nó sau
+          emailPayload: {
+            recipientName: initiator?.fullName || 'Người dùng',
+            recordCode: result.recordCode,
+            status: 'Hoàn tất',
+          },
+        },
       );
     } else if (result.shouldTransition && result.nextStepId) {
       await this.notificationsService.createNotification(
@@ -465,10 +521,22 @@ export class WorkflowsService {
       );
 
       for (const candidateId of result.nextStepCandidates) {
+        const recipient = await this.prisma.user.findUnique({
+          where: { id: candidateId },
+        });
         await this.notificationsService.createNotification(
           candidateId,
           'Yêu cầu phê duyệt mới cần xử lý',
           `Bạn nhận được một yêu cầu phê duyệt mới từ ${approverName} cho hồ sơ ${result.recordCode} tại trạm: ${result.nextStepName}.`,
+          {
+            emailJobName: 'send-new-approval-request',
+            emailPayload: {
+              recipientName: recipient?.fullName || 'Thành viên',
+              recordCode: result.recordCode,
+              initiatorName: approverName, // Người chuyển tiếp giờ là người khởi tạo của bước sau
+              stepName: result.nextStepName,
+            },
+          },
         );
       }
     }
@@ -476,8 +544,6 @@ export class WorkflowsService {
     // --- 4. ĐỘNG CƠ WEBHOOK ĐỘNG TRA CỨU DB & XỬ LÝ BẤT ĐỒNG BỘ (BULLMQ) ---
     if (result.isCompleted) {
       try {
-        // Truy vấn động tất cả các cấu hình Webhook đang hoạt động cho Biểu mẫu này dưới DB
-        // (Prisma Client Extension sẽ tự động chèn thêm điều kiện "tenantId" của doanh nghiệp hiện tại!)
         const configuredWebhooks = await this.prisma.webhookEndpoint.findMany({
           where: {
             entityId: result.entityId,
@@ -485,13 +551,11 @@ export class WorkflowsService {
           },
         });
 
-        // Lọc ra các Webhook có đăng ký sự kiện RECORD_COMPLETED
         const activeWebhooks = configuredWebhooks.filter((w) => {
           const events = w.events as string[];
           return Array.isArray(events) && events.includes('RECORD_COMPLETED');
         });
 
-        // Đẩy song song các Job Webhook ngầm vào Redis Queue
         for (const webhook of activeWebhooks) {
           await this.webhookQueue.add(
             'send-webhook',
