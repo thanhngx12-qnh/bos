@@ -11,6 +11,7 @@ import {
   Query,
   UseGuards,
   Request,
+  DefaultValuePipe,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -33,12 +34,10 @@ export class RecordsController {
   @Post()
   @ApiOperation({ summary: 'Thêm mới một bản ghi (Submit Form)' })
   create(@Request() req, @Body() dto: CreateRecordDto) {
-    // req.user được Inject tự động từ JwtStrategy
     const userId = req.user.userId;
     return this.recordsService.create(userId, dto);
   }
 
-  // --- ENDPOINT MỚI: ĐỘNG CƠ TRA CỨU LIÊN KẾT ĐỘNG (LOOKUP ENGINE) ---
   @Get('lookup/:fieldId')
   @ApiOperation({
     summary: 'Lấy danh sách dữ liệu tra cứu liên kết động chéo biểu mẫu',
@@ -48,10 +47,54 @@ export class RecordsController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Lấy danh sách các bản ghi của 1 Biểu mẫu' })
+  @ApiOperation({
+    summary: 'Lấy danh sách bản ghi phân trang, tìm kiếm và lọc động vạn năng',
+  })
   @ApiQuery({ name: 'entityId', required: true, type: Number })
-  findAllByEntity(@Query('entityId', ParseIntPipe) entityId: number) {
-    return this.recordsService.findAllByEntity(entityId);
+  @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, type: Number, example: 10 })
+  @ApiQuery({
+    name: 'sortBy',
+    required: false,
+    type: String,
+    example: 'total_amount',
+  })
+  @ApiQuery({
+    name: 'sortOrder',
+    required: false,
+    enum: ['asc', 'desc'],
+    example: 'desc',
+  })
+  @ApiQuery({
+    name: 'searchQuery',
+    required: false,
+    type: String,
+    example: 'Cisco',
+  })
+  @ApiQuery({
+    name: 'filters',
+    required: false,
+    type: String,
+    description: 'JSON string: {"plug_status":"DA_RUT"}',
+  })
+  findAllByEntity(
+    @Query('entityId', ParseIntPipe) entityId: number,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
+    @Query('sortBy') sortBy?: string,
+    @Query('sortOrder') sortOrder: 'asc' | 'desc' = 'desc',
+    @Query('searchQuery') searchQuery?: string,
+    @Query('filters') filtersRaw?: string,
+  ) {
+    return this.recordsService.findAllByEntity(
+      entityId,
+      page,
+      limit,
+      sortBy,
+      sortOrder,
+      searchQuery,
+      filtersRaw,
+    );
   }
 
   @Get(':id')
@@ -69,8 +112,8 @@ export class RecordsController {
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateRecordDto,
   ) {
-    const userId = req.user.userId; // Trích xuất ID người sửa từ JWT
-    return this.recordsService.update(userId, id, dto); // Truyền đúng thứ tự: userId trước, sau đó là id và dto
+    const userId = req.user.userId;
+    return this.recordsService.update(userId, id, dto);
   }
 
   @Delete(':id')

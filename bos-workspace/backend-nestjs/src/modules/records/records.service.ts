@@ -89,16 +89,118 @@ export class RecordsService {
     });
   }
 
-  async findAllByEntity(entityId: number) {
+  // ====================================================
+  // ĐỘNG CƠ TRUY VẤN VẠN NĂNG (UNIVERSAL QUERY ENGINE):
+  // Phân trang, Tìm kiếm toàn văn bản JSONB, Sắp xếp động, Lọc động
+  // ====================================================
+  async findAllByEntity(
+    entityId: number,
+    page: number = 1,
+    limit: number = 10,
+    sortBy?: string,
+    sortOrder: 'asc' | 'desc' = 'desc',
+    searchQuery?: string,
+    filtersRaw?: string,
+  ) {
     const entity = await this.prisma.entity.findUnique({
       where: { id: entityId },
+      include: { fields: true },
     });
     if (!entity) throw new NotFoundException('Không tìm thấy Biểu mẫu.');
 
-    return this.prisma.record.findMany({
-      where: { entityId },
-      orderBy: { id: 'desc' },
-    });
+    const tenantStore = tenantContext.getStore();
+    const tenantId = tenantStore?.tenantId || null;
+
+    let filterSql = '';
+    const queryParams: any[] = [entityId, tenantId];
+    let paramIndex = 3;
+
+    // 1. XỬ LÝ LỌC ĐỘNG NHIỀU TRƯỜNG (Multi-field Filtering)
+    if (filtersRaw) {
+      try {
+        const filters = JSON.parse(filtersRaw);
+        for (const [key, val] of Object.entries(filters)) {
+          // BẢO VỆ TUYỆT ĐỐI SQL INJECTION: Chỉ cho phép lọc theo trường đã khai báo trong cấu hình Entity
+          const fieldDef = entity.fields.find((f) => f.code === key);
+          if (fieldDef) {
+            filterSql += ` AND r.data->>${'$' + paramIndex} = ${'$' + (paramIndex + 1)}`;
+            queryParams.push(key, String(val));
+            paramIndex += 2;
+          }
+        }
+      } catch (e) {
+        throw new BadRequestException(
+          'Định dạng bộ lọc filters (JSON) gửi lên không hợp lệ.',
+        );
+      }
+    }
+
+    // 2. XỬ LÝ TÌM KIẾM TOÀN VĂN VẠN NĂNG (Global Search)
+    const searchPattern = searchQuery ? `%${searchQuery}%` : '%';
+    filterSql += ` AND r.data::text ILIKE ${'$' + paramIndex}`;
+    queryParams.push(searchPattern);
+    paramIndex += 1;
+
+    // 3. XỬ LÝ SẮP XẾP ĐỘNG THÔNG MINH (Dynamic Sorting)
+    let orderBySql = 'ORDER BY r.id DESC'; // Mặc định xếp theo id giảm dần
+    if (sortBy) {
+      const sortFieldDef = entity.fields.find((f) => f.code === sortBy);
+      const direction = sortOrder.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+      if (sortFieldDef) {
+        if (['NUMBER', 'FORMULA'].includes(sortFieldDef.type)) {
+          // Ép kiểu sang số thực tế dưới Database để sắp xếp chuẩn xác
+          orderBySql = `ORDER BY COALESCE((r.data->>'${sortBy}')::numeric, 0) ${direction}`;
+        } else {
+          orderBySql = `ORDER BY r.data->>'${sortBy}' ${direction}`;
+        }
+      }
+    }
+
+    // 4. PHÂN TRANG (Pagination offset)
+    const offset = (page - 1) * limit;
+    const limitParamIndex = paramIndex;
+    const offsetParamIndex = paramIndex + 1;
+    queryParams.push(limit, offset);
+
+    // 5. Cú pháp SQL thô hiệu năng cao chọc thẳng vào cấu trúc JSONB
+    const sqlQuery = `
+      SELECT r.* 
+      FROM records r
+      WHERE r.entity_id = $1 
+        AND (r.tenant_id = $2 OR (r.tenant_id IS NULL AND $2 IS NULL))
+        ${filterSql}
+      ${orderBySql}
+      LIMIT ${'$' + limitParamIndex} OFFSET ${'$' + offsetParamIndex}
+    `;
+
+    const sqlCountQuery = `
+      SELECT COUNT(*)::int as count
+      FROM records r
+      WHERE r.entity_id = $1 
+        AND (r.tenant_id = $2 OR (r.tenant_id IS NULL AND $2 IS NULL))
+        ${filterSql}
+    `;
+
+    // 6. Thực thi truy vấn song song tối ưu hóa bằng Prisma Transaction
+    const [records, countResult] = await this.prisma.$transaction([
+      this.prisma.$queryRawUnsafe<any[]>(sqlQuery, ...queryParams),
+      this.prisma.$queryRawUnsafe<any[]>(
+        sqlCountQuery,
+        ...queryParams.slice(0, queryParams.length - 2),
+      ),
+    ]);
+
+    const total = countResult[0]?.count || 0;
+
+    return {
+      data: records,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
   }
 
   async findOne(id: number) {
@@ -113,7 +215,7 @@ export class RecordsService {
     return record;
   }
 
-  // --- HÀM NÂNG CẤP KÈM LOG CHẨN ĐOÁN CHI TIẾT ---
+  // --- HÀM UPDATE ---
   async update(userId: number, id: number, dto: UpdateRecordDto) {
     console.log('====================================');
     console.log('=== [DEBUG] bat dau recordsService.update ===');
@@ -181,6 +283,7 @@ export class RecordsService {
       return currentRecord;
     }
 
+    console.log('Bat dau chay Prisma $transaction de ghi xuong DB...');
     return this.prisma.$transaction(async (tx) => {
       const updatedRecord = await tx.record.update({
         where: { id },
@@ -231,7 +334,6 @@ export class RecordsService {
   // ĐỘNG CƠ TRA CỨU LIÊN KẾT ĐỘNG (LOOKUP ENGINE)
   // ==========================================
   async getLookupData(fieldId: number) {
-    // 1. Tìm định nghĩa trường dữ liệu (FieldDefinition)
     const field = await this.prisma.fieldDefinition.findUnique({
       where: { id: fieldId },
     });
@@ -240,7 +342,7 @@ export class RecordsService {
 
     const options: any = field.options || {};
     const lookupEntityId = options.lookupEntityId;
-    const displayField = options.displayField || 'id'; // Mặc định hiển thị ID nếu không cấu hình displayField
+    const displayField = options.displayField || 'id';
     const filterConfig = options.filter || {};
 
     if (!lookupEntityId) {
@@ -249,12 +351,10 @@ export class RecordsService {
       );
     }
 
-    // 2. Xây dựng điều kiện truy vấn dưới Database
     const queryConditions: any = {
       entityId: lookupEntityId,
     };
 
-    // Chỉ lọc các bản ghi đang chạy quy trình (Ví dụ: xe đang ở trong bãi)
     if (filterConfig.activeWorkflowOnly) {
       queryConditions.instances = {
         some: {
@@ -263,13 +363,11 @@ export class RecordsService {
       };
     }
 
-    // Thực thi truy vấn (Prisma Client Extension sẽ tự động chèn thêm điều kiện cô lập tenantId!)
     const records = await this.prisma.record.findMany({
       where: queryConditions,
       orderBy: { id: 'desc' },
     });
 
-    // 3. Thực hiện lọc mềm (In-Memory Filter) nếu có cấu hình lọc theo dữ liệu bản ghi
     let filteredRecords = records;
     if (filterConfig.recordFilters) {
       filteredRecords = records.filter((r) => {
@@ -280,7 +378,6 @@ export class RecordsService {
       });
     }
 
-    // 4. Map kết quả trả về dạng danh sách nhãn [{ id, label }] cho Frontend dễ vẽ Dropdown
     return filteredRecords.map((r) => {
       const recordData = r.data as any;
       const codePrefix = r.recordCode ? `[${r.recordCode}] ` : '';

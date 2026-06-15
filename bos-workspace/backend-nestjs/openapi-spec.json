@@ -812,6 +812,63 @@
             "schema": {
               "type": "number"
             }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": 10,
+              "type": "number"
+            }
+          },
+          {
+            "name": "sortBy",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "total_amount",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sortOrder",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "searchQuery",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "Cisco",
+              "type": "string"
+            }
+          },
+          {
+            "name": "filters",
+            "required": false,
+            "in": "query",
+            "description": "JSON string: {\"plug_status\":\"DA_RUT\"}",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -824,7 +881,7 @@
             "bearer": []
           }
         ],
-        "summary": "Lấy danh sách các bản ghi của 1 Biểu mẫu",
+        "summary": "Lấy danh sách bản ghi phân trang, tìm kiếm và lọc động vạn năng",
         "tags": [
           "Metadata - Records (Dữ liệu bản ghi)"
         ]
