@@ -35,6 +35,7 @@ import SettingsTab from "@/components/metadata/SettingsTab";
 import Toolbox from "@/components/metadata/Toolbox";
 import Canvas from "@/components/metadata/Canvas";
 import PropertiesPanel from "@/components/metadata/PropertiesPanel";
+import WorkflowTab from "@/components/metadata/WorkflowTab";
 
 const { Title, Text } = Typography;
 
@@ -95,7 +96,7 @@ export default function BuilderPage({ params }: PageProps) {
     };
   }, [clearStore]);
 
-  // Cấu hình PointerSensor tối ưu tránh xung đột click chọn và kéo thả
+  // Cấu hình PointerSensor tối ưu
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -195,7 +196,6 @@ export default function BuilderPage({ params }: PageProps) {
               />
             </Col>
 
-            {/* CỘT PHẢI: PROPERTIES PANEL VỚI RULE BUILDER ĐÃ ĐỒNG BỘ HOÀN TOÀN */}
             <Col xs={24} md={6}>
               <PropertiesPanel />
             </Col>
@@ -212,12 +212,8 @@ export default function BuilderPage({ params }: PageProps) {
         </span>
       ),
       children: (
-        <div style={{ padding: "20px 0" }}>
-          <Text type="secondary">
-            Khu vực cấu hình Workflow & Phân quyền RBAC (Sẽ hoàn thiện ở Chặng
-            5).
-          </Text>
-        </div>
+        // ĐẤU NỐI TRỰC TIẾP TAB WORKFLOW MỚI REFACTOR
+        <WorkflowTab entityId={Number(entityId)} entity={fetchedEntity} />
       ),
     },
     {

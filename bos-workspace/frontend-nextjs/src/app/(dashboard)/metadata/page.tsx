@@ -16,20 +16,30 @@ import {
   Typography,
   Popconfirm,
   Empty,
+  Statistic,
+  Divider,
 } from "antd";
 import {
   PlusOutlined,
   DeleteOutlined,
   DatabaseOutlined,
+  SettingOutlined,
+  EyeOutlined,
+  AppstoreOutlined,
+  DeploymentUnitOutlined,
+  BarcodeOutlined,
 } from "@ant-design/icons";
+import { useRouter } from "next/navigation";
 import { useEntities } from "@/hooks/useEntities";
 import { useFields } from "@/hooks/useFields";
-import FieldBuilderModal from "@/components/metadata/FieldBuilderModal";
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
 
 export default function MetadataPage() {
+  const router = useRouter();
+
+  // Tải danh sách thực thể từ Backend thông qua TanStack Query
   const {
     entities,
     isLoading: isLoadingEntities,
@@ -38,23 +48,18 @@ export default function MetadataPage() {
   } = useEntities();
   const [selectedEntity, setSelectedEntity] = useState<any>(null);
 
-  const {
-    fields,
-    isLoading: isLoadingFields,
-    createField,
-    removeField,
-    isCreating: isCreatingField,
-  } = useFields(selectedEntity?.id);
+  // Nạp danh sách các Fields thuộc về Thực thể đang chọn
+  const { fields, isLoading: isLoadingFields } = useFields(selectedEntity?.id);
 
   const [isEntityModalOpen, setIsEntityModalOpen] = useState(false);
-  const [isFieldModalOpen, setIsFieldModalOpen] = useState(false);
-
   const [entityForm] = Form.useForm();
 
+  // Giải nén mảng danh sách an toàn
   const entityList = Array.isArray(entities)
     ? entities
     : (entities as any)?.data || (entities as any)?.items || [];
 
+  // Tự động chọn thực thể đầu tiên khi tải xong danh sách
   useEffect(() => {
     if (entityList.length > 0 && !selectedEntity) {
       setSelectedEntity(entityList[0]);
@@ -62,26 +67,12 @@ export default function MetadataPage() {
   }, [entityList, selectedEntity]);
 
   const handleCreateEntity = async (values: any) => {
-    console.log("[DEBUG-BOS] Form Entity Submitted Raw Values:", values);
     try {
       await createEntity(values);
       setIsEntityModalOpen(false);
       entityForm.resetFields();
     } catch (e) {
-      console.error("[DEBUG-BOS] handleCreateEntity try-catch caught:", e);
-    }
-  };
-
-  const handleCreateField = async (payload: any) => {
-    console.log(
-      "[DEBUG-BOS] Sending Refactored Payload to CreateField API:",
-      payload,
-    );
-    try {
-      await createField(payload);
-      setIsFieldModalOpen(false);
-    } catch (e) {
-      console.error("[DEBUG-BOS] handleCreateField failed:", e);
+      console.error("[DEBUG-BOS] handleCreateEntity failed:", e);
     }
   };
 
@@ -94,12 +85,31 @@ export default function MetadataPage() {
     } catch (e) {}
   };
 
-  const handleDeleteField = async (id: number) => {
-    try {
-      await removeField(id);
-    } catch (e) {}
+  // Hàm ánh xạ màu sắc trực quan cho từng loại trường dữ liệu (Metadata-Driven Coloring) [2]
+  const getFieldTypeTag = (type: string) => {
+    switch (type) {
+      case "TEXT":
+        return <Tag color="blue">TEXT</Tag>;
+      case "NUMBER":
+        return <Tag color="green">NUMBER</Tag>;
+      case "DATE":
+        return <Tag color="purple">DATE</Tag>;
+      case "DATETIME":
+        return <Tag color="magenta">DATETIME</Tag>;
+      case "SELECT":
+        return <Tag color="orange">SELECT</Tag>;
+      case "LOOKUP":
+        return <Tag color="gold">LOOKUP</Tag>;
+      case "TABLE":
+        return <Tag color="cyan">TABLE</Tag>;
+      case "FORMULA":
+        return <Tag color="geekblue">FORMULA</Tag>;
+      default:
+        return <Tag color="default">{type}</Tag>;
+    }
   };
 
+  // Cột hiển thị danh sách thực thể bên trái
   const entityColumns = [
     {
       title: "Tên thực thể",
@@ -130,7 +140,7 @@ export default function MetadataPage() {
       render: (_: any, record: any) => (
         <Popconfirm
           title="Xóa thực thể?"
-          description="Lưu ý: Hành động này sẽ xóa toàn bộ các trường dữ liệu liên quan."
+          description="Lưu ý: Hành động này sẽ xóa toàn bộ cấu trúc trường liên quan."
           okText="Xóa"
           cancelText="Hủy"
           onConfirm={() => handleDeleteEntity(record.id)}
@@ -141,6 +151,7 @@ export default function MetadataPage() {
     },
   ];
 
+  // Cột hiển thị trường dữ liệu chi tiết bên phải
   const fieldColumns = [
     {
       title: "Tên trường",
@@ -156,13 +167,13 @@ export default function MetadataPage() {
       ),
     },
     {
-      title: "Loại dữ liệu",
+      title: "Kiểu dữ liệu",
       dataIndex: "type",
       key: "type",
-      render: (type: string) => <Tag color="blue">{type}</Tag>,
+      render: (type: string) => getFieldTypeTag(type),
     },
     {
-      title: "Yêu cầu",
+      title: "Yêu cầu nhập",
       dataIndex: "isRequired",
       key: "isRequired",
       render: (isRequired: boolean) => (
@@ -171,35 +182,20 @@ export default function MetadataPage() {
         </Tag>
       ),
     },
-    {
-      title: "Hành động",
-      key: "actions",
-      width: 80,
-      render: (_: any, record: any) => (
-        <Popconfirm
-          title="Xóa trường dữ liệu?"
-          okText="Xóa"
-          cancelText="Hủy"
-          onConfirm={() => handleDeleteField(record.id)}
-        >
-          <Button type="text" danger icon={<DeleteOutlined />} />
-        </Popconfirm>
-      ),
-    },
   ];
 
   return (
     <div>
       <div style={{ marginBottom: "24px" }}>
-        <Title level={3}>Kiến tạo Metadata (Metadata Builder)</Title>
+        <Title level={3}>Trung tâm Kiến tạo cấu trúc (Metadata Hub)</Title>
         <Paragraph type="secondary">
-          Quản lý toàn bộ vòng đời cấu trúc thực thể. Thêm thực thể mới và thiết
-          lập các trường dữ liệu đi kèm để xây dựng ứng dụng của bạn.
+          Quản lý toàn bộ vòng đời cấu trúc thực thể Low-code. Định nghĩa thực
+          thể, gán luồng phê duyệt và theo dõi các trường dữ liệu động.
         </Paragraph>
       </div>
 
       <Row gutter={[24, 24]}>
-        {/* CỘT TRÁI: THỰC THỂ */}
+        {/* CỘT TRÁI (33%): DANH SÁCH THỰC THỂ */}
         <Col xs={24} md={8}>
           <Card
             title={
@@ -235,7 +231,7 @@ export default function MetadataPage() {
           </Card>
         </Col>
 
-        {/* CỘT PHẢI: TRƯỜNG DỮ LIỆU */}
+        {/* CỘT PHẢI (67%): CHI TIẾT THÔNG TIN CHUNG VÀ TRƯỜNG DỮ LIỆU */}
         <Col xs={24} md={16}>
           {selectedEntity ? (
             <Card
@@ -245,20 +241,31 @@ export default function MetadataPage() {
                     Thực thể: {selectedEntity.name}
                   </Title>
                   <Text type="secondary" style={{ fontSize: "13px" }}>
-                    Mã code: <strong>{selectedEntity.code}</strong>{" "}
-                    {selectedEntity.autoCodePattern &&
-                      `| Mẫu sinh mã: ${selectedEntity.autoCodePattern}`}
+                    Mã code: <strong>{selectedEntity.code}</strong>
                   </Text>
                 </Space>
               }
+              // Thanh hành động tập trung cao cấp - Chuyển Workspace làm nút chính (Primary) [1]
               extra={
-                <Button
-                  type="primary"
-                  icon={<PlusOutlined />}
-                  onClick={() => setIsFieldModalOpen(true)}
-                >
-                  Thêm trường dữ liệu
-                </Button>
+                <Space>
+                  <Button
+                    type="primary"
+                    icon={<SettingOutlined />}
+                    onClick={() =>
+                      router.push(`/metadata/builder/${selectedEntity.id}`)
+                    }
+                  >
+                    Vào Không gian thiết kế (Workspace)
+                  </Button>
+                  <Button
+                    icon={<EyeOutlined />}
+                    onClick={() =>
+                      router.push(`/entities/${selectedEntity.id}`)
+                    }
+                  >
+                    Vận hành dữ liệu (Grid)
+                  </Button>
+                </Space>
               }
               variant="borderless"
               style={{
@@ -266,11 +273,75 @@ export default function MetadataPage() {
                 minHeight: "600px",
               }}
             >
+              {/* BẢNG CHỈ SỐ THỐNG KÊ CHI TIẾT (ENTITY STATS HUB) [2] */}
+              <div
+                style={{
+                  background: "#fafafa",
+                  padding: "16px",
+                  borderRadius: "8px",
+                  marginBottom: "24px",
+                }}
+              >
+                <Row gutter={16}>
+                  <Col span={8}>
+                    <Statistic
+                      title="Tổng số trường"
+                      value={fields.length}
+                      prefix={
+                        <AppstoreOutlined
+                          style={{ color: "#1677ff", marginRight: "4px" }}
+                        />
+                      }
+                    />
+                  </Col>
+                  <Col span={8}>
+                    <Statistic
+                      title="Quy trình liên kết"
+                      value={
+                        selectedEntity.workflows?.length > 0
+                          ? "Đã kích hoạt"
+                          : "Chưa cấu hình"
+                      }
+                      prefix={
+                        <DeploymentUnitOutlined
+                          style={{
+                            color:
+                              selectedEntity.workflows?.length > 0
+                                ? "#52c41a"
+                                : "#ff4d4f",
+                            marginRight: "4px",
+                          }}
+                        />
+                      }
+                    />
+                  </Col>
+                  <Col span={8}>
+                    <Statistic
+                      title="Định dạng tự sinh mã"
+                      value={selectedEntity.autoCodePattern || "N/A"}
+                      prefix={
+                        <BarcodeOutlined
+                          style={{ color: "#fa8c16", marginRight: "4px" }}
+                        />
+                      }
+                    />
+                  </Col>
+                </Row>
+              </div>
+
               <div style={{ marginBottom: "20px" }}>
-                <Text strong>Mô tả: </Text>
+                <Text strong>Mô tả chi tiết thực thể: </Text>
                 <Text>
                   {selectedEntity.description ||
                     "Chưa có mô tả chi tiết cho thực thể này."}
+                </Text>
+              </div>
+
+              <Divider style={{ margin: "16px 0" }} />
+
+              <div style={{ marginBottom: "12px" }}>
+                <Text strong style={{ fontSize: "13px", color: "#595959" }}>
+                  DANH SÁCH CẤU TRÚC TRƯỜNG DỮ LIỆU ĐANG HOẠT ĐỘNG
                 </Text>
               </div>
 
@@ -305,7 +376,7 @@ export default function MetadataPage() {
         open={isEntityModalOpen}
         onCancel={() => setIsEntityModalOpen(false)}
         footer={null}
-        destroyOnHidden // Sử dụng thuộc tính mới của AntD v6 thay cho destroyOnClose
+        destroyOnHidden // Sử dụng thuộc tính chuẩn v6
       >
         <Form
           form={entityForm}
@@ -361,16 +432,6 @@ export default function MetadataPage() {
           </Form.Item>
         </Form>
       </Modal>
-
-      {/* COMPONENT THIẾT LẬP DỰA TRÊN TRÌNH XÂY DỰNG TRƯỜNG DỮ LIỆU ĐỘNG */}
-      <FieldBuilderModal
-        open={isFieldModalOpen}
-        onCancel={() => setIsFieldModalOpen(false)}
-        onFinish={handleCreateField}
-        confirmLoading={isCreatingField}
-        selectedEntity={selectedEntity}
-        entities={entityList}
-      />
     </div>
   );
 }

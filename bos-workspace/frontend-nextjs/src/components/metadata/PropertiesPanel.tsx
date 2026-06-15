@@ -25,6 +25,7 @@ import {
   SafetyCertificateOutlined,
 } from "@ant-design/icons";
 import { useBuilderStore } from "@/hooks/useBuilderStore";
+import { useEntities } from "@/hooks/useEntities";
 
 const { Text } = Typography;
 const { TextArea } = Input;
@@ -33,27 +34,21 @@ const { Option } = Select;
 export default function PropertiesPanel() {
   const [form] = Form.useForm();
 
-  // Lấy dữ liệu thực thể và các trường từ Zustand Store
-  const { selectedFieldId, fields, updateField, entities } = useBuilderStore();
+  const { selectedFieldId, fields, updateField, entity } = useBuilderStore();
+  const { entities: allEntitiesData } = useEntities();
 
-  // Tìm trường thông tin đang được người dùng click chọn trên Canvas
   const selectedField = fields.find((f) => f.id === selectedFieldId);
-
-  // Danh sách các trường khác trên Canvas dùng để tham chiếu chéo (loại bỏ trường hiện tại)
   const otherFields = fields.filter((f) => f.id !== selectedFieldId);
 
-  // Khắc phục mảng rỗng cho thực thể liên kết (LOOKUP)
-  const entityList = Array.isArray(entities)
-    ? entities
-    : (entities as any)?.data || (entities as any)?.items || [];
+  const entityList = Array.isArray(allEntitiesData)
+    ? allEntitiesData
+    : (allEntitiesData as any)?.data || (allEntitiesData as any)?.items || [];
 
-  // 🛑 CHỐT CHẶN UX: Tránh vòng lặp vô hạn làm mất ký tự/nhảy con trỏ chuột khi người dùng đang gõ
+  const lookupEntities = entityList.filter((e: any) => e.id !== entity?.id);
   const lastLoadedFieldIdRef = useRef<string | number | null>(null);
 
-  // Đồng bộ hóa dữ liệu từ Canvas Store vào Form thuộc tính
   useEffect(() => {
     if (selectedField) {
-      // CHỈ setFieldsValue khi thực sự chuyển đổi sang click một trường hoàn toàn khác trên Canvas
       if (lastLoadedFieldIdRef.current !== selectedField.id) {
         lastLoadedFieldIdRef.current = selectedField.id;
 
@@ -62,29 +57,24 @@ export default function PropertiesPanel() {
           code: selectedField.code,
           isRequired: !!selectedField.isRequired,
 
-          // SELECT Options
           selectMultiple: !!selectedField.options?.multiple,
           selectChoices: selectedField.options?.choices || [],
 
-          // NUMBER Options
           numMin: selectedField.options?.min,
           numMax: selectedField.options?.max,
           numPrefix: selectedField.options?.prefix,
 
-          // LOOKUP Options
           lookupEntityId: selectedField.options?.lookupEntityId,
           lookupDisplayField: selectedField.options?.displayField,
 
-          // FORMULA Options
           formulaExpression: selectedField.options?.formula,
+          tableColumns: selectedField.options?.columns || [],
 
-          // RULE BUILDER: Đồng bộ điều kiện hiển thị (showIf)
           hasShowIf: !!selectedField.options?.showIf,
           showIfField: selectedField.options?.showIf?.field,
           showIfOperator: selectedField.options?.showIf?.operator || "==",
           showIfValue: selectedField.options?.showIf?.value,
 
-          // RULE BUILDER: Đồng bộ điều kiện bắt buộc (requiredIf)
           hasRequiredIf: !!selectedField.options?.requiredIf,
           requiredIfField: selectedField.options?.requiredIf?.field,
           requiredIfOperator:
@@ -112,16 +102,13 @@ export default function PropertiesPanel() {
     );
   }
 
-  // Lắng nghe thay đổi giá trị trên Form để ghi đè tức thì vào Zustand Store
   const handleValuesChange = (changedValues: any, allValues: any) => {
     const { name, code, isRequired, ...configValues } = allValues;
 
-    // 1. Bảo toàn tất cả các options cũ đã lưu trong DB để tránh mất mát dữ liệu
     const optionsPayload: Record<string, any> = {
       ...(selectedField.options || {}),
     };
 
-    // 2. Biên soạn Options đặc thù theo từng Type đúng chuẩn Backend Architect yêu cầu
     switch (selectedField.type) {
       case "SELECT":
         optionsPayload.multiple = !!configValues.selectMultiple;
@@ -129,9 +116,28 @@ export default function PropertiesPanel() {
         break;
 
       case "NUMBER":
-        optionsPayload.min = configValues.numMin ?? null;
-        optionsPayload.max = configValues.numMax ?? null;
         optionsPayload.prefix = configValues.numPrefix || "";
+
+        // 🛑 TRIỆT ĐỂ: Loại bỏ hoàn toàn min/max khỏi payload nếu trống thay vì gán null [1]
+        if (
+          configValues.numMin !== undefined &&
+          configValues.numMin !== null &&
+          configValues.numMin !== ""
+        ) {
+          optionsPayload.min = Number(configValues.numMin);
+        } else {
+          delete optionsPayload.min;
+        }
+
+        if (
+          configValues.numMax !== undefined &&
+          configValues.numMax !== null &&
+          configValues.numMax !== ""
+        ) {
+          optionsPayload.max = Number(configValues.numMax);
+        } else {
+          delete optionsPayload.max;
+        }
         break;
 
       case "LOOKUP":
@@ -142,9 +148,12 @@ export default function PropertiesPanel() {
       case "FORMULA":
         optionsPayload.formula = configValues.formulaExpression;
         break;
+
+      case "TABLE":
+        optionsPayload.columns = configValues.tableColumns || [];
+        break;
     }
 
-    // 3. Tự động gom cấu hình trực quan của Rule Builder ẩn/hiện (showIf) lồng vào options
     if (configValues.hasShowIf && configValues.showIfField) {
       optionsPayload.showIf = {
         field: configValues.showIfField,
@@ -152,11 +161,9 @@ export default function PropertiesPanel() {
         value: configValues.showIfValue,
       };
     } else {
-      // TRIỆT ĐỂ: Xóa bỏ hoàn toàn key showIf ra khỏi object khi người dùng gạt công tắc Tắt
       delete optionsPayload.showIf;
     }
 
-    // 4. Tự động gom cấu hình trực quan của Rule Builder bắt buộc (requiredIf) lồng vào options
     if (configValues.hasRequiredIf && configValues.requiredIfField) {
       optionsPayload.requiredIf = {
         field: configValues.requiredIfField,
@@ -164,11 +171,9 @@ export default function PropertiesPanel() {
         value: configValues.requiredIfValue,
       };
     } else {
-      // TRIỆT ĐỂ: Xóa bỏ hoàn toàn key requiredIf ra khỏi object khi người dùng gạt công tắc Tắt
       delete optionsPayload.requiredIf;
     }
 
-    // 5. Kích hoạt cập nhật Canvas Store ngay tức thì
     updateField(selectedField.id, {
       name,
       code,
@@ -199,7 +204,6 @@ export default function PropertiesPanel() {
         requiredMark={false}
         onValuesChange={handleValuesChange}
       >
-        {/* PHẦN 1: THÔNG TIN CƠ BẢN */}
         <div style={{ marginBottom: "16px" }}>
           <Text strong style={{ fontSize: "12px", color: "#8c8c8c" }}>
             THÔNG TIN CHUNG
@@ -238,14 +242,12 @@ export default function PropertiesPanel() {
 
         <Divider style={{ margin: "16px 0" }} />
 
-        {/* PHẦN 2: CẤU HÌNH ĐẶC THÙ THEO LOẠI TRƯỜNG */}
         <div style={{ marginBottom: "16px" }}>
           <Text strong style={{ fontSize: "12px", color: "#8c8c8c" }}>
             CẤU HÌNH THEO LOẠI [{selectedField.type}]
           </Text>
         </div>
 
-        {/* Cấu hình SELECT */}
         {selectedField.type === "SELECT" && (
           <Space orientation="vertical" style={{ width: "100%" }} size="middle">
             <Form.Item
@@ -316,7 +318,6 @@ export default function PropertiesPanel() {
           </Space>
         )}
 
-        {/* Cấu hình NUMBER */}
         {selectedField.type === "NUMBER" && (
           <Row gutter={8}>
             <Col span={8}>
@@ -337,7 +338,6 @@ export default function PropertiesPanel() {
           </Row>
         )}
 
-        {/* Cấu hình LOOKUP */}
         {selectedField.type === "LOOKUP" && (
           <Space orientation="vertical" style={{ width: "100%" }} size="small">
             <Form.Item
@@ -345,8 +345,8 @@ export default function PropertiesPanel() {
               label="Thực thể đích liên kết"
               rules={[{ required: true, message: "Chọn thực thể liên kết!" }]}
             >
-              <Select placeholder="Chọn thực thể...">
-                {entityList.map((e: any) => (
+              <Select placeholder="Chọn thực thể liên kết...">
+                {lookupEntities.map((e: any) => (
                   <Option key={e.id} value={e.id}>
                     {e.name} ({e.code})
                   </Option>
@@ -363,7 +363,6 @@ export default function PropertiesPanel() {
           </Space>
         )}
 
-        {/* Cấu hình FORMULA */}
         {selectedField.type === "FORMULA" && (
           <Form.Item
             name="formulaExpression"
@@ -378,12 +377,134 @@ export default function PropertiesPanel() {
           </Form.Item>
         )}
 
-        {/* Các kiểu dữ liệu thuần khác */}
+        {selectedField.type === "TABLE" && (
+          <Form.Item label="Thiết lập các Cột của Bảng con" required>
+            <Form.List name="tableColumns">
+              {(columns, { add, remove }) => (
+                <>
+                  {columns.map((column, index) => (
+                    <Card
+                      key={column.key}
+                      size="small"
+                      title={
+                        <Space>
+                          <Text strong style={{ fontSize: "13px" }}>
+                            Cột #{index + 1}
+                          </Text>
+                        </Space>
+                      }
+                      extra={
+                        <Button
+                          type="text"
+                          danger
+                          onClick={() => remove(column.name)}
+                          icon={<DeleteOutlined />}
+                          size="small"
+                        />
+                      }
+                      style={{
+                        marginBottom: "12px",
+                        background: "#fff",
+                        border: "1px solid #e8e8e8",
+                      }}
+                    >
+                      <Space
+                        orientation="vertical"
+                        style={{ width: "100%" }}
+                        size="small"
+                      >
+                        <Row gutter={8}>
+                          <Col span={12}>
+                            <Form.Item
+                              {...column}
+                              name={[column.name, "name"]}
+                              label="Tên cột hiển thị"
+                              rules={[
+                                { required: true, message: "Nhập tên cột!" },
+                              ]}
+                              style={{ marginBottom: "8px" }}
+                            >
+                              <Input placeholder="ví dụ: Đơn giá" />
+                            </Form.Item>
+                          </Col>
+                          <Col span={12}>
+                            <Form.Item
+                              {...column}
+                              name={[column.name, "code"]}
+                              label="Mã cột (snake_case)"
+                              rules={[
+                                { required: true, message: "Nhập mã cột!" },
+                                {
+                                  pattern: /^[a-z0-9_]+$/,
+                                  message: "Chữ thường không dấu & gạch dưới",
+                                },
+                              ]}
+                              style={{ marginBottom: "8px" }}
+                            >
+                              <Input placeholder="ví dụ: unit_price" />
+                            </Form.Item>
+                          </Col>
+                        </Row>
+                        <Row gutter={8}>
+                          <Col span={14}>
+                            <Form.Item
+                              {...column}
+                              name={[column.name, "type"]}
+                              label="Kiểu dữ liệu"
+                              rules={[
+                                { required: true, message: "Chọn kiểu!" },
+                              ]}
+                              style={{ marginBottom: 0 }}
+                              initialValue="TEXT"
+                            >
+                              <Select size="small">
+                                <Option value="TEXT">Văn bản (TEXT)</Option>
+                                <Option value="NUMBER">Số học (NUMBER)</Option>
+                                <Option value="DATE">Ngày (DATE)</Option>
+                                <Option value="SELECT">
+                                  Lựa chọn (SELECT)
+                                </Option>
+                              </Select>
+                            </Form.Item>
+                          </Col>
+                          <Col span={10}>
+                            <Form.Item
+                              {...column}
+                              name={[column.name, "isRequired"]}
+                              label="Bắt buộc"
+                              valuePropName="checked"
+                              style={{ marginBottom: 0 }}
+                            >
+                              <Switch
+                                size="small"
+                                checkedChildren="Có"
+                                unCheckedChildren="Không"
+                              />
+                            </Form.Item>
+                          </Col>
+                        </Row>
+                      </Space>
+                    </Card>
+                  ))}
+                  <Button
+                    type="dashed"
+                    onClick={() => add()}
+                    block
+                    icon={<PlusOutlined />}
+                    style={{ marginTop: "8px" }}
+                  >
+                    Thêm cột bảng con
+                  </Button>
+                </>
+              )}
+            </Form.List>
+          </Form.Item>
+        )}
+
         {[
           "TEXT",
           "DATE",
           "DATETIME",
-          "TABLE",
           "USER_REF",
           "DEPT_REF",
           "FILE",
@@ -407,14 +528,12 @@ export default function PropertiesPanel() {
 
         <Divider style={{ margin: "16px 0" }} />
 
-        {/* PHẦN 3: 🛑 DYNAMIC RULE BUILDER (ZERO-JSON) */}
         <div style={{ marginBottom: "16px" }}>
           <Text strong style={{ fontSize: "12px", color: "#8c8c8c" }}>
             LOGIC ĐỘNG (RULE BUILDER)
           </Text>
         </div>
 
-        {/* A. RULE BUILDER CHO SHOWIF */}
         <Card
           size="small"
           title={
@@ -500,7 +619,6 @@ export default function PropertiesPanel() {
           </Form.Item>
         </Card>
 
-        {/* B. RULE BUILDER CHO REQUIREDIF */}
         <Card
           size="small"
           title={
