@@ -5,7 +5,7 @@ import {
   NestModule,
   MiddlewareConsumer,
 } from '@nestjs/common';
-import { APP_PIPE } from '@nestjs/core';
+import { APP_PIPE, APP_INTERCEPTOR } from '@nestjs/core'; // <-- IMPORT APP_INTERCEPTOR
 import { BullModule } from '@nestjs/bullmq';
 import { PrismaModule } from './prisma/prisma.module';
 import { OrganizationsModule } from './modules/organizations/organizations.module';
@@ -23,7 +23,8 @@ import { TenantMiddleware } from './prisma/tenant.middleware';
 import { RedisModule } from './modules/redis/redis.module';
 import { AttachmentsModule } from './modules/attachments/attachments.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
-import { TenantsModule } from './modules/tenants/tenants.module';
+import { AuditLogsModule } from './modules/audit-logs/audit-logs.module'; // <-- IMPORT MODULE MỚI
+import { AuditLogInterceptor } from './core/interceptors/audit-log.interceptor'; // <-- IMPORT INTERCEPTOR MỚI
 
 @Module({
   imports: [
@@ -48,12 +49,17 @@ import { TenantsModule } from './modules/tenants/tenants.module';
     RedisModule,
     AttachmentsModule,
     NotificationsModule,
-    TenantsModule,
+    AuditLogsModule, // <-- KÍCH HOẠT MODULE
   ],
   providers: [
     {
       provide: APP_PIPE,
       useClass: ValidationPipe,
+    },
+    // --- KÍCH HOẠT CAMERA AN NINH TOÀN CẦU (AUTOMATIC AUDIT LOGGING) ---
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: AuditLogInterceptor,
     },
   ],
 })

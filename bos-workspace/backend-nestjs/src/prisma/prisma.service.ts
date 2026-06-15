@@ -33,6 +33,7 @@ export class PrismaService
               'Notification',
               'WorkflowInstance',
               'WebhookEndpoint',
+              'SystemAuditLog',
             ];
 
             if (tenantModels.includes(model)) {
