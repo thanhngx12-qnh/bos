@@ -33,8 +33,18 @@ export class RecordsController {
   @Post()
   @ApiOperation({ summary: 'Thêm mới một bản ghi (Submit Form)' })
   create(@Request() req, @Body() dto: CreateRecordDto) {
+    // req.user được Inject tự động từ JwtStrategy
     const userId = req.user.userId;
     return this.recordsService.create(userId, dto);
+  }
+
+  // --- ENDPOINT MỚI: ĐỘNG CƠ TRA CỨU LIÊN KẾT ĐỘNG (LOOKUP ENGINE) ---
+  @Get('lookup/:fieldId')
+  @ApiOperation({
+    summary: 'Lấy danh sách dữ liệu tra cứu liên kết động chéo biểu mẫu',
+  })
+  getLookupData(@Param('fieldId', ParseIntPipe) fieldId: number) {
+    return this.recordsService.getLookupData(fieldId);
   }
 
   @Get()

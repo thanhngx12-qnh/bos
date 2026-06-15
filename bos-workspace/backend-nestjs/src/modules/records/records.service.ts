@@ -9,6 +9,7 @@ import { CreateRecordDto } from './dto/create-record.dto';
 import { UpdateRecordDto } from './dto/update-record.dto';
 import { DynamicValidationService } from './dynamic-validation.service'; // <-- KÍCH HOẠT ĐỘNG CƠ VALIDATE MỚI
 import { FormulaEngineService } from './formula-engine.service'; // <-- KÍCH HOẠT ĐỘNG CƠ CÔNG THỨC MỚI
+import { tenantContext } from '../../prisma/tenant-context'; // <-- IMPORT CONTEXT ĐỂ QUẢN TRỊ SAAS
 
 @Injectable()
 export class RecordsService {
@@ -180,7 +181,6 @@ export class RecordsService {
       return currentRecord;
     }
 
-    console.log('Bat dau chay Prisma $transaction de ghi xuong DB...');
     return this.prisma.$transaction(async (tx) => {
       const updatedRecord = await tx.record.update({
         where: { id },
@@ -224,6 +224,72 @@ export class RecordsService {
         user: { select: { fullName: true, email: true } },
       },
       orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  // ==========================================
+  // ĐỘNG CƠ TRA CỨU LIÊN KẾT ĐỘNG (LOOKUP ENGINE)
+  // ==========================================
+  async getLookupData(fieldId: number) {
+    // 1. Tìm định nghĩa trường dữ liệu (FieldDefinition)
+    const field = await this.prisma.fieldDefinition.findUnique({
+      where: { id: fieldId },
+    });
+    if (!field)
+      throw new NotFoundException('Không tìm thấy định nghĩa trường.');
+
+    const options: any = field.options || {};
+    const lookupEntityId = options.lookupEntityId;
+    const displayField = options.displayField || 'id'; // Mặc định hiển thị ID nếu không cấu hình displayField
+    const filterConfig = options.filter || {};
+
+    if (!lookupEntityId) {
+      throw new BadRequestException(
+        'Trường này chưa được cấu hình liên kết thực thể (lookupEntityId).',
+      );
+    }
+
+    // 2. Xây dựng điều kiện truy vấn dưới Database
+    const queryConditions: any = {
+      entityId: lookupEntityId,
+    };
+
+    // Chỉ lọc các bản ghi đang chạy quy trình (Ví dụ: xe đang ở trong bãi)
+    if (filterConfig.activeWorkflowOnly) {
+      queryConditions.instances = {
+        some: {
+          status: 'IN_PROGRESS',
+        },
+      };
+    }
+
+    // Thực thi truy vấn (Prisma Client Extension sẽ tự động chèn thêm điều kiện cô lập tenantId!)
+    const records = await this.prisma.record.findMany({
+      where: queryConditions,
+      orderBy: { id: 'desc' },
+    });
+
+    // 3. Thực hiện lọc mềm (In-Memory Filter) nếu có cấu hình lọc theo dữ liệu bản ghi
+    let filteredRecords = records;
+    if (filterConfig.recordFilters) {
+      filteredRecords = records.filter((r) => {
+        const recordData = r.data as any;
+        return Object.entries(filterConfig.recordFilters).every(
+          ([key, val]) => recordData[key] === val,
+        );
+      });
+    }
+
+    // 4. Map kết quả trả về dạng danh sách nhãn [{ id, label }] cho Frontend dễ vẽ Dropdown
+    return filteredRecords.map((r) => {
+      const recordData = r.data as any;
+      const codePrefix = r.recordCode ? `[${r.recordCode}] ` : '';
+      const labelValue = recordData[displayField] || `#${r.id}`;
+
+      return {
+        id: r.id,
+        label: `${codePrefix}${labelValue}`,
+      };
     });
   }
 }

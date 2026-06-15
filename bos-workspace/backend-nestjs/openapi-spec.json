@@ -830,6 +830,35 @@
         ]
       }
     },
+    "/api/v1/records/lookup/{fieldId}": {
+      "get": {
+        "operationId": "RecordsController_getLookupData",
+        "parameters": [
+          {
+            "name": "fieldId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lấy danh sách dữ liệu tra cứu liên kết động chéo biểu mẫu",
+        "tags": [
+          "Metadata - Records (Dữ liệu bản ghi)"
+        ]
+      }
+    },
     "/api/v1/records/{id}": {
       "get": {
         "operationId": "RecordsController_findOne",
