@@ -31,8 +31,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       email: user.email,
       roleId: user.roleId,
       roleName: user.role?.name,
-      userType: user.userType, // <-- BỔ SUNG TRƯỜNG NÀY ĐỂ PHÂN BIỆT SAAS CUSTOMER
-      departmentId: user.departmentId, // <-- BỔ SUNG TRƯỜNG NÀY ĐỂ LỌC THEO PHÒNG BAN
+      userType: user.userType,
+      departmentId: user.departmentId,
+      tenantId: user.tenantId, // <-- SỬA LỖI TẠI ĐÂY: Nạp thêm Tenant ID vào req.user!
     };
   }
 }

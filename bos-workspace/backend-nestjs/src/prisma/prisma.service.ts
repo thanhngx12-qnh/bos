@@ -30,7 +30,8 @@ export class PrismaService
               'Record',
               'Workflow',
               'Attachment',
-            ]; // <-- THÊM 'Attachment' VÀO ĐÂY
+              'Notification',
+            ];
 
             if (tenantModels.includes(model)) {
               const store = tenantContext.getStore();

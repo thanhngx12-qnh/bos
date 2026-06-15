@@ -1775,6 +1775,95 @@
           "Metadata - Attachments (Quản lý tệp tin S3/MinIO)"
         ]
       }
+    },
+    "/api/v1/notifications": {
+      "get": {
+        "operationId": "NotificationsController_findAllForUser",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lấy danh sách thông báo của người dùng đăng nhập",
+        "tags": [
+          "Notifications (Hộp thư thông báo)"
+        ]
+      }
+    },
+    "/api/v1/notifications/stream": {
+      "get": {
+        "operationId": "NotificationsController_streamNotifications",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Kênh truyền tin thông báo thời gian thực (SSE)",
+        "tags": [
+          "Notifications (Hộp thư thông báo)"
+        ]
+      }
+    },
+    "/api/v1/notifications/{id}/read": {
+      "patch": {
+        "operationId": "NotificationsController_markAsRead",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Đánh dấu đã đọc một thông báo",
+        "tags": [
+          "Notifications (Hộp thư thông báo)"
+        ]
+      }
+    },
+    "/api/v1/notifications/read-all": {
+      "patch": {
+        "operationId": "NotificationsController_markAllAsRead",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Đánh dấu đã đọc TOÀN BỘ thông báo",
+        "tags": [
+          "Notifications (Hộp thư thông báo)"
+        ]
+      }
     }
   },
   "info": {

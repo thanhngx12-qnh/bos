@@ -18,11 +18,12 @@ model Tenant {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  users       User[]
-  entities    Entity[]
-  records     Record[]
-  workflows   Workflow[]
-  attachments Attachment[] // Quan hệ với bảng lưu tệp đính kèm
+  users        User[]
+  entities     Entity[]
+  records      Record[]
+  workflows    Workflow[]
+  attachments  Attachment[]
+  notifications Notification[] // Quan hệ với hòm thư thông báo
 
   @@map("tenants")
 }
@@ -49,7 +50,8 @@ model User {
   instances    WorkflowInstance[]
   workflowLogs WorkflowLog[]
   participations WorkflowParticipant[]
-  recordRevisions RecordRevision[] // Quan hệ với lịch sử chỉnh sửa biểu mẫu
+  recordRevisions RecordRevision[]
+  notifications Notification[] // Quan hệ với hòm thư thông báo
 
   @@map("users")
 }
@@ -147,14 +149,13 @@ model Record {
   entity      Entity   @relation(fields: [entityId], references: [id])
   tenant      Tenant?  @relation(fields: [tenantId], references: [id])
   instances   WorkflowInstance[]
-  revisions   RecordRevision[] // Quan hệ với bảng lưu lịch sử sửa
-  attachments Attachment[] // Quan hệ với tệp đính kèm của biểu mẫu
+  revisions   RecordRevision[]
+  attachments Attachment[]
 
   @@index([entityId])
   @@map("records")
 }
 
-// BẢNG LƯU VẾT LỊCH SỬ CHỈNH SỬA BẢN GHI (AUDIT TRAIL)
 model RecordRevision {
   id          Int      @id @default(autoincrement())
   recordId    Int      @map("record_id")
@@ -169,21 +170,38 @@ model RecordRevision {
   @@map("record_revisions")
 }
 
-// BẢNG MỚI: QUẢN LÝ TỆP TIN ĐÍNH KÈM (ATTACHMENTS)
 model Attachment {
   id          Int      @id @default(autoincrement())
-  recordId    Int?     @map("record_id") // Có thể null nếu là file tĩnh hướng dẫn
-  tenantId    Int?     @map("tenant_id") // SaaS Isolation
-  fileName    String   @map("file_name") // Tên file gốc (VD: "invoice.pdf")
-  s3Key       String   @unique @map("s3_key") // S3 Key (VD: "tenant_1/uuid_invoice.pdf")
-  mimeType    String   @map("mime_type") // MIME Type (VD: "application/pdf")
-  fileSize    Int      @map("file_size") // Dung lượng file tính bằng bytes
+  recordId    Int?     @map("record_id")
+  tenantId    Int?     @map("tenant_id")
+  fileName    String   @map("file_name")
+  s3Key       String   @unique @map("s3_key")
+  mimeType    String   @map("mime_type")
+  fileSize    Int      @map("file_size")
   createdAt   DateTime @default(now()) @map("created_at")
 
   record      Record?  @relation(fields: [recordId], references: [id], onDelete: Cascade)
   tenant      Tenant?  @relation(fields: [tenantId], references: [id])
 
   @@map("attachments")
+}
+
+// ==========================================
+// BLOCK 5: NOTIFICATIONS (HỒM THƯ THÔNG BÁO)
+// ==========================================
+model Notification {
+  id          Int      @id @default(autoincrement())
+  userId      Int      @map("user_id") // Người nhận thông báo
+  tenantId    Int?     @map("tenant_id") // SaaS Isolation
+  title       String   // Tiêu đề (VD: "Yêu cầu phê duyệt phiếu")
+  message     String   // Nội dung chi tiết
+  isRead      Boolean  @default(false) @map("is_read") // Đã đọc hay chưa
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant      Tenant?  @relation(fields: [tenantId], references: [id])
+
+  @@map("notifications")
 }
 
 // ==========================================
@@ -195,7 +213,7 @@ model Workflow {
   name        String
   description String?
   visibility  Json     @default("{}")
-  tenantId    Int?     @map("tenant_id") // Khóa ngoại Tenant
+  tenantId    Int?     @map("tenant_id")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
