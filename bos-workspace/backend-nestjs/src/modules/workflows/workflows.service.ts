@@ -475,7 +475,7 @@ export class WorkflowsService {
     // --- 4. KÍCH HOẠT HÀNG ĐỢI WEBHOOK BẤT ĐỒNG BỘ (BULLMQ) ---
     if (result.isCompleted) {
       const testWebhookUrl =
-        'https://webhook.site/26330559-6798-4c8d-afae-03b8600f9ba9';
+        'https://webhook.site/a4299bc5-68e7-465d-bb30-71ea13094f9e';
       try {
         await this.webhookQueue.add(
           'send-webhook',
