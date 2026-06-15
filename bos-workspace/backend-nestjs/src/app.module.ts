@@ -22,7 +22,8 @@ import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { TenantMiddleware } from './prisma/tenant.middleware';
 import { RedisModule } from './modules/redis/redis.module';
 import { AttachmentsModule } from './modules/attachments/attachments.module';
-import { NotificationsModule } from './modules/notifications/notifications.module'; // <-- IMPORT MỚI
+import { NotificationsModule } from './modules/notifications/notifications.module';
+import { TenantsModule } from './modules/tenants/tenants.module';
 
 @Module({
   imports: [
@@ -46,7 +47,8 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
     AnalyticsModule,
     RedisModule,
     AttachmentsModule,
-    NotificationsModule, // <-- KÍCH HOẠT MODULE THÔNG BÁO
+    NotificationsModule,
+    TenantsModule,
   ],
   providers: [
     {

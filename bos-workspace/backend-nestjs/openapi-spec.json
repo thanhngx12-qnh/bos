@@ -454,6 +454,34 @@
         ]
       }
     },
+    "/api/v1/auth/register-tenant": {
+      "post": {
+        "operationId": "AuthController_registerTenant",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterTenantDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Khởi tạo Doanh nghiệp và tài khoản Admin thành công!"
+          },
+          "409": {
+            "description": "Trùng Email hoặc trùng Mã doanh nghiệp"
+          }
+        },
+        "summary": "Đăng ký doanh nghiệp mới (Onboarding SaaS)",
+        "tags": [
+          "Auth (Xác thực)"
+        ]
+      }
+    },
     "/api/v1/entities": {
       "post": {
         "operationId": "EntitiesController_create",
@@ -1864,6 +1892,147 @@
           "Notifications (Hộp thư thông báo)"
         ]
       }
+    },
+    "/api/v1/tenants": {
+      "post": {
+        "operationId": "TenantsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTenantDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Tạo một doanh nghiệp mới",
+        "tags": [
+          "Tenants (Quản lý Doanh nghiệp SaaS - Chỉ Super Admin)"
+        ]
+      },
+      "get": {
+        "operationId": "TenantsController_findAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lấy toàn bộ danh sách doanh nghiệp (Super Admin View)",
+        "tags": [
+          "Tenants (Quản lý Doanh nghiệp SaaS - Chỉ Super Admin)"
+        ]
+      }
+    },
+    "/api/v1/tenants/{id}": {
+      "get": {
+        "operationId": "TenantsController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lấy thông tin chi tiết doanh nghiệp kèm số lượng tài khoản/dữ liệu",
+        "tags": [
+          "Tenants (Quản lý Doanh nghiệp SaaS - Chỉ Super Admin)"
+        ]
+      },
+      "patch": {
+        "operationId": "TenantsController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTenantDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cập nhật thông tin doanh nghiệp",
+        "tags": [
+          "Tenants (Quản lý Doanh nghiệp SaaS - Chỉ Super Admin)"
+        ]
+      },
+      "delete": {
+        "operationId": "TenantsController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Xóa vĩnh viễn doanh nghiệp & toàn bộ dữ liệu liên đới (Cascade Delete)",
+        "tags": [
+          "Tenants (Quản lý Doanh nghiệp SaaS - Chỉ Super Admin)"
+        ]
+      }
     }
   },
   "info": {
@@ -2046,6 +2215,43 @@
         "required": [
           "email",
           "password"
+        ]
+      },
+      "RegisterTenantDto": {
+        "type": "object",
+        "properties": {
+          "tenantName": {
+            "type": "string",
+            "example": "Công ty Cổ phần Vận tải BOS",
+            "description": "Tên doanh nghiệp muốn đăng ký"
+          },
+          "tenantCode": {
+            "type": "string",
+            "example": "vantai_bos",
+            "description": "Mã định danh duy nhất (snake_case viết thường)"
+          },
+          "adminEmail": {
+            "type": "string",
+            "example": "admin@vantaibos.com",
+            "description": "Email quản trị viên đầu tiên"
+          },
+          "adminPassword": {
+            "type": "string",
+            "example": "Admin@123",
+            "description": "Mật khẩu quản trị (tối thiểu 6 ký tự)"
+          },
+          "adminFullName": {
+            "type": "string",
+            "example": "Nguyễn Văn Admin",
+            "description": "Họ và tên Quản trị viên"
+          }
+        },
+        "required": [
+          "tenantName",
+          "tenantCode",
+          "adminEmail",
+          "adminPassword",
+          "adminFullName"
         ]
       },
       "CreateEntityDto": {
@@ -2487,6 +2693,35 @@
             "example": {
               "html": "<h1>PHIẾU ĐỀ XUẤT MUA SẮM</h1><p>Lý do: {{data.reason}}</p>"
             }
+          }
+        }
+      },
+      "CreateTenantDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Công ty Cổ phần Vận tải BOS",
+            "description": "Tên doanh nghiệp"
+          },
+          "code": {
+            "type": "string",
+            "example": "vantai_bos",
+            "description": "Mã doanh nghiệp (snake_case viết thường)"
+          }
+        },
+        "required": [
+          "name",
+          "code"
+        ]
+      },
+      "UpdateTenantDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Công ty Cổ phần Vận tải BOS",
+            "description": "Tên doanh nghiệp"
           }
         }
       }
