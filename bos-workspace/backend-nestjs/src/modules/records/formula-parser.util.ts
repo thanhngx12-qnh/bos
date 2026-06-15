@@ -8,7 +8,6 @@ export class FormulaParser {
     '/': 2,
   };
 
-  // Chia tách biểu thức chuỗi thành mảng các Token toán học sạch
   private static tokenize(expression: string): string[] {
     return (
       expression
@@ -17,7 +16,6 @@ export class FormulaParser {
     );
   }
 
-  // Chuyển biểu thức trung tố (Infix) sang hậu tố (Reverse Polish Notation - RPN) để xử lý độ ưu tiên toán tử
   private static infixToPostfix(tokens: string[]): string[] {
     const output: string[] = [];
     const operators: string[] = [];
@@ -27,7 +25,7 @@ export class FormulaParser {
         /^[0-9]+(?:\.[0-9]+)?$/.test(token) ||
         /^[a-z_][a-z0-9_]*$/i.test(token)
       ) {
-        output.push(token); // Số hoặc biến số đi thẳng ra đầu ra
+        output.push(token);
       } else if (token === '(') {
         operators.push(token);
       } else if (token === ')') {
@@ -37,7 +35,7 @@ export class FormulaParser {
         ) {
           output.push(operators.pop()!);
         }
-        operators.pop(); // Bỏ dấu ngoặc mở '('
+        operators.pop();
       } else if (this.precedence[token]) {
         while (
           operators.length > 0 &&
@@ -57,7 +55,6 @@ export class FormulaParser {
     return output;
   }
 
-  // Tính toán biểu thức RPN dựa trên ngữ cảnh dữ liệu thực tế
   public static evaluate(
     expression: string,
     context: Record<string, any>,
@@ -70,8 +67,22 @@ export class FormulaParser {
       if (/^[0-9]+(?:\.[0-9]+)?$/.test(token)) {
         stack.push(Number(token));
       } else if (/^[a-z_][a-z0-9_]*$/i.test(token)) {
-        // Lấy giá trị biến số từ context và ép kiểu sang số để tính toán
-        const val = Number(context[token] || 0);
+        // --- NÂNG CẤP CHUYÊN SÂU: TỰ ĐỘNG CHUYỂN NGÀY THÁNG SANG MILISECONDS ---
+        const rawVal = context[token];
+        let val = 0;
+
+        if (rawVal !== undefined && rawVal !== null) {
+          // Kiểm tra nếu giá trị là chuỗi ngày tháng hợp lệ (ISO Date) chứ không phải là số thuần
+          if (
+            typeof rawVal === 'string' &&
+            !isNaN(Date.parse(rawVal)) &&
+            isNaN(Number(rawVal))
+          ) {
+            val = Date.parse(rawVal); // Tự động quy đổi sang số miliseconds (Ví dụ: 1781510400000)
+          } else {
+            val = Number(rawVal || 0);
+          }
+        }
         stack.push(val);
       } else if (this.precedence[token]) {
         const b = stack.pop();
