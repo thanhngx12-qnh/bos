@@ -12,7 +12,6 @@ import {
   Alert,
   Row,
   Col,
-  Empty,
 } from "antd";
 import {
   SettingOutlined,
@@ -35,6 +34,7 @@ import { useFields } from "@/hooks/useFields";
 import SettingsTab from "@/components/metadata/SettingsTab";
 import Toolbox from "@/components/metadata/Toolbox";
 import Canvas from "@/components/metadata/Canvas";
+import PropertiesPanel from "@/components/metadata/PropertiesPanel";
 
 const { Title, Text } = Typography;
 
@@ -79,7 +79,7 @@ export default function BuilderPage({ params }: PageProps) {
     isUpdating,
   } = useEntityDetail(entityId);
 
-  // Gọi API quản trị Fields thuộc thực thể này
+  // Gọi Custom Hook thực thi đồng bộ hàng loạt (Unit of Work Sync)
   const { syncFields, isSyncing } = useFields(Number(entityId));
 
   useEffect(() => {
@@ -95,7 +95,7 @@ export default function BuilderPage({ params }: PageProps) {
     };
   }, [clearStore]);
 
-  // Cấu hình PointerSensor tối ưu
+  // Cấu hình PointerSensor tối ưu tránh xung đột click chọn và kéo thả
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -137,7 +137,6 @@ export default function BuilderPage({ params }: PageProps) {
     }
   };
 
-  // Hàm kích hoạt luồng đồng bộ hàng loạt các thay đổi (Batch Sync) xuống Backend
   const handleSaveChanges = async () => {
     console.log("[DEBUG-BOS] Bắt đầu đồng bộ danh sách trường dữ liệu...");
     try {
@@ -196,32 +195,9 @@ export default function BuilderPage({ params }: PageProps) {
               />
             </Col>
 
+            {/* CỘT PHẢI: PROPERTIES PANEL VỚI RULE BUILDER ĐÃ ĐỒNG BỘ HOÀN TOÀN */}
             <Col xs={24} md={6}>
-              <Card
-                title="Bảng thuộc tính trường"
-                size="small"
-                variant="outlined"
-                style={{
-                  borderRadius: "8px",
-                  minHeight: "calc(100vh - 200px)",
-                }}
-              >
-                {selectedFieldId ? (
-                  <div style={{ textAlign: "center", paddingTop: "100px" }}>
-                    <Text type="secondary">
-                      Trường có ID: <strong>{selectedFieldId}</strong> đang được
-                      chọn.
-                      <br />
-                      Giao diện cấu hình động Properties Panel & Rule Builder sẽ
-                      hiển thị tại đây ở Chặng 4.
-                    </Text>
-                  </div>
-                ) : (
-                  <div style={{ paddingTop: "150px", textAlign: "center" }}>
-                    <Empty description="Chọn một trường trên Canvas để cấu hình thuộc tính" />
-                  </div>
-                )}
-              </Card>
+              <PropertiesPanel />
             </Col>
           </Row>
         </DndKitContext>
@@ -299,7 +275,7 @@ export default function BuilderPage({ params }: PageProps) {
             icon={<SaveOutlined />}
             onClick={handleSaveChanges}
             disabled={!isDirty}
-            loading={isSyncing} // Hiển thị vòng xoay loading khi đang lưu
+            loading={isSyncing}
           >
             Lưu thay đổi
           </Button>
