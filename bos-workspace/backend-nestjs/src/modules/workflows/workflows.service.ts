@@ -11,11 +11,13 @@ import { CreateInstanceDto } from './dto/create-instance.dto';
 import { WorkflowActionDto } from './dto/workflow-action.dto';
 import { InjectQueue } from '@nestjs/bullmq'; // <-- IMPORT THƯ VIỆN ĐẨY QUENE
 import { Queue } from 'bullmq'; // <-- IMPORT THƯ VIỆN HÀNG ĐỢI
+import { NotificationsService } from '../notifications/notifications.service'; // <-- IMPORT DỊCH VỤ THÔNG BÁO
 
 @Injectable()
 export class WorkflowsService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly notificationsService: NotificationsService, // <-- INJECT DỊCH VỤ THÔNG BÁO LÕI
     @InjectQueue('webhook-queue') private readonly webhookQueue: Queue, // <-- INJECT HÀNG ĐỢI WEBHOOK LÕI
   ) {}
 
@@ -218,6 +220,7 @@ export class WorkflowsService {
     });
   }
 
+  // --- 1. KHỞI CHẠY QUY TRÌNH (Tích hợp bắn thông báo cho Trạm 1) ---
   async startInstance(userId: number, dto: CreateInstanceDto) {
     const record = await this.prisma.record.findUnique({
       where: { id: dto.recordId },
@@ -248,8 +251,8 @@ export class WorkflowsService {
 
     const firstStep = version.steps[0];
 
-    return this.prisma.$transaction(async (tx) => {
-      const instance = await tx.workflowInstance.create({
+    const instance = await this.prisma.$transaction(async (tx) => {
+      const newInstance = await tx.workflowInstance.create({
         data: {
           versionId: dto.versionId,
           recordId: dto.recordId,
@@ -260,7 +263,7 @@ export class WorkflowsService {
 
       await tx.workflowLog.create({
         data: {
-          instanceId: instance.id,
+          instanceId: newInstance.id,
           stepId: firstStep.id,
           userId,
           action: 'START',
@@ -268,19 +271,38 @@ export class WorkflowsService {
         },
       });
 
-      return instance;
+      return newInstance;
     });
+
+    // --- BẮN THÔNG BÁO THỜI GIAN THỰC ĐẾN NGƯỜI DUYỆT TRẠM 1 ---
+    const firstStepConfig: any = firstStep.permissions || {};
+    const candidateUsers: number[] = firstStepConfig.candidateUsers || [];
+
+    const initiator = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+    const initiatorName = initiator?.fullName || 'Nhân sự';
+    const recordCode = record.recordCode || `#${record.id}`;
+
+    for (const candidateId of candidateUsers) {
+      await this.notificationsService.createNotification(
+        candidateId,
+        'Yêu cầu phê duyệt mới',
+        `Phiếu đề xuất ${recordCode} vừa được trình ký bởi ${initiatorName} đang chờ bạn phê duyệt tại bước: ${firstStep.name}.`,
+      );
+    }
+
+    return instance;
   }
 
   // ====================================================
-  // BẢN NÂNG CẤP HOÀN HẢO: HÀM LÕI PHÊ DUYỆT TÍCH HỢP HÀNG ĐỢI WEBHOOK NGẦM
+  // BẢN NÂNG CẤP HOÀN HẢO: HÀM LÕI PHÊ DUYỆT TÍCH HỢP HÀNG ĐỢI WEBHOOK & THÔNG BÁO LÕI
   // ====================================================
   async handleAction(
     instanceId: number,
     userId: number,
     dto: WorkflowActionDto,
   ) {
-    // 1. Chạy Transaction cô lập dòng dữ liệu và phê duyệt
     const result = await this.prisma.$transaction(async (tx) => {
       await tx.$queryRawUnsafe(
         `SELECT id FROM workflow_instances WHERE id = $1 FOR UPDATE`,
@@ -294,7 +316,7 @@ export class WorkflowsService {
           version: {
             include: {
               steps: true,
-              workflow: { select: { name: true } }, // Lấy thêm tên quy trình để bắn webhook
+              workflow: { select: { name: true } },
             },
           },
         },
@@ -399,26 +421,64 @@ export class WorkflowsService {
         });
       }
 
-      // Đóng gói dữ liệu sạch để chuyển tiếp ra môi trường bất đồng bộ ngoài Transaction
+      // Đóng gói dữ liệu sạch để xử lý tác vụ thông báo & Webhook ngầm
+      const nextStepConfig: any = nextStepObj?.permissions || {};
       return {
         instanceId,
         isCompleted: shouldTransition && finalStatus === 'COMPLETED',
         recordData: instance.record.data,
+        recordCode: instance.record.recordCode || `#${instance.record.id}`,
+        initiatorId: instance.record.createdBy,
         workflowName: instance.version.workflow.name,
         actionExecuted: actionLabel,
+        isRejected: false, // (Xử lý riêng nếu sau này có nút REJECT dạng hủy quy trình)
+        nextStepId: shouldTransition ? nextStepId : instance.currentStep,
+        nextStepName: nextStepObj?.name || '',
+        nextStepCandidates: nextStepConfig.candidateUsers || [],
+        currentStepName: currentStepObj.name,
+        shouldTransition,
       };
     });
 
-    // --- 2. KÍCH HOẠT HÀNG ĐỢI WEBHOOK BẤT ĐỒNG BỘ (BULLMQ) ---
-    // Tuyệt đối không gọi HTTP API bên trong Database Transaction tránh treo tài nguyên DB
+    // --- LẤY TÊN NGƯỜI DUYỆT ĐỂ GÁN VÀO THÔNG BÁO ---
+    const approver = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+    const approverName = approver?.fullName || 'Người duyệt';
+
+    // --- 3. ĐỘNG CƠ THÔNG BÁO THỜI GIAN THỰC (REAL-TIME NOTIFICATION COCK) ---
     if (result.isCompleted) {
-      // Giả lập webhook nhận cấu hình từ quy trình. Hiện tại để test, ta trỏ về một Mock Webhook Endpoint
+      // Kịch bản A: Phiếu được HOÀN THÀNH -> Báo cho người trình ký
+      await this.notificationsService.createNotification(
+        result.initiatorId,
+        'Quy trình phê duyệt hoàn tất',
+        `Hồ sơ ${result.recordCode} của bạn đã được PHÊ DUYỆT HOÀN TẤT qua tất cả các cấp!`,
+      );
+    } else if (result.shouldTransition && result.nextStepId) {
+      // Kịch bản B: Phiếu được chuyển sang Bước tiếp theo -> Báo cho người trình ký
+      await this.notificationsService.createNotification(
+        result.initiatorId,
+        'Cập nhật tiến trình hồ sơ',
+        `Hồ sơ ${result.recordCode} của bạn đã được ${approverName} chuyển tiếp sang bước: ${result.nextStepName}.`,
+      );
+
+      // Đồng thời báo cho những người duyệt của trạm tiếp theo nổ bíp bíp!
+      for (const candidateId of result.nextStepCandidates) {
+        await this.notificationsService.createNotification(
+          candidateId,
+          'Yêu cầu phê duyệt mới cần xử lý',
+          `Bạn nhận được một yêu cầu phê duyệt mới từ ${approverName} cho hồ sơ ${result.recordCode} tại trạm: ${result.nextStepName}.`,
+        );
+      }
+    }
+
+    // --- 4. KÍCH HOẠT HÀNG ĐỢI WEBHOOK BẤT ĐỒNG BỘ (BULLMQ) ---
+    if (result.isCompleted) {
       const testWebhookUrl =
         'https://webhook.site/26330559-6798-4c8d-afae-03b8600f9ba9';
-
       try {
         await this.webhookQueue.add(
-          'send-webhook', // Tên job
+          'send-webhook',
           {
             instanceId: result.instanceId,
             webhookUrl: testWebhookUrl,
@@ -431,8 +491,8 @@ export class WorkflowsService {
             },
           },
           {
-            attempts: 3, // Thử lại tối đa 3 lần nếu máy chủ đích bị lỗi/timeout
-            backoff: { type: 'exponential', delay: 2000 }, // Trì hoãn luỹ thừa tăng dần (2s, 4s, 8s) để tránh spam
+            attempts: 3,
+            backoff: { type: 'exponential', delay: 2000 },
           },
         );
         console.log(
@@ -445,14 +505,13 @@ export class WorkflowsService {
       }
     }
 
-    // Lấy lại thông tin instance mới nhất để trả về cho Client hiển thị UI
     const updatedInstance = await this.prisma.workflowInstance.findUnique({
       where: { id: instanceId },
     });
 
     return {
       ...updatedInstance,
-      transitioned: result.isCompleted,
+      transitioned: result.shouldTransition,
       actionExecuted: result.actionExecuted,
     };
   }
