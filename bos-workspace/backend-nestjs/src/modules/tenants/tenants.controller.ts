@@ -39,7 +39,6 @@ export class TenantsController {
   @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
   @ApiQuery({ name: 'limit', required: false, type: Number, example: 10 })
   @ApiQuery({ name: 'sortBy', required: false, type: String, example: 'id' })
-  // SỬA LẠI ĐOẠN NÀY
   @ApiQuery({
     name: 'sortOrder',
     required: false,
@@ -50,7 +49,7 @@ export class TenantsController {
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
     @Query('sortBy') sortBy?: string,
-    @Query('sortOrder') sortOrder: 'asc' | 'desc' = 'desc', // Thêm giá trị mặc định vào đây
+    @Query('sortOrder') sortOrder?: 'asc' | 'desc',
   ) {
     return this.tenantsService.findAll({ page, limit, sortBy, sortOrder });
   }
