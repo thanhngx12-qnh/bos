@@ -5,8 +5,9 @@ import {
   NestModule,
   MiddlewareConsumer,
 } from '@nestjs/common';
-import { APP_PIPE, APP_INTERCEPTOR } from '@nestjs/core'; // <-- IMPORT APP_INTERCEPTOR
+import { APP_PIPE, APP_INTERCEPTOR } from '@nestjs/core';
 import { BullModule } from '@nestjs/bullmq';
+import { PrometheusModule } from '@willsoto/nestjs-prometheus'; // <-- IMPORT MỚI
 import { PrismaModule } from './prisma/prisma.module';
 import { OrganizationsModule } from './modules/organizations/organizations.module';
 import { RolesModule } from './modules/roles/roles.module';
@@ -23,11 +24,18 @@ import { TenantMiddleware } from './prisma/tenant.middleware';
 import { RedisModule } from './modules/redis/redis.module';
 import { AttachmentsModule } from './modules/attachments/attachments.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
-import { AuditLogsModule } from './modules/audit-logs/audit-logs.module'; // <-- IMPORT MODULE MỚI
-import { AuditLogInterceptor } from './core/interceptors/audit-log.interceptor'; // <-- IMPORT INTERCEPTOR MỚI
+import { AuditLogsModule } from './modules/audit-logs/audit-logs.module';
+import { AuditLogInterceptor } from './core/interceptors/audit-log.interceptor';
+import { TenantsModule } from './modules/tenants/tenants.module';
 
 @Module({
   imports: [
+    PrometheusModule.register({
+      // <-- Giữ nguyên
+      defaultMetrics: {
+        enabled: true,
+      },
+    }),
     BullModule.forRoot({
       connection: {
         host: process.env.REDIS_HOST || 'localhost',
@@ -49,14 +57,14 @@ import { AuditLogInterceptor } from './core/interceptors/audit-log.interceptor';
     RedisModule,
     AttachmentsModule,
     NotificationsModule,
-    AuditLogsModule, // <-- KÍCH HOẠT MODULE
+    AuditLogsModule,
+    TenantsModule,
   ],
   providers: [
     {
       provide: APP_PIPE,
       useClass: ValidationPipe,
     },
-    // --- KÍCH HOẠT CAMERA AN NINH TOÀN CẦU (AUTOMATIC AUDIT LOGGING) ---
     {
       provide: APP_INTERCEPTOR,
       useClass: AuditLogInterceptor,
