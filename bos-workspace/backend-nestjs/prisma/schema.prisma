@@ -12,18 +12,20 @@ datasource db {
 // BLOCK 0: SAAS MULTI-TENANCY
 // ==========================================
 model Tenant {
-  id        Int      @id @default(autoincrement())
-  name      String
-  code      String   @unique // VD: "company_a", "company_b"
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id               Int               @id @default(autoincrement())
+  name             String
+  code             String            @unique // VD: "company_a", "company_b"
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
 
-  users        User[]
-  entities     Entity[]
-  records      Record[]
-  workflows    Workflow[]
-  attachments  Attachment[]
-  notifications Notification[] // Quan hệ với hòm thư thông báo
+  users            User[]
+  entities         Entity[]
+  records          Record[]
+  workflows        Workflow[]
+  attachments      Attachment[]
+  notifications    Notification[]
+  instances        WorkflowInstance[] // Đọc trực tiếp không cần JOIN chéo
+  webhookEndpoints WebhookEndpoint[]  // Quan hệ với bảng quản lý Webhook đối tác
 
   @@map("tenants")
 }
@@ -32,26 +34,26 @@ model Tenant {
 // BLOCK 1: AUTH & ORGANIZATION
 // ==========================================
 model User {
-  id           Int        @id @default(autoincrement())
-  email        String     @unique
-  password     String
-  fullName     String     @map("full_name")
-  departmentId Int?       @map("department_id")
-  roleId       Int?       @map("role_id")
-  tenantId     Int?       @map("tenant_id") // Khóa ngoại Tenant
-  status       String     @default("ACTIVE")
-  userType     String     @default("INTERNAL") @map("user_type")
-  createdAt    DateTime   @default(now()) @map("created_at")
-  updatedAt    DateTime   @updatedAt @map("updated_at")
+  id              Int        @id @default(autoincrement())
+  email           String     @unique
+  password        String
+  fullName        String     @map("full_name")
+  departmentId    Int?       @map("department_id")
+  roleId          Int?       @map("role_id")
+  tenantId        Int?       @map("tenant_id")
+  status          String     @default("ACTIVE")
+  userType        String     @default("INTERNAL") @map("user_type")
+  createdAt       DateTime   @default(now()) @map("created_at")
+  updatedAt       DateTime   @updatedAt @map("updated_at")
 
-  department   Department? @relation(fields: [departmentId], references: [id])
-  role         Role?       @relation(fields: [roleId], references: [id])
-  tenant       Tenant?     @relation(fields: [tenantId], references: [id])
-  instances    WorkflowInstance[]
-  workflowLogs WorkflowLog[]
-  participations WorkflowParticipant[]
+  department      Department? @relation(fields: [departmentId], references: [id])
+  role            Role?       @relation(fields: [roleId], references: [id])
+  tenant          Tenant?     @relation(fields: [tenantId], references: [id])
+  instances       WorkflowInstance[]
+  workflowLogs    WorkflowLog[]
+  participations  WorkflowParticipant[]
   recordRevisions RecordRevision[]
-  notifications Notification[] // Quan hệ với hòm thư thông báo
+  notifications   Notification[]
 
   @@map("users")
 }
@@ -91,15 +93,16 @@ model Entity {
   code            String   @unique
   description     String?
   autoCodePattern String?  @map("auto_code_pattern")
-  tenantId        Int?     @map("tenant_id") // Khóa ngoại Tenant
+  tenantId        Int?     @map("tenant_id")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
-  tenant         Tenant?  @relation(fields: [tenantId], references: [id])
-  fields         FieldDefinition[]
-  records        Record[]
-  workflows      Workflow[]
-  printTemplates PrintTemplate[]
+  tenant           Tenant?           @relation(fields: [tenantId], references: [id])
+  fields           FieldDefinition[]
+  records          Record[]
+  workflows        Workflow[]
+  printTemplates   PrintTemplate[]
+  webhookEndpoints WebhookEndpoint[] // Quan hệ ngược với bảng quản lý Webhook
 
   @@map("entities")
 }
@@ -142,7 +145,7 @@ model Record {
   recordCode  String?  @unique @map("record_code")
   data        Json     @default("{}")
   createdBy   Int      @map("created_by")
-  tenantId    Int?     @map("tenant_id") // Khóa ngoại Tenant
+  tenantId    Int?     @map("tenant_id")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
@@ -152,7 +155,7 @@ model Record {
   revisions   RecordRevision[]
   attachments Attachment[]
 
-  @@index([entityId])
+  @@index([tenantId, entityId]) // CHỈ MỤC PHỨC HỢP 1: Tăng tốc độ truy xuất báo cáo thống kê vĩ mô nhóm
   @@map("records")
 }
 
@@ -187,20 +190,21 @@ model Attachment {
 }
 
 // ==========================================
-// BLOCK 5: NOTIFICATIONS (HỒM THƯ THÔNG BÁO)
+// BLOCK 5: NOTIFICATIONS (HÒM THƯ THÔNG BÁO)
 // ==========================================
 model Notification {
   id          Int      @id @default(autoincrement())
-  userId      Int      @map("user_id") // Người nhận thông báo
-  tenantId    Int?     @map("tenant_id") // SaaS Isolation
-  title       String   // Tiêu đề (VD: "Yêu cầu phê duyệt phiếu")
-  message     String   // Nội dung chi tiết
-  isRead      Boolean  @default(false) @map("is_read") // Đã đọc hay chưa
+  userId      Int      @map("user_id")
+  tenantId    Int?     @map("tenant_id")
+  title       String
+  message     String
+  isRead      Boolean  @default(false) @map("is_read")
   createdAt   DateTime @default(now()) @map("created_at")
 
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   tenant      Tenant?  @relation(fields: [tenantId], references: [id])
 
+  @@index([userId, isRead]) // CHỈ MỤC PHỨC HỢP 2: Tối ưu đếm số lượng tin nhắn chưa đọc thời gian thực
   @@map("notifications")
 }
 
@@ -278,16 +282,20 @@ model WorkflowInstance {
   currentStep Int      @map("current_step")
   status      String   @default("IN_PROGRESS")
   assigneeId  Int?     @map("assignee_id")
+  tenantId    Int?     @map("tenant_id") // Bổ sung trường tenant_id để làm phẳng dữ liệu
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   version     WorkflowVersion @relation(fields: [versionId], references: [id])
   record      Record          @relation(fields: [recordId], references: [id])
   assignee    User?           @relation(fields: [assigneeId], references: [id])
+  tenant      Tenant?         @relation(fields: [tenantId], references: [id])
   
   logs              WorkflowLog[]
   participants      WorkflowParticipant[]
 
+  @@index([recordId, status]) // CHỈ MỤC PHỨC HỢP 3: Tối ưu tra cứu quy trình vận hành của bản ghi
+  @@index([tenantId, status]) // CHỈ MỤC PHỨC HỢP 4: Tăng tốc độ truy xuất các quy trình IN_PROGRESS của doanh nghiệp
   @@map("workflow_instances")
 }
 
@@ -316,4 +324,21 @@ model WorkflowLog {
   step        WorkflowStep?    @relation(fields: [stepId], references: [id])
   user        User?            @relation(fields: [userId], references: [id])
   @@map("workflow_logs")
+}
+
+// BẢNG MỚI: QUẢN LÝ ĐIỂM ĐẦU CUỐI WEBHOOK (WEBHOOK ENDPOINTS)
+model WebhookEndpoint {
+  id          Int      @id @default(autoincrement())
+  tenantId    Int      @map("tenant_id")
+  entityId    Int      @map("entity_id")
+  url         String   
+  secretKey   String?  @map("secret_key") 
+  events      Json     // Danh sách các sự kiện đăng ký (VD: ["RECORD_COMPLETED", "RECORD_UPDATED"])
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  entity      Entity   @relation(fields: [entityId], references: [id])
+
+  @@map("webhook_endpoints")
 }

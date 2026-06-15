@@ -31,6 +31,8 @@ export class PrismaService
               'Workflow',
               'Attachment',
               'Notification',
+              'WorkflowInstance',
+              'WebhookEndpoint',
             ];
 
             if (tenantModels.includes(model)) {
