@@ -2,17 +2,25 @@
 import axiosInstance from "@/lib/axios";
 import { operations } from "@/types/api";
 
-// Trích xuất Type-Safe Response cực kỳ an toàn trực tiếp từ Operation của NestJS
+// Trích xuất Type-Safe cực kỳ an toàn
 export type EntityListResponse =
   operations["EntitiesController_findAll"]["responses"][200]["content"]["application/json"];
-export type EntityItem = EntityListResponse extends Array<infer T> ? T : any;
+export type CreateEntityRequest =
+  operations["EntitiesController_create"]["requestBody"]["content"]["application/json"];
 
 export const entityService = {
-  /**
-   * Lấy danh sách tất cả các thực thể (Entities) đang hoạt động trên hệ thống
-   */
   findAll: async (): Promise<EntityListResponse> => {
     const response = await axiosInstance.get("/api/v1/entities");
+    return response.data;
+  },
+
+  create: async (data: CreateEntityRequest): Promise<any> => {
+    const response = await axiosInstance.post("/api/v1/entities", data);
+    return response.data;
+  },
+
+  remove: async (id: number | string): Promise<any> => {
+    const response = await axiosInstance.delete(`/api/v1/entities/${id}`);
     return response.data;
   },
 };

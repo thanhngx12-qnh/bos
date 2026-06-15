@@ -1,0 +1,326 @@
+// File: src/app/(dashboard)/metadata/builder/[id]/page.tsx
+"use client";
+
+import React, { useEffect } from "react";
+import {
+  Tabs,
+  Spin,
+  Space,
+  Typography,
+  Card,
+  Button,
+  Alert,
+  Row,
+  Col,
+  Empty,
+} from "antd";
+import {
+  SettingOutlined,
+  DeploymentUnitOutlined,
+  BuildOutlined,
+  SaveOutlined,
+} from "@ant-design/icons";
+import {
+  DndContext as DndKitContext,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import { arrayMove } from "@dnd-kit/sortable";
+
+import { useBuilderStore } from "@/hooks/useBuilderStore";
+import { useEntityDetail } from "@/hooks/useEntityDetail";
+import { useFields } from "@/hooks/useFields";
+import SettingsTab from "@/components/metadata/SettingsTab";
+import Toolbox from "@/components/metadata/Toolbox";
+import Canvas from "@/components/metadata/Canvas";
+
+const { Title, Text } = Typography;
+
+interface PageProps {
+  params: Promise<{ id: string }>;
+}
+
+export default function BuilderPage({ params }: PageProps) {
+  const { id: entityId } = React.use(params);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const currentTenant = localStorage.getItem("tenant_id");
+      if (!currentTenant) {
+        localStorage.setItem("tenant_id", "1");
+      }
+    }
+  }, []);
+
+  const {
+    entity,
+    fields,
+    addedFields,
+    updatedFields,
+    deletedFieldIds,
+    selectedFieldId,
+    isDirty,
+    setEntity,
+    initializeFields,
+    setSelectedFieldId,
+    addField,
+    removeField,
+    reorderFields,
+    resetChanges,
+    clearStore,
+  } = useBuilderStore();
+
+  const {
+    entity: fetchedEntity,
+    isLoading: isFetchingEntity,
+    updateEntity,
+    isUpdating,
+  } = useEntityDetail(entityId);
+
+  // Gọi API quản trị Fields thuộc thực thể này
+  const { syncFields, isSyncing } = useFields(Number(entityId));
+
+  useEffect(() => {
+    if (fetchedEntity) {
+      setEntity(fetchedEntity);
+      initializeFields(fetchedEntity.fields || []);
+    }
+  }, [fetchedEntity, setEntity, initializeFields]);
+
+  useEffect(() => {
+    return () => {
+      clearStore();
+    };
+  }, [clearStore]);
+
+  // Cấu hình PointerSensor tối ưu
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+  );
+
+  const handleAddToolboxItem = (type: string) => {
+    const tempCode = `${type.toLowerCase()}_${Math.random().toString(36).substring(2, 6)}`;
+    addField({
+      name: `Trường ${type.toLowerCase()}`,
+      code: tempCode,
+      type: type,
+      isRequired: false,
+      sortOrder: fields.length,
+      options: {},
+    });
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over) return;
+
+    const activeId = active.id.toString();
+    const overId = over.id.toString();
+
+    if (activeId.startsWith("toolbox_")) {
+      const type = activeId.replace("toolbox_", "");
+      handleAddToolboxItem(type);
+    } else if (activeId !== overId) {
+      const oldIndex = fields.findIndex((f) => f.id === activeId);
+      const newIndex = fields.findIndex((f) => f.id === overId);
+
+      if (oldIndex !== -1 && newIndex !== -1) {
+        const reordered = arrayMove(fields, oldIndex, newIndex);
+        reorderFields(reordered);
+      }
+    }
+  };
+
+  // Hàm kích hoạt luồng đồng bộ hàng loạt các thay đổi (Batch Sync) xuống Backend
+  const handleSaveChanges = async () => {
+    console.log("[DEBUG-BOS] Bắt đầu đồng bộ danh sách trường dữ liệu...");
+    try {
+      await syncFields({
+        added: addedFields,
+        updated: updatedFields,
+        deleted: deletedFieldIds,
+      });
+    } catch (err) {
+      console.error("[DEBUG-BOS] Đồng bộ dữ liệu thất bại:", err);
+    }
+  };
+
+  if (isFetchingEntity) {
+    return (
+      <div
+        style={{
+          height: "400px",
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+        }}
+      >
+        <Space orientation="vertical" align="center">
+          <Spin size="large" />
+          <Text type="secondary">
+            Đang nạp cấu trúc không gian làm việc BOS Workspace...
+          </Text>
+        </Space>
+      </div>
+    );
+  }
+
+  const tabItems = [
+    {
+      key: "form-builder",
+      label: (
+        <span>
+          <BuildOutlined />
+          Thiết kế Giao diện (Form Builder)
+        </span>
+      ),
+      children: (
+        <DndKitContext sensors={sensors} onDragEnd={handleDragEnd}>
+          <Row gutter={16} style={{ marginTop: "12px" }}>
+            <Col xs={24} md={6}>
+              <Toolbox onAddItem={handleAddToolboxItem} />
+            </Col>
+
+            <Col xs={24} md={12}>
+              <Canvas
+                fields={fields}
+                selectedFieldId={selectedFieldId}
+                onSelectField={setSelectedFieldId}
+                onDeleteField={removeField}
+              />
+            </Col>
+
+            <Col xs={24} md={6}>
+              <Card
+                title="Bảng thuộc tính trường"
+                size="small"
+                variant="outlined"
+                style={{
+                  borderRadius: "8px",
+                  minHeight: "calc(100vh - 200px)",
+                }}
+              >
+                {selectedFieldId ? (
+                  <div style={{ textAlign: "center", paddingTop: "100px" }}>
+                    <Text type="secondary">
+                      Trường có ID: <strong>{selectedFieldId}</strong> đang được
+                      chọn.
+                      <br />
+                      Giao diện cấu hình động Properties Panel & Rule Builder sẽ
+                      hiển thị tại đây ở Chặng 4.
+                    </Text>
+                  </div>
+                ) : (
+                  <div style={{ paddingTop: "150px", textAlign: "center" }}>
+                    <Empty description="Chọn một trường trên Canvas để cấu hình thuộc tính" />
+                  </div>
+                )}
+              </Card>
+            </Col>
+          </Row>
+        </DndKitContext>
+      ),
+    },
+    {
+      key: "workflow",
+      label: (
+        <span>
+          <DeploymentUnitOutlined />
+          Luồng quy trình (Workflow Designer)
+        </span>
+      ),
+      children: (
+        <div style={{ padding: "20px 0" }}>
+          <Text type="secondary">
+            Khu vực cấu hình Workflow & Phân quyền RBAC (Sẽ hoàn thiện ở Chặng
+            5).
+          </Text>
+        </div>
+      ),
+    },
+    {
+      key: "settings",
+      label: (
+        <span>
+          <SettingOutlined />
+          Cấu hình Thực thể (Settings)
+        </span>
+      ),
+      children: (
+        <SettingsTab
+          entity={fetchedEntity}
+          onSave={updateEntity}
+          isSaving={isUpdating}
+        />
+      ),
+    },
+  ];
+
+  return (
+    <div
+      style={{
+        minHeight: "calc(100vh - 120px)",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          paddingBottom: "16px",
+          borderBottom: "1px solid #f0f0f0",
+          marginBottom: "20px",
+        }}
+      >
+        <div>
+          <Title level={3} style={{ margin: 0 }}>
+            Không gian kiến tạo biểu mẫu: {fetchedEntity?.name || "Đang tải..."}
+          </Title>
+          <Text type="secondary">
+            Mã code hệ thống: <strong>{fetchedEntity?.code || "N/A"}</strong>
+          </Text>
+        </div>
+        <Space size="middle">
+          {isDirty && (
+            <Button onClick={resetChanges} danger disabled={isSyncing}>
+              Hoàn tác thay đổi
+            </Button>
+          )}
+          <Button
+            type="primary"
+            icon={<SaveOutlined />}
+            onClick={handleSaveChanges}
+            disabled={!isDirty}
+            loading={isSyncing} // Hiển thị vòng xoay loading khi đang lưu
+          >
+            Lưu thay đổi
+          </Button>
+        </Space>
+      </div>
+
+      {isDirty && (
+        <Alert
+          message="Bạn đang có các cấu hình giao diện chưa được lưu xuống cơ sở dữ liệu."
+          type="info"
+          showIcon
+          style={{ marginBottom: "20px" }}
+        />
+      )}
+
+      <Card
+        variant="borderless"
+        style={{ flexGrow: 1, boxShadow: "0 1px 4px rgba(0,0,0,0.02)" }}
+      >
+        <Tabs defaultActiveKey="form-builder" items={tabItems} />
+      </Card>
+    </div>
+  );
+}
