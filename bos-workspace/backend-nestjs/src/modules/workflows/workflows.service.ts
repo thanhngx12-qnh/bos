@@ -9,10 +9,15 @@ import { CreateWorkflowDto } from './dto/create-workflow.dto';
 import { UpdateWorkflowDto } from './dto/update-workflow.dto';
 import { CreateInstanceDto } from './dto/create-instance.dto';
 import { WorkflowActionDto } from './dto/workflow-action.dto';
+import { InjectQueue } from '@nestjs/bullmq'; // <-- IMPORT THƯ VIỆN ĐẨY QUENE
+import { Queue } from 'bullmq'; // <-- IMPORT THƯ VIỆN HÀNG ĐỢI
 
 @Injectable()
 export class WorkflowsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @InjectQueue('webhook-queue') private readonly webhookQueue: Queue, // <-- INJECT HÀNG ĐỢI WEBHOOK LÕI
+  ) {}
 
   // --- HÀM TRỢ GIÚP: ĐÁNH GIÁ ĐIỀU KIỆN RẼ NHÁNH ---
   private evaluateTransitionCondition(logic: any, recordData: any): boolean {
@@ -268,24 +273,20 @@ export class WorkflowsService {
   }
 
   // ====================================================
-  // BẢN NÂNG CẤP HOÀN HẢO: HÀM LÕI XỬ LÝ PHÊ DUYỆT CÓ KHÓA CHỐNG TRÙNG LẶP
+  // BẢN NÂNG CẤP HOÀN HẢO: HÀM LÕI PHÊ DUYỆT TÍCH HỢP HÀNG ĐỢI WEBHOOK NGẦM
   // ====================================================
   async handleAction(
     instanceId: number,
     userId: number,
     dto: WorkflowActionDto,
   ) {
-    // 1. Mở ngay Prisma Transaction để thực thi khóa dòng dữ liệu
-    return this.prisma.$transaction(async (tx) => {
-      // 2. CHỐT CHẶN RACE CONDITION: Khóa cứng dòng dữ liệu này bằng SELECT FOR UPDATE của Postgres
-      // Bắt mọi transaction song song khác muốn chạm vào instanceId này phải xếp hàng đợi
+    // 1. Chạy Transaction cô lập dòng dữ liệu và phê duyệt
+    const result = await this.prisma.$transaction(async (tx) => {
       await tx.$queryRawUnsafe(
         `SELECT id FROM workflow_instances WHERE id = $1 FOR UPDATE`,
         instanceId,
       );
 
-      // 3. ĐỌC DỮ LIỆU SẠCH: Sau khi đã lấy được Khóa, lúc này ta mới đọc dữ liệu thực tế từ DB
-      // Đảm bảo không bị lỗi Dirty Read (Đọc dữ liệu cũ khi người trước đang sửa đổi)
       const instance = await tx.workflowInstance.findUnique({
         where: { id: instanceId },
         include: {
@@ -293,6 +294,7 @@ export class WorkflowsService {
           version: {
             include: {
               steps: true,
+              workflow: { select: { name: true } }, // Lấy thêm tên quy trình để bắn webhook
             },
           },
         },
@@ -301,15 +303,12 @@ export class WorkflowsService {
       if (!instance)
         throw new NotFoundException('Không tìm thấy lượt chạy quy trình.');
 
-      // Nếu người trước xếp hàng duyệt xong và đã đóng luồng (status chuyển sang COMPLETED),
-      // người sau vào đọc ra status mới và lập tức bị chặn bằng lỗi BadRequest dưới đây!
       if (instance.status !== 'IN_PROGRESS') {
         throw new BadRequestException(
           'Lượt chạy quy trình này đã kết thúc hoặc đang được xử lý bởi thành viên khác.',
         );
       }
 
-      // 4. Tìm thông tin đường rẽ nhánh (Nút bấm)
       const transition = await tx.workflowTransition.findUnique({
         where: { id: dto.transitionId },
         include: { fromStep: true, toStep: true },
@@ -328,7 +327,6 @@ export class WorkflowsService {
       const currentStepObj = transition.fromStep;
       const nextStepObj = transition.toStep;
 
-      // Đọc cấu hình người duyệt
       const stepConfig: any = currentStepObj.permissions || {};
       const approverType = stepConfig.approverType || 'SINGLE';
       const candidateUsers = stepConfig.candidateUsers || [];
@@ -349,7 +347,6 @@ export class WorkflowsService {
         );
       }
 
-      // Ghi nhận lượt duyệt hiện tại vào Audit Log
       await tx.workflowLog.create({
         data: {
           instanceId,
@@ -365,7 +362,6 @@ export class WorkflowsService {
 
       let shouldTransition = true;
 
-      // XỬ LÝ DUYỆT ĐỒNG THUẬN SONG SONG (ALL_OF)
       if (approverType === 'ALL_OF' && candidateUsers.length > 1) {
         const approvedLogs = await tx.workflowLog.findMany({
           where: {
@@ -386,34 +382,79 @@ export class WorkflowsService {
         }
       }
 
-      // 5. Thực hiện chuyển trạm phê duyệt
-      if (shouldTransition) {
-        let finalStatus = 'IN_PROGRESS';
-        let nextStepId: number | null = transition.toStepId;
+      let finalStatus = 'IN_PROGRESS';
+      let nextStepId: number | null = transition.toStepId;
 
+      if (shouldTransition) {
         if (nextStepObj.stepType === 'SYSTEM_TASK' || transition.autoSkip) {
           finalStatus = 'COMPLETED';
         }
 
-        const updated = await tx.workflowInstance.update({
+        await tx.workflowInstance.update({
           where: { id: instanceId },
           data: {
             currentStep: nextStepId,
             status: finalStatus,
           },
         });
-
-        return { ...updated, transitioned: true, actionExecuted: actionLabel };
       }
 
+      // Đóng gói dữ liệu sạch để chuyển tiếp ra môi trường bất đồng bộ ngoài Transaction
       return {
-        ...instance,
-        transitioned: false,
+        instanceId,
+        isCompleted: shouldTransition && finalStatus === 'COMPLETED',
+        recordData: instance.record.data,
+        workflowName: instance.version.workflow.name,
         actionExecuted: actionLabel,
-        message:
-          'Lượt phê duyệt đã được ghi nhận. Hệ thống đang chờ các thành viên khác phê duyệt đồng thuận để chuyển trạm.',
       };
     });
+
+    // --- 2. KÍCH HOẠT HÀNG ĐỢI WEBHOOK BẤT ĐỒNG BỘ (BULLMQ) ---
+    // Tuyệt đối không gọi HTTP API bên trong Database Transaction tránh treo tài nguyên DB
+    if (result.isCompleted) {
+      // Giả lập webhook nhận cấu hình từ quy trình. Hiện tại để test, ta trỏ về một Mock Webhook Endpoint
+      const testWebhookUrl =
+        'https://webhook.site/26330559-6798-4c8d-afae-03b8600f9ba9';
+
+      try {
+        await this.webhookQueue.add(
+          'send-webhook', // Tên job
+          {
+            instanceId: result.instanceId,
+            webhookUrl: testWebhookUrl,
+            payload: {
+              event: 'WORKFLOW_COMPLETED',
+              workflowName: result.workflowName,
+              instanceId: result.instanceId,
+              recordData: result.recordData,
+              timestamp: new Date().toISOString(),
+            },
+          },
+          {
+            attempts: 3, // Thử lại tối đa 3 lần nếu máy chủ đích bị lỗi/timeout
+            backoff: { type: 'exponential', delay: 2000 }, // Trì hoãn luỹ thừa tăng dần (2s, 4s, 8s) để tránh spam
+          },
+        );
+        console.log(
+          `[Webhook Queue] Da xep hang tac vu ban Webhook cho Instance ID: ${result.instanceId}`,
+        );
+      } catch (error) {
+        console.error(
+          `[Webhook Queue] Loi khong the dua Job vao Redis: ${error.message}`,
+        );
+      }
+    }
+
+    // Lấy lại thông tin instance mới nhất để trả về cho Client hiển thị UI
+    const updatedInstance = await this.prisma.workflowInstance.findUnique({
+      where: { id: instanceId },
+    });
+
+    return {
+      ...updatedInstance,
+      transitioned: result.isCompleted,
+      actionExecuted: result.actionExecuted,
+    };
   }
 
   async getInstanceLogs(instanceId: number) {

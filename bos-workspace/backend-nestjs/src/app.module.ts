@@ -6,6 +6,7 @@ import {
   MiddlewareConsumer,
 } from '@nestjs/common';
 import { APP_PIPE } from '@nestjs/core';
+import { BullModule } from '@nestjs/bullmq'; // <-- IMPORT BULLMQ
 import { PrismaModule } from './prisma/prisma.module';
 import { OrganizationsModule } from './modules/organizations/organizations.module';
 import { RolesModule } from './modules/roles/roles.module';
@@ -20,10 +21,17 @@ import { PrintTemplatesModule } from './modules/print-templates/print-templates.
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { TenantMiddleware } from './prisma/tenant.middleware';
 import { RedisModule } from './modules/redis/redis.module';
-import { AttachmentsModule } from './modules/attachments/attachments.module'; // <-- IMPORT MỚI
+import { AttachmentsModule } from './modules/attachments/attachments.module';
 
 @Module({
   imports: [
+    // --- KẾT NỐI BULLMQ TỚI REDIS TOÀN CỤC ---
+    BullModule.forRoot({
+      connection: {
+        host: process.env.REDIS_HOST || 'localhost',
+        port: Number(process.env.REDIS_PORT) || 6379,
+      },
+    }),
     PrismaModule,
     OrganizationsModule,
     RolesModule,
@@ -37,7 +45,7 @@ import { AttachmentsModule } from './modules/attachments/attachments.module'; //
     PrintTemplatesModule,
     AnalyticsModule,
     RedisModule,
-    AttachmentsModule, // <-- KÍCH HOẠT ATTACHMENTS MODULE
+    AttachmentsModule,
   ],
   providers: [
     {
