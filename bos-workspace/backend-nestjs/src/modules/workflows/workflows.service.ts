@@ -220,7 +220,6 @@ export class WorkflowsService {
     });
   }
 
-  // --- 1. KHỞI CHẠY QUY TRÌNH (Tích hợp bắn thông báo cho Trạm 1) ---
   async startInstance(userId: number, dto: CreateInstanceDto) {
     const record = await this.prisma.record.findUnique({
       where: { id: dto.recordId },
@@ -296,7 +295,7 @@ export class WorkflowsService {
   }
 
   // ====================================================
-  // BẢN NÂNG CẤP HOÀN HẢO: HÀM LÕI PHÊ DUYỆT TÍCH HỢP HÀNG ĐỢI WEBHOOK & THÔNG BÁO LÕI
+  // BẢN NÂNG CẤP HOÀN HẢO: HÀM LÕI PHÊ DUYỆT TÍCH HỢP HÀNG ĐỢI WEBHOOK ĐỘNG & THÔNG BÁO LÕI
   // ====================================================
   async handleAction(
     instanceId: number,
@@ -425,13 +424,14 @@ export class WorkflowsService {
       const nextStepConfig: any = nextStepObj?.permissions || {};
       return {
         instanceId,
+        entityId: instance.record.entityId, // <-- BỔ SUNG TRƯỜNG NÀY ĐỂ TRUY VẤN WEBHOOK THEO BIỂU MẪU
         isCompleted: shouldTransition && finalStatus === 'COMPLETED',
         recordData: instance.record.data,
         recordCode: instance.record.recordCode || `#${instance.record.id}`,
         initiatorId: instance.record.createdBy,
         workflowName: instance.version.workflow.name,
         actionExecuted: actionLabel,
-        isRejected: false, // (Xử lý riêng nếu sau này có nút REJECT dạng hủy quy trình)
+        isRejected: false,
         nextStepId: shouldTransition ? nextStepId : instance.currentStep,
         nextStepName: nextStepObj?.name || '',
         nextStepCandidates: nextStepConfig.candidateUsers || [],
@@ -440,7 +440,6 @@ export class WorkflowsService {
       };
     });
 
-    // --- LẤY TÊN NGƯỜI DUYỆT ĐỂ GÁN VÀO THÔNG BÁO ---
     const approver = await this.prisma.user.findUnique({
       where: { id: userId },
     });
@@ -448,21 +447,18 @@ export class WorkflowsService {
 
     // --- 3. ĐỘNG CƠ THÔNG BÁO THỜI GIAN THỰC (REAL-TIME NOTIFICATION COCK) ---
     if (result.isCompleted) {
-      // Kịch bản A: Phiếu được HOÀN THÀNH -> Báo cho người trình ký
       await this.notificationsService.createNotification(
         result.initiatorId,
         'Quy trình phê duyệt hoàn tất',
         `Hồ sơ ${result.recordCode} của bạn đã được PHÊ DUYỆT HOÀN TẤT qua tất cả các cấp!`,
       );
     } else if (result.shouldTransition && result.nextStepId) {
-      // Kịch bản B: Phiếu được chuyển sang Bước tiếp theo -> Báo cho người trình ký
       await this.notificationsService.createNotification(
         result.initiatorId,
         'Cập nhật tiến trình hồ sơ',
         `Hồ sơ ${result.recordCode} của bạn đã được ${approverName} chuyển tiếp sang bước: ${result.nextStepName}.`,
       );
 
-      // Đồng thời báo cho những người duyệt của trạm tiếp theo nổ bíp bíp!
       for (const candidateId of result.nextStepCandidates) {
         await this.notificationsService.createNotification(
           candidateId,
@@ -472,35 +468,51 @@ export class WorkflowsService {
       }
     }
 
-    // --- 4. KÍCH HOẠT HÀNG ĐỢI WEBHOOK BẤT ĐỒNG BỘ (BULLMQ) ---
+    // --- 4. ĐỘNG CƠ WEBHOOK ĐỘNG TRA CỨU DB & XỬ LÝ BẤT ĐỒNG BỘ (BULLMQ) ---
     if (result.isCompleted) {
-      const testWebhookUrl =
-        'https://webhook.site/a4299bc5-68e7-465d-bb30-71ea13094f9e';
       try {
-        await this.webhookQueue.add(
-          'send-webhook',
-          {
-            instanceId: result.instanceId,
-            webhookUrl: testWebhookUrl,
-            payload: {
-              event: 'WORKFLOW_COMPLETED',
-              workflowName: result.workflowName,
+        // Truy vấn động tất cả các cấu hình Webhook đang hoạt động cho Biểu mẫu này dưới DB
+        // (Prisma Client Extension sẽ tự động chèn thêm điều kiện "tenantId" của doanh nghiệp hiện tại!)
+        const configuredWebhooks = await this.prisma.webhookEndpoint.findMany({
+          where: {
+            entityId: result.entityId,
+            isActive: true,
+          },
+        });
+
+        // Lọc ra các Webhook có đăng ký sự kiện RECORD_COMPLETED
+        const activeWebhooks = configuredWebhooks.filter((w) => {
+          const events = w.events as string[];
+          return Array.isArray(events) && events.includes('RECORD_COMPLETED');
+        });
+
+        // Đẩy song song các Job Webhook ngầm vào Redis Queue
+        for (const webhook of activeWebhooks) {
+          await this.webhookQueue.add(
+            'send-webhook',
+            {
               instanceId: result.instanceId,
-              recordData: result.recordData,
-              timestamp: new Date().toISOString(),
+              webhookUrl: webhook.url, // Lấy URL động từ cơ sở dữ liệu
+              payload: {
+                event: 'WORKFLOW_COMPLETED',
+                workflowName: result.workflowName,
+                instanceId: result.instanceId,
+                recordData: result.recordData,
+                timestamp: new Date().toISOString(),
+              },
             },
-          },
-          {
-            attempts: 3,
-            backoff: { type: 'exponential', delay: 2000 },
-          },
-        );
-        console.log(
-          `[Webhook Queue] Da xep hang tac vu ban Webhook cho Instance ID: ${result.instanceId}`,
-        );
+            {
+              attempts: 3,
+              backoff: { type: 'exponential', delay: 2000 },
+            },
+          );
+          console.log(
+            `[Webhook Queue] Da xep hang gui Webhook den URL dong: ${webhook.url}`,
+          );
+        }
       } catch (error) {
         console.error(
-          `[Webhook Queue] Loi khong the dua Job vao Redis: ${error.message}`,
+          `[Webhook Queue] Loi khi chọc DB hoac nap Job vao Redis: ${error.message}`,
         );
       }
     }
