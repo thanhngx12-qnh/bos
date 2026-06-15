@@ -26,9 +26,7 @@
           }
         ],
         "summary": "Tạo mới phòng ban",
-        "tags": [
-          "Departments (Cơ cấu tổ chức)"
-        ]
+        "tags": ["Departments (Cơ cấu tổ chức)"]
       }
     },
     "/api/v1/departments/tree": {
@@ -46,9 +44,7 @@
           }
         ],
         "summary": "Lấy toàn bộ sơ đồ tổ chức (Dạng Cây)",
-        "tags": [
-          "Departments (Cơ cấu tổ chức)"
-        ]
+        "tags": ["Departments (Cơ cấu tổ chức)"]
       }
     },
     "/api/v1/departments/{id}": {
@@ -75,9 +71,7 @@
           }
         ],
         "summary": "Lấy thông tin 1 phòng ban",
-        "tags": [
-          "Departments (Cơ cấu tổ chức)"
-        ]
+        "tags": ["Departments (Cơ cấu tổ chức)"]
       },
       "patch": {
         "operationId": "DepartmentsController_update",
@@ -112,9 +106,7 @@
           }
         ],
         "summary": "Cập nhật phòng ban",
-        "tags": [
-          "Departments (Cơ cấu tổ chức)"
-        ]
+        "tags": ["Departments (Cơ cấu tổ chức)"]
       },
       "delete": {
         "operationId": "DepartmentsController_remove",
@@ -139,9 +131,7 @@
           }
         ],
         "summary": "Xóa phòng ban",
-        "tags": [
-          "Departments (Cơ cấu tổ chức)"
-        ]
+        "tags": ["Departments (Cơ cấu tổ chức)"]
       }
     },
     "/api/v1/roles": {
@@ -169,9 +159,7 @@
           }
         ],
         "summary": "Tạo vai trò mới",
-        "tags": [
-          "Roles (Vai trò & Phân quyền)"
-        ]
+        "tags": ["Roles (Vai trò & Phân quyền)"]
       },
       "get": {
         "operationId": "RolesController_findAll",
@@ -187,9 +175,7 @@
           }
         ],
         "summary": "Lấy danh sách vai trò",
-        "tags": [
-          "Roles (Vai trò & Phân quyền)"
-        ]
+        "tags": ["Roles (Vai trò & Phân quyền)"]
       }
     },
     "/api/v1/roles/{id}": {
@@ -216,9 +202,7 @@
           }
         ],
         "summary": "Lấy thông tin 1 vai trò",
-        "tags": [
-          "Roles (Vai trò & Phân quyền)"
-        ]
+        "tags": ["Roles (Vai trò & Phân quyền)"]
       },
       "patch": {
         "operationId": "RolesController_update",
@@ -253,9 +237,7 @@
           }
         ],
         "summary": "Cập nhật vai trò",
-        "tags": [
-          "Roles (Vai trò & Phân quyền)"
-        ]
+        "tags": ["Roles (Vai trò & Phân quyền)"]
       },
       "delete": {
         "operationId": "RolesController_remove",
@@ -280,9 +262,7 @@
           }
         ],
         "summary": "Xóa vai trò",
-        "tags": [
-          "Roles (Vai trò & Phân quyền)"
-        ]
+        "tags": ["Roles (Vai trò & Phân quyền)"]
       }
     },
     "/api/v1/users": {
@@ -310,9 +290,7 @@
           }
         ],
         "summary": "Tạo tài khoản người dùng",
-        "tags": [
-          "Users (Người dùng)"
-        ]
+        "tags": ["Users (Người dùng)"]
       },
       "get": {
         "operationId": "UsersController_findAll",
@@ -328,9 +306,7 @@
           }
         ],
         "summary": "Lấy danh sách người dùng",
-        "tags": [
-          "Users (Người dùng)"
-        ]
+        "tags": ["Users (Người dùng)"]
       }
     },
     "/api/v1/users/{id}": {
@@ -357,9 +333,7 @@
           }
         ],
         "summary": "Lấy chi tiết 1 người dùng",
-        "tags": [
-          "Users (Người dùng)"
-        ]
+        "tags": ["Users (Người dùng)"]
       },
       "patch": {
         "operationId": "UsersController_update",
@@ -394,9 +368,7 @@
           }
         ],
         "summary": "Cập nhật thông tin",
-        "tags": [
-          "Users (Người dùng)"
-        ]
+        "tags": ["Users (Người dùng)"]
       },
       "delete": {
         "operationId": "UsersController_remove",
@@ -421,9 +393,7 @@
           }
         ],
         "summary": "Xóa tài khoản",
-        "tags": [
-          "Users (Người dùng)"
-        ]
+        "tags": ["Users (Người dùng)"]
       }
     },
     "/api/v1/auth/login": {
@@ -449,9 +419,7 @@
           }
         },
         "summary": "Đăng nhập vào hệ thống",
-        "tags": [
-          "Auth (Xác thực)"
-        ]
+        "tags": ["Auth (Xác thực)"]
       }
     },
     "/api/v1/entities": {
@@ -479,9 +447,7 @@
           }
         ],
         "summary": "Tạo Entity mới (VD: Phiếu xin nghỉ)",
-        "tags": [
-          "Metadata - Entities (Thực thể / Biểu mẫu)"
-        ]
+        "tags": ["Metadata - Entities (Thực thể / Biểu mẫu)"]
       },
       "get": {
         "operationId": "EntitiesController_findAll",
@@ -497,9 +463,7 @@
           }
         ],
         "summary": "Lấy danh sách các Entities",
-        "tags": [
-          "Metadata - Entities (Thực thể / Biểu mẫu)"
-        ]
+        "tags": ["Metadata - Entities (Thực thể / Biểu mẫu)"]
       }
     },
     "/api/v1/entities/{id}": {
@@ -526,9 +490,7 @@
           }
         ],
         "summary": "Lấy chi tiết Entity kèm danh sách các trường (Fields)",
-        "tags": [
-          "Metadata - Entities (Thực thể / Biểu mẫu)"
-        ]
+        "tags": ["Metadata - Entities (Thực thể / Biểu mẫu)"]
       },
       "patch": {
         "operationId": "EntitiesController_update",
@@ -563,9 +525,7 @@
           }
         ],
         "summary": "Cập nhật thông tin Entity",
-        "tags": [
-          "Metadata - Entities (Thực thể / Biểu mẫu)"
-        ]
+        "tags": ["Metadata - Entities (Thực thể / Biểu mẫu)"]
       },
       "delete": {
         "operationId": "EntitiesController_remove",
@@ -590,9 +550,7 @@
           }
         ],
         "summary": "Xóa Entity",
-        "tags": [
-          "Metadata - Entities (Thực thể / Biểu mẫu)"
-        ]
+        "tags": ["Metadata - Entities (Thực thể / Biểu mẫu)"]
       }
     },
     "/api/v1/fields": {
@@ -620,9 +578,7 @@
           }
         ],
         "summary": "Tạo trường dữ liệu mới vào Entity",
-        "tags": [
-          "Metadata - Fields (Trường dữ liệu)"
-        ]
+        "tags": ["Metadata - Fields (Trường dữ liệu)"]
       },
       "get": {
         "operationId": "FieldsController_findAllByEntity",
@@ -647,9 +603,7 @@
           }
         ],
         "summary": "Lấy danh sách các trường dữ liệu của 1 Entity",
-        "tags": [
-          "Metadata - Fields (Trường dữ liệu)"
-        ]
+        "tags": ["Metadata - Fields (Trường dữ liệu)"]
       }
     },
     "/api/v1/fields/{id}": {
@@ -676,9 +630,7 @@
           }
         ],
         "summary": "Lấy chi tiết 1 trường dữ liệu",
-        "tags": [
-          "Metadata - Fields (Trường dữ liệu)"
-        ]
+        "tags": ["Metadata - Fields (Trường dữ liệu)"]
       },
       "patch": {
         "operationId": "FieldsController_update",
@@ -713,9 +665,7 @@
           }
         ],
         "summary": "Cập nhật trường dữ liệu",
-        "tags": [
-          "Metadata - Fields (Trường dữ liệu)"
-        ]
+        "tags": ["Metadata - Fields (Trường dữ liệu)"]
       },
       "delete": {
         "operationId": "FieldsController_remove",
@@ -740,9 +690,7 @@
           }
         ],
         "summary": "Xóa trường dữ liệu",
-        "tags": [
-          "Metadata - Fields (Trường dữ liệu)"
-        ]
+        "tags": ["Metadata - Fields (Trường dữ liệu)"]
       }
     },
     "/api/v1/records": {
@@ -770,9 +718,7 @@
           }
         ],
         "summary": "Thêm mới một bản ghi (Submit Form)",
-        "tags": [
-          "Metadata - Records (Dữ liệu bản ghi)"
-        ]
+        "tags": ["Metadata - Records (Dữ liệu bản ghi)"]
       },
       "get": {
         "operationId": "RecordsController_findAllByEntity",
@@ -797,9 +743,7 @@
           }
         ],
         "summary": "Lấy danh sách các bản ghi của 1 Biểu mẫu",
-        "tags": [
-          "Metadata - Records (Dữ liệu bản ghi)"
-        ]
+        "tags": ["Metadata - Records (Dữ liệu bản ghi)"]
       }
     },
     "/api/v1/records/{id}": {
@@ -826,9 +770,7 @@
           }
         ],
         "summary": "Lấy chi tiết 1 bản ghi",
-        "tags": [
-          "Metadata - Records (Dữ liệu bản ghi)"
-        ]
+        "tags": ["Metadata - Records (Dữ liệu bản ghi)"]
       },
       "patch": {
         "operationId": "RecordsController_update",
@@ -863,9 +805,7 @@
           }
         ],
         "summary": "Cập nhật nội dung bản ghi (Tự động ghi Log Lịch sử)",
-        "tags": [
-          "Metadata - Records (Dữ liệu bản ghi)"
-        ]
+        "tags": ["Metadata - Records (Dữ liệu bản ghi)"]
       },
       "delete": {
         "operationId": "RecordsController_remove",
@@ -890,9 +830,7 @@
           }
         ],
         "summary": "Xóa bản ghi",
-        "tags": [
-          "Metadata - Records (Dữ liệu bản ghi)"
-        ]
+        "tags": ["Metadata - Records (Dữ liệu bản ghi)"]
       }
     },
     "/api/v1/records/{id}/revisions": {
@@ -919,9 +857,7 @@
           }
         ],
         "summary": "Lấy lịch sử các lần chỉnh sửa dữ liệu (Audit Trail)",
-        "tags": [
-          "Metadata - Records (Dữ liệu bản ghi)"
-        ]
+        "tags": ["Metadata - Records (Dữ liệu bản ghi)"]
       }
     },
     "/api/v1/workflows": {
@@ -949,9 +885,7 @@
           }
         ],
         "summary": "Tạo mới một Quy trình",
-        "tags": [
-          "Workflow Engine (Cỗ máy Quy trình)"
-        ]
+        "tags": ["Workflow Engine (Cỗ máy Quy trình)"]
       },
       "get": {
         "operationId": "WorkflowsController_findAll",
@@ -967,9 +901,7 @@
           }
         ],
         "summary": "Lấy danh sách Quy trình (Đã lọc theo tầm nhìn phân quyền)",
-        "tags": [
-          "Workflow Engine (Cỗ máy Quy trình)"
-        ]
+        "tags": ["Workflow Engine (Cỗ máy Quy trình)"]
       }
     },
     "/api/v1/workflows/{id}": {
@@ -996,9 +928,7 @@
           }
         ],
         "summary": "Lấy chi tiết Quy trình kèm các Phiên bản",
-        "tags": [
-          "Workflow Engine (Cỗ máy Quy trình)"
-        ]
+        "tags": ["Workflow Engine (Cỗ máy Quy trình)"]
       },
       "patch": {
         "operationId": "WorkflowsController_update",
@@ -1033,9 +963,7 @@
           }
         ],
         "summary": "Cập nhật tên/mô tả Quy trình",
-        "tags": [
-          "Workflow Engine (Cỗ máy Quy trình)"
-        ]
+        "tags": ["Workflow Engine (Cỗ máy Quy trình)"]
       },
       "delete": {
         "operationId": "WorkflowsController_remove",
@@ -1060,9 +988,7 @@
           }
         ],
         "summary": "Xóa Quy trình",
-        "tags": [
-          "Workflow Engine (Cỗ máy Quy trình)"
-        ]
+        "tags": ["Workflow Engine (Cỗ máy Quy trình)"]
       }
     },
     "/api/v1/workflows/{id}/versions/{versionId}/clone": {
@@ -1097,9 +1023,7 @@
           }
         ],
         "summary": "Nhân bản một Version thành Version mới",
-        "tags": [
-          "Workflow Engine (Cỗ máy Quy trình)"
-        ]
+        "tags": ["Workflow Engine (Cỗ máy Quy trình)"]
       }
     },
     "/api/v1/workflows/{id}/versions/{versionId}/status": {
@@ -1134,9 +1058,7 @@
           }
         ],
         "summary": "Cập nhật trạng thái Version",
-        "tags": [
-          "Workflow Engine (Cỗ máy Quy trình)"
-        ]
+        "tags": ["Workflow Engine (Cỗ máy Quy trình)"]
       }
     },
     "/api/v1/workflows/instances/start": {
@@ -1164,9 +1086,7 @@
           }
         ],
         "summary": "Khởi chạy luồng quy trình cho 1 bản ghi (Trình ký phiếu)",
-        "tags": [
-          "Workflow Engine (Cỗ máy Quy trình)"
-        ]
+        "tags": ["Workflow Engine (Cỗ máy Quy trình)"]
       }
     },
     "/api/v1/workflows/instances/{id}/action": {
@@ -1203,9 +1123,7 @@
           }
         ],
         "summary": "Thực hiện Phê duyệt hoặc Từ chối phiếu",
-        "tags": [
-          "Workflow Engine (Cỗ máy Quy trình)"
-        ]
+        "tags": ["Workflow Engine (Cỗ máy Quy trình)"]
       }
     },
     "/api/v1/workflows/instances/{id}/logs": {
@@ -1232,9 +1150,7 @@
           }
         ],
         "summary": "Lấy lịch sử Audit Log phê duyệt của lượt chạy",
-        "tags": [
-          "Workflow Engine (Cỗ máy Quy trình)"
-        ]
+        "tags": ["Workflow Engine (Cỗ máy Quy trình)"]
       }
     },
     "/api/v1/workflow-pipeline/steps": {
@@ -1262,9 +1178,7 @@
           }
         ],
         "summary": "Tạo bước duyệt mới vào Version DRAFT",
-        "tags": [
-          "Workflow Pipeline (Vẽ luồng quy trình)"
-        ]
+        "tags": ["Workflow Pipeline (Vẽ luồng quy trình)"]
       }
     },
     "/api/v1/workflow-pipeline/steps/{id}": {
@@ -1301,9 +1215,7 @@
           }
         ],
         "summary": "Cập nhật bước duyệt",
-        "tags": [
-          "Workflow Pipeline (Vẽ luồng quy trình)"
-        ]
+        "tags": ["Workflow Pipeline (Vẽ luồng quy trình)"]
       },
       "delete": {
         "operationId": "WorkflowStepsController_removeStep",
@@ -1328,9 +1240,7 @@
           }
         ],
         "summary": "Xóa bước duyệt",
-        "tags": [
-          "Workflow Pipeline (Vẽ luồng quy trình)"
-        ]
+        "tags": ["Workflow Pipeline (Vẽ luồng quy trình)"]
       }
     },
     "/api/v1/workflow-pipeline/transitions": {
@@ -1358,9 +1268,7 @@
           }
         ],
         "summary": "Tạo đường rẽ nhánh giữa 2 Bước",
-        "tags": [
-          "Workflow Pipeline (Vẽ luồng quy trình)"
-        ]
+        "tags": ["Workflow Pipeline (Vẽ luồng quy trình)"]
       }
     },
     "/api/v1/workflow-pipeline/transitions/{id}": {
@@ -1397,9 +1305,7 @@
           }
         ],
         "summary": "Cập nhật logic rẽ nhánh",
-        "tags": [
-          "Workflow Pipeline (Vẽ luồng quy trình)"
-        ]
+        "tags": ["Workflow Pipeline (Vẽ luồng quy trình)"]
       },
       "delete": {
         "operationId": "WorkflowStepsController_removeTransition",
@@ -1424,9 +1330,7 @@
           }
         ],
         "summary": "Xóa đường rẽ nhánh",
-        "tags": [
-          "Workflow Pipeline (Vẽ luồng quy trình)"
-        ]
+        "tags": ["Workflow Pipeline (Vẽ luồng quy trình)"]
       }
     },
     "/api/v1/workflow-pipeline/versions/{versionId}": {
@@ -1453,9 +1357,7 @@
           }
         ],
         "summary": "Lấy toàn bộ sơ đồ các bước và rẽ nhánh",
-        "tags": [
-          "Workflow Pipeline (Vẽ luồng quy trình)"
-        ]
+        "tags": ["Workflow Pipeline (Vẽ luồng quy trình)"]
       }
     },
     "/api/v1/print-templates": {
@@ -1483,9 +1385,7 @@
           }
         ],
         "summary": "Tạo mới một mẫu in cho Biểu mẫu",
-        "tags": [
-          "Metadata - Print Templates (Mẫu in động)"
-        ]
+        "tags": ["Metadata - Print Templates (Mẫu in động)"]
       }
     },
     "/api/v1/print-templates/{id}": {
@@ -1512,9 +1412,7 @@
           }
         ],
         "summary": "Lấy chi tiết cấu hình mẫu in",
-        "tags": [
-          "Metadata - Print Templates (Mẫu in động)"
-        ]
+        "tags": ["Metadata - Print Templates (Mẫu in động)"]
       },
       "patch": {
         "operationId": "PrintTemplatesController_update",
@@ -1549,9 +1447,7 @@
           }
         ],
         "summary": "Cập nhật mẫu in",
-        "tags": [
-          "Metadata - Print Templates (Mẫu in động)"
-        ]
+        "tags": ["Metadata - Print Templates (Mẫu in động)"]
       },
       "delete": {
         "operationId": "PrintTemplatesController_remove",
@@ -1576,9 +1472,7 @@
           }
         ],
         "summary": "Xóa mẫu in",
-        "tags": [
-          "Metadata - Print Templates (Mẫu in động)"
-        ]
+        "tags": ["Metadata - Print Templates (Mẫu in động)"]
       }
     },
     "/api/v1/print-templates/{id}/render/{recordId}": {
@@ -1613,9 +1507,7 @@
           }
         ],
         "summary": "Biên dịch dữ liệu bản ghi vào Mẫu in ra mã HTML hoàn chỉnh",
-        "tags": [
-          "Metadata - Print Templates (Mẫu in động)"
-        ]
+        "tags": ["Metadata - Print Templates (Mẫu in động)"]
       }
     },
     "/api/v1/analytics/entities-summary": {
@@ -1633,9 +1525,7 @@
           }
         ],
         "summary": "Thống kê lượng bản ghi (phiếu) theo từng biểu mẫu",
-        "tags": [
-          "Macro Analytics (Báo cáo Thống kê Vĩ mô)"
-        ]
+        "tags": ["Macro Analytics (Báo cáo Thống kê Vĩ mô)"]
       }
     },
     "/api/v1/analytics/workflows-summary": {
@@ -1653,9 +1543,7 @@
           }
         ],
         "summary": "Thống kê trạng thái phê duyệt của các quy trình",
-        "tags": [
-          "Macro Analytics (Báo cáo Thống kê Vĩ mô)"
-        ]
+        "tags": ["Macro Analytics (Báo cáo Thống kê Vĩ mô)"]
       }
     },
     "/api/v1/analytics/spending-by-department": {
@@ -1673,9 +1561,7 @@
           }
         ],
         "summary": "Báo cáo vĩ mô: Thống kê tổng ngân sách đề xuất theo từng Phòng ban (Bóc tách JSONB)",
-        "tags": [
-          "Macro Analytics (Báo cáo Thống kê Vĩ mô)"
-        ]
+        "tags": ["Macro Analytics (Báo cáo Thống kê Vĩ mô)"]
       }
     },
     "/api/v1/attachments/upload": {
@@ -1713,9 +1599,7 @@
           }
         ],
         "summary": "Tải tệp đính kèm lên Cloudflare R2 / S3",
-        "tags": [
-          "Metadata - Attachments (Quản lý tệp tin S3/MinIO)"
-        ]
+        "tags": ["Metadata - Attachments (Quản lý tệp tin S3/MinIO)"]
       }
     },
     "/api/v1/attachments/{id}/view": {
@@ -1742,9 +1626,7 @@
           }
         ],
         "summary": "Lấy đường dẫn có chữ ký số (Presigned URL) có hiệu lực 15 phút",
-        "tags": [
-          "Metadata - Attachments (Quản lý tệp tin S3/MinIO)"
-        ]
+        "tags": ["Metadata - Attachments (Quản lý tệp tin S3/MinIO)"]
       }
     },
     "/api/v1/attachments/{id}": {
@@ -1771,9 +1653,7 @@
           }
         ],
         "summary": "Xóa tệp tin",
-        "tags": [
-          "Metadata - Attachments (Quản lý tệp tin S3/MinIO)"
-        ]
+        "tags": ["Metadata - Attachments (Quản lý tệp tin S3/MinIO)"]
       }
     }
   },
@@ -1808,9 +1688,7 @@
             "example": 1
           }
         },
-        "required": [
-          "name"
-        ]
+        "required": ["name"]
       },
       "UpdateDepartmentDto": {
         "type": "object",
@@ -1839,21 +1717,12 @@
             "type": "object",
             "description": "Cấu hình quyền dạng JSON",
             "example": {
-              "users": [
-                "CREATE",
-                "READ",
-                "UPDATE",
-                "DELETE"
-              ],
-              "workflows": [
-                "READ"
-              ]
+              "users": ["CREATE", "READ", "UPDATE", "DELETE"],
+              "workflows": ["READ"]
             }
           }
         },
-        "required": [
-          "name"
-        ]
+        "required": ["name"]
       },
       "UpdateRoleDto": {
         "type": "object",
@@ -1867,15 +1736,8 @@
             "type": "object",
             "description": "Cấu hình quyền dạng JSON",
             "example": {
-              "users": [
-                "CREATE",
-                "READ",
-                "UPDATE",
-                "DELETE"
-              ],
-              "workflows": [
-                "READ"
-              ]
+              "users": ["CREATE", "READ", "UPDATE", "DELETE"],
+              "workflows": ["READ"]
             }
           }
         }
@@ -1909,11 +1771,7 @@
             "description": "ID Vai trò"
           }
         },
-        "required": [
-          "email",
-          "password",
-          "fullName"
-        ]
+        "required": ["email", "password", "fullName"]
       },
       "UpdateUserDto": {
         "type": "object",
@@ -1954,10 +1812,7 @@
             "description": "Mật khẩu"
           }
         },
-        "required": [
-          "email",
-          "password"
-        ]
+        "required": ["email", "password"]
       },
       "CreateEntityDto": {
         "type": "object",
@@ -1982,10 +1837,7 @@
             "example": "QTMS-{SEQ:4}"
           }
         },
-        "required": [
-          "name",
-          "code"
-        ]
+        "required": ["name", "code"]
       },
       "UpdateEntityDto": {
         "type": "object",
@@ -2058,12 +1910,7 @@
             "default": 0
           }
         },
-        "required": [
-          "entityId",
-          "name",
-          "code",
-          "type"
-        ]
+        "required": ["entityId", "name", "code", "type"]
       },
       "UpdateFieldDto": {
         "type": "object",
@@ -2121,10 +1968,7 @@
             }
           }
         },
-        "required": [
-          "entityId",
-          "data"
-        ]
+        "required": ["entityId", "data"]
       },
       "UpdateRecordDto": {
         "type": "object",
@@ -2161,16 +2005,11 @@
             "description": "Cấu hình phân quyền tầm nhìn",
             "example": {
               "allowAll": false,
-              "allowedDepartments": [
-                1
-              ]
+              "allowedDepartments": [1]
             }
           }
         },
-        "required": [
-          "entityId",
-          "name"
-        ]
+        "required": ["entityId", "name"]
       },
       "UpdateWorkflowDto": {
         "type": "object",
@@ -2189,9 +2028,7 @@
             "description": "Cấu hình phân quyền tầm nhìn",
             "example": {
               "allowAll": false,
-              "allowedDepartments": [
-                1
-              ]
+              "allowedDepartments": [1]
             }
           }
         }
@@ -2210,10 +2047,7 @@
             "example": 2
           }
         },
-        "required": [
-          "recordId",
-          "versionId"
-        ]
+        "required": ["recordId", "versionId"]
       },
       "WorkflowActionDto": {
         "type": "object",
@@ -2234,9 +2068,7 @@
             "example": "SIGNED_BY_ADMIN_MD5_789abc"
           }
         },
-        "required": [
-          "transitionId"
-        ]
+        "required": ["transitionId"]
       },
       "CreateStepDto": {
         "type": "object",
@@ -2271,10 +2103,7 @@
             "default": 0
           }
         },
-        "required": [
-          "versionId",
-          "name"
-        ]
+        "required": ["versionId", "name"]
       },
       "UpdateStepDto": {
         "type": "object",
@@ -2333,10 +2162,7 @@
             "default": false
           }
         },
-        "required": [
-          "fromStepId",
-          "toStepId"
-        ]
+        "required": ["fromStepId", "toStepId"]
       },
       "UpdateTransitionDto": {
         "type": "object",
@@ -2378,11 +2204,7 @@
             }
           }
         },
-        "required": [
-          "entityId",
-          "name",
-          "template"
-        ]
+        "required": ["entityId", "name", "template"]
       },
       "UpdateTemplateDto": {
         "type": "object",
