@@ -7,6 +7,7 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateTenantDto } from './dto/create-tenant.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
+import { paginate, PaginateOptions } from '../../prisma/prisma.helper';
 
 @Injectable()
 export class TenantsService {
@@ -24,8 +25,8 @@ export class TenantsService {
     return this.prisma.tenant.create({ data: dto });
   }
 
-  async findAll() {
-    return this.prisma.tenant.findMany({ orderBy: { id: 'asc' } });
+  async findAll(options: PaginateOptions) {
+    return paginate(this.prisma.tenant, {}, options);
   }
 
   async findOne(id: number) {

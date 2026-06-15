@@ -15,6 +15,8 @@ import { JwtAuthGuard } from '../../core/guards/jwt-auth.guard';
 import { RedisService } from '../redis/redis.service'; // <-- IMPORT REDIS
 import { Observable } from 'rxjs'; // <-- IMPORT OBSERVALBE
 import { map } from 'rxjs/operators';
+import { Query, DefaultValuePipe } from '@nestjs/common';
+import { ApiQuery } from '@nestjs/swagger';
 
 @ApiTags('Notifications (Hộp thư thông báo)')
 @ApiBearerAuth()
@@ -27,10 +29,16 @@ export class NotificationsController {
   ) {}
 
   @Get()
-  @ApiOperation({ summary: 'Lấy danh sách thông báo của người dùng đăng nhập' })
-  findAllForUser(@Request() req) {
+  @ApiOperation({ summary: 'Lấy danh sách thông báo (Có phân trang)' })
+  @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, type: Number, example: 10 })
+  findAllForUser(
+    @Request() req,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
+  ) {
     const userId = req.user.userId;
-    return this.notificationsService.findAllForUser(userId);
+    return this.notificationsService.findAllForUser(userId, { page, limit });
   }
 
   // --- CỔNG TRUYỀN TIN THỜI GIAN THỰC: SERVER-SENT EVENTS (SSE) ---

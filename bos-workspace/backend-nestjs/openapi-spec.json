@@ -175,7 +175,47 @@
       },
       "get": {
         "operationId": "RolesController_findAll",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": 10,
+              "type": "number"
+            }
+          },
+          {
+            "name": "sortBy",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "id",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sortOrder",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": ""
@@ -186,7 +226,7 @@
             "bearer": []
           }
         ],
-        "summary": "Lấy danh sách vai trò",
+        "summary": "Lấy danh sách vai trò (Có phân trang & Sắp xếp)",
         "tags": [
           "Roles (Vai trò & Phân quyền)"
         ]
@@ -316,7 +356,47 @@
       },
       "get": {
         "operationId": "UsersController_findAll",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": 10,
+              "type": "number"
+            }
+          },
+          {
+            "name": "sortBy",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "id",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sortOrder",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": ""
@@ -327,7 +407,7 @@
             "bearer": []
           }
         ],
-        "summary": "Lấy danh sách người dùng",
+        "summary": "Lấy danh sách người dùng (Có phân trang & Sắp xếp)",
         "tags": [
           "Users (Người dùng)"
         ]
@@ -513,7 +593,47 @@
       },
       "get": {
         "operationId": "EntitiesController_findAll",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": 10,
+              "type": "number"
+            }
+          },
+          {
+            "name": "sortBy",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "id",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sortOrder",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": ""
@@ -524,7 +644,7 @@
             "bearer": []
           }
         ],
-        "summary": "Lấy danh sách các Entities",
+        "summary": "Lấy danh sách các Entities (Có phân trang & Sắp xếp)",
         "tags": [
           "Metadata - Entities (Thực thể / Biểu mẫu)"
         ]
@@ -1069,7 +1189,47 @@
       },
       "get": {
         "operationId": "WorkflowsController_findAll",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": 10,
+              "type": "number"
+            }
+          },
+          {
+            "name": "sortBy",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "id",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sortOrder",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": ""
@@ -1080,7 +1240,7 @@
             "bearer": []
           }
         ],
-        "summary": "Lấy danh sách Quy trình (Đã lọc theo tầm nhìn phân quyền)",
+        "summary": "Lấy danh sách Quy trình (Đã lọc theo tầm nhìn phân quyền, có phân trang & sắp xếp)",
         "tags": [
           "Workflow Engine (Cỗ máy Quy trình)"
         ]
@@ -1893,7 +2053,26 @@
     "/api/v1/notifications": {
       "get": {
         "operationId": "NotificationsController_findAllForUser",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": 10,
+              "type": "number"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": ""
@@ -1904,7 +2083,7 @@
             "bearer": []
           }
         ],
-        "summary": "Lấy danh sách thông báo của người dùng đăng nhập",
+        "summary": "Lấy danh sách thông báo (Có phân trang)",
         "tags": [
           "Notifications (Hộp thư thông báo)"
         ]

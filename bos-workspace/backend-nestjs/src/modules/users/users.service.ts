@@ -1,16 +1,23 @@
 // File: src/modules/users/users.service.ts
-import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import * as bcrypt from 'bcrypt';
+import { paginate, PaginateOptions } from '../../prisma/prisma.helper';
 
 @Injectable()
 export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(dto: CreateUserDto) {
-    const existingUser = await this.prisma.user.findUnique({ where: { email: dto.email } });
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
     if (existingUser) {
       throw new ConflictException('Email này đã được sử dụng.');
     }
@@ -31,19 +38,24 @@ export class UsersService {
     return result;
   }
 
-  async findAll() {
-    const users = await this.prisma.user.findMany({
-      include: {
+  async findAll(options: PaginateOptions) {
+    const result = await paginate(
+      this.prisma.user,
+      {}, // Where (Prisma Extension sẽ tự động chèn tenantId vào đây)
+      options,
+      {
         department: { select: { id: true, name: true } },
         role: { select: { id: true, name: true } },
-      },
-      orderBy: { id: 'asc' },
+      }, // Include quan hệ
+    );
+
+    // Xóa password khỏi mảng data trước khi trả về
+    result.data = result.data.map((user: any) => {
+      const { password, ...safeUser } = user;
+      return safeUser;
     });
 
-    return users.map(user => {
-      const { password, ...result } = user;
-      return result;
-    });
+    return result;
   }
 
   async findOne(id: number) {
@@ -56,7 +68,7 @@ export class UsersService {
     });
 
     if (!user) throw new NotFoundException('Không tìm thấy người dùng.');
-    
+
     const { password, ...result } = user;
     return result;
   }
@@ -65,7 +77,9 @@ export class UsersService {
     await this.findOne(id);
 
     if (dto.email) {
-      const existingUser = await this.prisma.user.findUnique({ where: { email: dto.email } });
+      const existingUser = await this.prisma.user.findUnique({
+        where: { email: dto.email },
+      });
       if (existingUser && existingUser.id !== id) {
         throw new ConflictException('Email này đã thuộc về người dùng khác.');
       }
@@ -83,7 +97,7 @@ export class UsersService {
   async remove(id: number) {
     await this.findOne(id);
     const deletedUser = await this.prisma.user.delete({ where: { id } });
-    
+
     const { password, ...result } = deletedUser;
     return result;
   }

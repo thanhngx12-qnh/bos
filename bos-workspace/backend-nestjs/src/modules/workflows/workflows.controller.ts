@@ -18,6 +18,8 @@ import { UpdateWorkflowDto } from './dto/update-workflow.dto';
 import { CreateInstanceDto } from './dto/create-instance.dto';
 import { WorkflowActionDto } from './dto/workflow-action.dto';
 import { JwtAuthGuard } from '../../core/guards/jwt-auth.guard';
+import { Query, DefaultValuePipe } from '@nestjs/common';
+import { ApiQuery } from '@nestjs/swagger';
 
 @ApiTags('Workflow Engine (Cỗ máy Quy trình)')
 @ApiBearerAuth()
@@ -34,12 +36,32 @@ export class WorkflowsController {
 
   @Get()
   @ApiOperation({
-    summary: 'Lấy danh sách Quy trình (Đã lọc theo tầm nhìn phân quyền)',
+    summary:
+      'Lấy danh sách Quy trình (Đã lọc theo tầm nhìn phân quyền, có phân trang & sắp xếp)',
   })
-  findAll(@Request() req) {
-    // <-- CẬP NHẬT Ở ĐÂY ĐỂ ĐÓN REQ
+  @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, type: Number, example: 10 })
+  @ApiQuery({ name: 'sortBy', required: false, type: String, example: 'id' })
+  @ApiQuery({
+    name: 'sortOrder',
+    required: false,
+    enum: ['asc', 'desc'],
+    example: 'desc',
+  })
+  findAll(
+    @Request() req,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
+    @Query('sortBy') sortBy?: string,
+    @Query('sortOrder') sortOrder?: 'asc' | 'desc',
+  ) {
     const currentUser = req.user;
-    return this.workflowsService.findAll(currentUser); // Truyền thông tin user xuống Service
+    return this.workflowsService.findAll(currentUser, {
+      page,
+      limit,
+      sortBy,
+      sortOrder,
+    });
   }
 
   @Get(':id')

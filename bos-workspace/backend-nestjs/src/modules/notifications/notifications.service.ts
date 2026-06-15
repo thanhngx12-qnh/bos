@@ -3,6 +3,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service'; // <-- IMPORT REDIS
 import { tenantContext } from '../../prisma/tenant-context'; // <-- IMPORT CONTEXT
+import { paginate, PaginateOptions } from '../../prisma/prisma.helper';
 
 @Injectable()
 export class NotificationsService {
@@ -36,11 +37,9 @@ export class NotificationsService {
     return notification;
   }
 
-  async findAllForUser(userId: number) {
-    return this.prisma.notification.findMany({
-      where: { userId },
-      orderBy: { createdAt: 'desc' },
-    });
+  async findAllForUser(userId: number, options: PaginateOptions) {
+    // Prisma Extension sẽ tự động chèn { userId, tenantId } vào where nhờ cô lập SaaS
+    return paginate(this.prisma.notification, { userId }, options);
   }
 
   async markAsRead(id: number, userId: number) {

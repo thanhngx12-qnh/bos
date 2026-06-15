@@ -3,6 +3,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
+import { paginate, PaginateOptions } from '../../prisma/prisma.helper';
 
 @Injectable()
 export class RolesService {
@@ -17,8 +18,8 @@ export class RolesService {
     });
   }
 
-  async findAll() {
-    return this.prisma.role.findMany({ orderBy: { id: 'asc' } });
+  async findAll(options: PaginateOptions) {
+    return paginate(this.prisma.role, {}, options);
   }
 
   async findOne(id: number) {

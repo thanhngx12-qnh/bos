@@ -10,6 +10,7 @@ import { CreateEntityDto } from './dto/create-entity.dto';
 import { UpdateEntityDto } from './dto/update-entity.dto';
 import { RedisService } from '../redis/redis.service'; // <-- Import Redis
 import { tenantContext } from '../../prisma/tenant-context'; // <-- Import Context
+import { paginate, PaginateOptions } from '../../prisma/prisma.helper';
 
 @Injectable()
 export class EntitiesService {
@@ -35,8 +36,8 @@ export class EntitiesService {
     return this.prisma.entity.create({ data: dto });
   }
 
-  async findAll() {
-    return this.prisma.entity.findMany({ orderBy: { id: 'desc' } });
+  async findAll(options: PaginateOptions) {
+    return paginate(this.prisma.entity, {}, options);
   }
 
   // --- ĐỌC CACHE: Tốc độ < 1ms, bảo vệ PostgreSQL ---

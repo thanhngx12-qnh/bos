@@ -12,6 +12,7 @@ import { WorkflowActionDto } from './dto/workflow-action.dto';
 import { InjectQueue } from '@nestjs/bullmq'; // <-- IMPORT THƯ VIỆN ĐẨY QUENE
 import { Queue } from 'bullmq'; // <-- IMPORT THƯ VIỆN HÀNG ĐỢI
 import { NotificationsService } from '../notifications/notifications.service'; // <-- IMPORT DỊCH VỤ THÔNG BÁO
+import { paginate, PaginateOptions } from '../../prisma/prisma.helper';
 
 @Injectable()
 export class WorkflowsService {
@@ -77,47 +78,51 @@ export class WorkflowsService {
   }
 
   // ====================================================
-  // BỘ LỌC TẦM NHÌN QUY TRÌNH (VISIBILITY FILTER ENGINE)
+  // BỘ LỌC TẦM NHÌN QUY TRÌNH (DATABASE-LEVEL VISIBILITY FILTER)
+  // Tích hợp phân trang, lọc chéo JSONB dưới Postgres cực nhanh
   // ====================================================
-  async findAll(currentUser: any) {
-    const workflows = await this.prisma.workflow.findMany({
-      include: {
-        entity: { select: { id: true, name: true, code: true } },
-        versions: { orderBy: { version: 'desc' } },
-      },
-      orderBy: { id: 'desc' },
-    });
+  async findAll(currentUser: any, options: PaginateOptions) {
+    const whereClause: any = {
+      // Prisma Client Extension sẽ tự động ghim thêm tenantId cô lập tại đây!
+      OR: [
+        // Kịch bản 1: Cho phép tất cả xem (allowAll: true) hoặc chưa cấu hình tầm nhìn
+        { visibility: { path: ['allowAll'], equals: true } },
+        { visibility: { equals: {} } },
 
-    return workflows.filter((wf) => {
-      const visibility: any = wf.visibility || {};
+        // Kịch bản 2: Lọc nghiêm ngặt theo loại tài khoản (allowedUserTypes chứa INTERNAL/EXTERNAL)
+        {
+          visibility: {
+            path: ['allowedUserTypes'],
+            array_contains: currentUser.userType,
+          },
+        },
 
-      if (
-        visibility.allowAll === true ||
-        Object.keys(visibility).length === 0
-      ) {
-        return true;
-      }
+        // Kịch bản 3: Kiểm tra khớp chéo theo Phòng ban, Vai trò, hoặc User ID
+        {
+          visibility: {
+            path: ['allowedDepartments'],
+            array_contains: currentUser.departmentId,
+          },
+        },
+        {
+          visibility: {
+            path: ['allowedRoles'],
+            array_contains: currentUser.roleId,
+          },
+        },
+        {
+          visibility: {
+            path: ['allowedUsers'],
+            array_contains: currentUser.userId,
+          },
+        },
+      ],
+    };
 
-      if (
-        visibility.allowedUserTypes &&
-        Array.isArray(visibility.allowedUserTypes)
-      ) {
-        if (!visibility.allowedUserTypes.includes(currentUser.userType)) {
-          return false;
-        }
-      }
-
-      const isAllowedDept =
-        currentUser.departmentId &&
-        visibility.allowedDepartments?.includes(currentUser.departmentId);
-      const isAllowedRole =
-        currentUser.roleId &&
-        visibility.allowedRoles?.includes(currentUser.roleId);
-      const isAllowedUser = visibility.allowedUsers?.includes(
-        currentUser.userId,
-      );
-
-      return isAllowedDept || isAllowedRole || isAllowedUser;
+    // Thực thi bộ phân trang toàn cục dùng chung
+    return paginate(this.prisma.workflow, whereClause, options, {
+      entity: { select: { id: true, name: true, code: true } },
+      versions: { orderBy: { version: 'desc' } },
     });
   }
 

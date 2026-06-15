@@ -16,6 +16,8 @@ import { CreateTenantDto } from './dto/create-tenant.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
 import { JwtAuthGuard } from '../../core/guards/jwt-auth.guard';
 import { SuperAdminGuard } from '../../core/guards/super-admin.guard'; // <-- IMPORT Ổ KHÓA
+import { Query, DefaultValuePipe } from '@nestjs/common';
+import { ApiQuery } from '@nestjs/swagger';
 
 @ApiTags('Tenants (Quản lý Doanh nghiệp SaaS - Chỉ Super Admin)')
 @ApiBearerAuth()
@@ -32,10 +34,25 @@ export class TenantsController {
 
   @Get()
   @ApiOperation({
-    summary: 'Lấy toàn bộ danh sách doanh nghiệp (Super Admin View)',
+    summary: 'Lấy toàn bộ danh sách doanh nghiệp (Có phân trang & Sắp xếp)',
   })
-  findAll() {
-    return this.tenantsService.findAll();
+  @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, type: Number, example: 10 })
+  @ApiQuery({ name: 'sortBy', required: false, type: String, example: 'id' })
+  // SỬA LẠI ĐOẠN NÀY
+  @ApiQuery({
+    name: 'sortOrder',
+    required: false,
+    enum: ['asc', 'desc'],
+    example: 'desc',
+  })
+  findAll(
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
+    @Query('sortBy') sortBy?: string,
+    @Query('sortOrder') sortOrder: 'asc' | 'desc' = 'desc', // Thêm giá trị mặc định vào đây
+  ) {
+    return this.tenantsService.findAll({ page, limit, sortBy, sortOrder });
   }
 
   @Get(':id')

@@ -15,6 +15,8 @@ import { EntitiesService } from './entities.service';
 import { CreateEntityDto } from './dto/create-entity.dto';
 import { UpdateEntityDto } from './dto/update-entity.dto';
 import { JwtAuthGuard } from '../../core/guards/jwt-auth.guard';
+import { Query, DefaultValuePipe } from '@nestjs/common';
+import { ApiQuery } from '@nestjs/swagger';
 
 @ApiTags('Metadata - Entities (Thực thể / Biểu mẫu)')
 @ApiBearerAuth()
@@ -30,9 +32,25 @@ export class EntitiesController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Lấy danh sách các Entities' })
-  findAll() {
-    return this.entitiesService.findAll();
+  @ApiOperation({
+    summary: 'Lấy danh sách các Entities (Có phân trang & Sắp xếp)',
+  })
+  @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, type: Number, example: 10 })
+  @ApiQuery({ name: 'sortBy', required: false, type: String, example: 'id' })
+  @ApiQuery({
+    name: 'sortOrder',
+    required: false,
+    enum: ['asc', 'desc'],
+    example: 'desc',
+  })
+  findAll(
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
+    @Query('sortBy') sortBy?: string,
+    @Query('sortOrder') sortOrder?: 'asc' | 'desc',
+  ) {
+    return this.entitiesService.findAll({ page, limit, sortBy, sortOrder });
   }
 
   @Get(':id')
