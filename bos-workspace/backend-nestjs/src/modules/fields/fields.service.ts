@@ -24,39 +24,31 @@ export class FieldsService {
     const cacheKey = `tenant:${tenantId}:entity:${entityId}`;
     await this.redis.del(cacheKey);
     console.log(
-      `[REDIS CACHE INVALIDATE] Da xoa Cache cho Entity ID ${entityId} vi danh sach Fields (Truong) co thay doi.`,
+      `[REDIS CACHE INVALIDATE] Da xoa Cache cho Entity ID ${entityId} vi danh sach Fields co thay doi.`,
     );
   }
 
   async create(dto: CreateFieldDto) {
     const entity = await this.prisma.entity.findFirst({
-      where: { id: dto.entityId } as any, // Sửa lỗi findUnique compound key
+      where: { id: dto.entityId } as any,
     });
     if (!entity) throw new NotFoundException('Không tìm thấy Entity.');
 
+    // SỬA LỖI 500: Bảng FieldRegistry V8.1 không có cột vật lý entityId.
+    // Field code là unique trên toàn bộ Tenant.
     const existingField = await this.prisma.fieldRegistry.findFirst({
       where: {
-        entityId: dto.entityId,
         code: dto.code,
       } as any,
     });
 
     if (existingField) {
       throw new ConflictException(
-        `Mã trường '${dto.code}' đã tồn tại trong biểu mẫu này.`,
+        `Mã trường '${dto.code}' đã tồn tại trong Từ điển dữ liệu (Field Registry).`,
       );
     }
 
-    let finalOrderIndex = dto.orderIndex;
-    if (finalOrderIndex === undefined || finalOrderIndex === null) {
-      const lastField = await this.prisma.fieldRegistry.findFirst({
-        where: { entityId: dto.entityId } as any,
-        // Bỏ orderBy orderIndex tạm thời nếu FieldRegistry chưa có cột orderIndex,
-        // ở bản V8.1 FieldRegistry chỉ có config json. Ta sẽ nhét orderIndex vào config!
-      });
-      // Mock logic tạm thời để server chạy xanh
-      finalOrderIndex = 1;
-    }
+    let finalOrderIndex = dto.orderIndex || 1;
 
     const newField = await this.prisma.fieldRegistry.create({
       data: {
@@ -67,7 +59,7 @@ export class FieldsService {
           isRequired: dto.isRequired ?? false,
           options: dto.options ?? {},
           orderIndex: finalOrderIndex,
-          entityId: dto.entityId, // Nhét entityId vào config luôn vì V8.1 không có cột vật lý entityId trong FieldRegistry
+          entityId: dto.entityId, // V8.1: Phải lưu entityId vào trong cục JSON config để móc nối
         },
       } as any,
     });
@@ -77,9 +69,8 @@ export class FieldsService {
   }
 
   async findAllByEntity(entityId: number) {
-    // V8.1: Lấy field dựa vào JSON config
+    // V8.1: Lấy tất cả field của Tenant, sau đó lọc theo entityId trong JSON config
     const fields = await this.prisma.fieldRegistry.findMany();
-    // Lọc mềm tạm thời
     return fields.filter((f) => (f.config as any)?.entityId === entityId);
   }
 
@@ -92,7 +83,7 @@ export class FieldsService {
   }
 
   async update(id: number, dto: UpdateFieldDto) {
-    await this.findOne(id);
+    const current = await this.findOne(id);
 
     const updatedField = await this.prisma.fieldRegistry.update({
       where: { id } as any,
@@ -103,6 +94,7 @@ export class FieldsService {
           isRequired: dto.isRequired,
           options: dto.options ?? undefined,
           orderIndex: dto.orderIndex,
+          entityId: (current.config as any)?.entityId, // Giữ nguyên móc nối
         },
       } as any,
     });

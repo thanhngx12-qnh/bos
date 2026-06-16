@@ -1,11 +1,10 @@
 // File: src/modules/records/dynamic-validation.service.ts
 import { Injectable, BadRequestException } from '@nestjs/common';
-import { FieldRegistry } from '@prisma/client'; // <-- ĐỔI THÀNH FieldRegistry
+import { FieldRegistry } from '@prisma/client';
 import { DynamicCondition } from '../fields/interfaces/field-options.interface';
 
 @Injectable()
 export class DynamicValidationService {
-  // Đánh giá điều kiện Logic Động (VD: total > 1000)
   private evaluateCondition(
     condition: DynamicCondition,
     inputData: any,
@@ -36,20 +35,17 @@ export class DynamicValidationService {
     }
   }
 
-  // Engine chính xử lý toàn bộ payload
   public validateAndSanitize(
-    fields: FieldRegistry[], // <-- SỬA LỖI TẠI ĐÂY
+    fields: FieldRegistry[],
     inputData: any,
   ): Record<string, any> {
     const sanitizedData: Record<string, any> = {};
 
     for (const field of fields) {
-      // V8.1: Lấy thông tin từ cột config
       const config: any = field.config || {};
       const options: any = config.options || {};
       let value = inputData[field.code];
 
-      // 1. Áp dụng Default Value nếu bỏ trống
       if (
         (value === undefined || value === null || value === '') &&
         options.defaultValue !== undefined
@@ -57,8 +53,7 @@ export class DynamicValidationService {
         value = options.defaultValue;
       }
 
-      // 2. Đánh giá trường bắt buộc (Tĩnh: isRequired, hoặc Động: requiredIf)
-      let isFieldRequired = config.isRequired || false; // <-- Lấy isRequired từ config
+      let isFieldRequired = config.isRequired || false;
       if (!isFieldRequired && options.requiredIf) {
         isFieldRequired = this.evaluateCondition(options.requiredIf, inputData);
       }
@@ -72,7 +67,6 @@ export class DynamicValidationService {
         );
       }
 
-      // 3. Nếu có giá trị thì Validate & Ép kiểu theo đặc thù
       if (value !== undefined && value !== null && value !== '') {
         switch (field.type) {
           case 'NUMBER':
@@ -151,6 +145,17 @@ export class DynamicValidationService {
               );
             }
             sanitizedData[field.code] = dateVal.toISOString();
+            break;
+
+          // --- FIX LỖI TẠI ĐÂY: KHAI BÁO TYPE LOOKUP ---
+          case 'LOOKUP':
+            const lookupId = Number(value);
+            if (isNaN(lookupId)) {
+              throw new BadRequestException(
+                `Trường '${field.name}' phải chứa ID của bản ghi liên kết hợp lệ.`,
+              );
+            }
+            sanitizedData[field.code] = lookupId;
             break;
 
           default:

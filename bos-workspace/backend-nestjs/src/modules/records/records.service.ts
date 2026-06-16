@@ -28,6 +28,22 @@ export class RecordsService {
     });
   }
 
+  // --- THUẬT TOÁN BIÊN DỊCH TIÊU ĐỀ BẢN GHI (DYNAMIC TITLE GENERATOR) ---
+  private generateRecordTitle(
+    pattern: string | null | undefined,
+    data: Record<string, any>,
+    recordCode: string | null,
+  ): string | null {
+    if (!pattern) return null;
+
+    // Tự động tìm các chuỗi nằm trong ngoặc nhọn {field_code} và thay bằng data
+    return pattern.replace(/\{([^}]+)\}/g, (match, fieldCode) => {
+      if (fieldCode === 'RECORD_CODE') return recordCode || '';
+      const value = data[fieldCode];
+      return value !== undefined && value !== null ? String(value) : '';
+    });
+  }
+
   // --- THUẬT TOÁN JSON DIFF (TÌM SỰ KHÁC BIỆT DỮ LIỆU) ---
   private calculateDiff(
     oldData: any,
@@ -52,21 +68,112 @@ export class RecordsService {
     return diff;
   }
 
+  private async processGraphRelations(
+    tx: any,
+    tenantId: number,
+    sourceRecordId: number,
+    entityId: number,
+    entityFields: any[],
+    finalData: any,
+  ) {
+    await tx.recordRelation.deleteMany({
+      where: { sourceRecordId: sourceRecordId } as any,
+    });
+
+    const lookupFields = entityFields.filter((f) => f.type === 'LOOKUP');
+
+    for (const field of lookupFields) {
+      const targetRecordIdRaw = finalData[field.code];
+      const targetRecordId = Number(targetRecordIdRaw);
+
+      if (targetRecordId && !isNaN(targetRecordId)) {
+        const config: any = field.config || {};
+        const options: any = config.options || {};
+        const targetEntityId = options.lookupEntityId;
+
+        if (targetEntityId) {
+          let relationDef = await tx.relationDefinition.findFirst({
+            where: {
+              sourceEntityId: entityId,
+              targetEntityId: targetEntityId,
+              code: field.code,
+            } as any,
+          });
+
+          if (!relationDef) {
+            relationDef = await tx.relationDefinition.create({
+              data: {
+                tenantId,
+                code: field.code,
+                name: `Liên kết từ ${field.name}`,
+                sourceEntityId: entityId,
+                targetEntityId: targetEntityId,
+                cardinality: 'MANY_TO_ONE',
+              } as any,
+            });
+          }
+
+          await tx.recordRelation.create({
+            data: {
+              tenantId,
+              definitionId: relationDef.id,
+              sourceRecordId: sourceRecordId,
+              targetRecordId: targetRecordId,
+              direction: 'FORWARD',
+            } as any,
+          });
+        }
+      }
+    }
+  }
+
+  // --- HÀM TRỢ GIÚP: ĐẢM BẢO ENTITY VERSION TỒN TẠI ĐỂ GẮN VÀO RECORD ---
+  private async ensureEntityVersionExists(
+    tx: any,
+    tenantId: number,
+    entityId: number,
+  ) {
+    let version = await tx.entityVersion.findFirst({
+      where: { entityId, tenantId, status: 'PUBLISHED' } as any,
+    });
+
+    if (!version) {
+      version = await tx.entityVersion.findFirst({
+        where: { entityId, tenantId } as any,
+      });
+    }
+
+    if (!version) {
+      version = await tx.entityVersion.create({
+        data: {
+          tenantId,
+          entityId,
+          version: 1,
+          status: 'PUBLISHED',
+          snapshotHash: 'mock-hash-123',
+          fieldsSnapshot: {},
+        } as any,
+      });
+    }
+
+    return version.id;
+  }
+
   async create(userId: number, dto: CreateRecordDto) {
+    const store = tenantContext.getStore();
+    const tenantId = store?.tenantId || 0;
+
     const entity = await this.prisma.entity.findFirst({
       where: { id: dto.entityId } as any,
-      // Trong V8.1 FieldDefinition đổi thành FieldRegistry
     });
 
     if (!entity)
       throw new NotFoundException('Không tìm thấy Biểu mẫu (Entity).');
 
-    // Lấy field registries (V8.1) thay vì include
     const fields = await this.prisma.fieldRegistry.findMany({
       where: { tenantId: (entity as any).tenantId } as any,
     });
 
-    // Lọc theo entityId trong config (tạm thời để bypass)
     const entityFields = fields.filter(
       (f) => (f.config as any)?.entityId === entity.id,
     );
@@ -92,21 +199,48 @@ export class RecordsService {
       );
     }
 
-    return this.prisma.record.create({
-      data: {
-        entityId: dto.entityId,
-        businessCode: recordCode || `CODE-${Date.now()}`, // SỬA LỖI: V8.1 dùng businessCode
-        data: finalData as any,
-        createdById: userId, // SỬA LỖI: V8.1 dùng createdById
-        metadataVersionId: 1, // SỬA LỖI: V8.1 yêu cầu metadataVersionId
-      } as any,
+    // NÂNG CẤP DYNAMIC TITLE
+    const businessCode = recordCode || `CODE-${Date.now()}`;
+    const generatedTitle = this.generateRecordTitle(
+      (entity as any).titlePattern,
+      finalData,
+      businessCode,
+    );
+
+    return this.prisma.$transaction(async (tx) => {
+      // 1. Đảm bảo EntityVersion tồn tại để tránh lỗi Foreign Key
+      const validVersionId = await this.ensureEntityVersionExists(
+        tx,
+        tenantId,
+        entity.id,
+      );
+
+      // 2. Tạo Bản ghi
+      const newRecord = await tx.record.create({
+        data: {
+          entityId: dto.entityId,
+          businessCode: businessCode,
+          title: generatedTitle, // GHI TIÊU ĐỀ TỰ ĐỘNG XUỐNG DB
+          data: finalData as any,
+          createdById: userId,
+          metadataVersionId: validVersionId,
+        } as any,
+      });
+
+      // 3. Vẽ liên kết (Edges)
+      await this.processGraphRelations(
+        tx,
+        tenantId,
+        newRecord.id,
+        entity.id,
+        entityFields,
+        finalData,
+      );
+
+      return newRecord;
     });
   }
 
-  // ====================================================
-  // ĐỘNG CƠ TRUY VẤN VẠN NĂNG (UNIVERSAL QUERY ENGINE):
-  // Phân trang, Tìm kiếm toàn văn bản JSONB, Sắp xếp động, Lọc động
-  // ====================================================
   async findAllByEntity(
     entityId: number,
     page: number = 1,
@@ -135,12 +269,10 @@ export class RecordsService {
     const queryParams: any[] = [entityId, tenantId];
     let paramIndex = 3;
 
-    // 1. XỬ LÝ LỌC ĐỘNG NHIỀU TRƯỜNG (Multi-field Filtering)
     if (filtersRaw) {
       try {
         const filters = JSON.parse(filtersRaw);
         for (const [key, val] of Object.entries(filters)) {
-          // BẢO VỆ TUYỆT ĐỐI SQL INJECTION: Chỉ cho phép lọc theo trường đã khai báo trong cấu hình Entity
           const fieldDef = entityFields.find((f) => f.code === key);
           if (fieldDef) {
             filterSql += ` AND r.data->>${'$' + paramIndex} = ${'$' + (paramIndex + 1)}`;
@@ -155,20 +287,18 @@ export class RecordsService {
       }
     }
 
-    // 2. XỬ LÝ TÌM KIẾM TOÀN VĂN VẠN NĂNG (Global Search)
     const searchPattern = searchQuery ? `%${searchQuery}%` : '%';
-    filterSql += ` AND r.data::text ILIKE ${'$' + paramIndex}`;
+    // Mở rộng tìm kiếm toàn văn sang cả cột Title mới
+    filterSql += ` AND (r.data::text ILIKE ${'$' + paramIndex} OR r.title ILIKE ${'$' + paramIndex})`;
     queryParams.push(searchPattern);
     paramIndex += 1;
 
-    // 3. XỬ LÝ SẮP XẾP ĐỘNG THÔNG MINH (Dynamic Sorting)
-    let orderBySql = 'ORDER BY r.id DESC'; // Mặc định xếp theo id giảm dần
+    let orderBySql = 'ORDER BY r.id DESC';
     if (sortBy) {
       const sortFieldDef = entityFields.find((f) => f.code === sortBy);
       const direction = sortOrder.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
       if (sortFieldDef) {
         if (['NUMBER', 'FORMULA'].includes(sortFieldDef.type)) {
-          // Ép kiểu sang số thực tế dưới Database để sắp xếp chuẩn xác
           orderBySql = `ORDER BY COALESCE((r.data->>'${sortBy}')::numeric, 0) ${direction}`;
         } else {
           orderBySql = `ORDER BY r.data->>'${sortBy}' ${direction}`;
@@ -176,13 +306,11 @@ export class RecordsService {
       }
     }
 
-    // 4. PHÂN TRANG (Pagination offset)
     const offset = (page - 1) * limit;
     const limitParamIndex = paramIndex;
     const offsetParamIndex = paramIndex + 1;
     queryParams.push(limit, offset);
 
-    // 5. Cú pháp SQL thô hiệu năng cao chọc thẳng vào cấu trúc JSONB
     const sqlQuery = `
       SELECT r.* 
       FROM records r
@@ -201,7 +329,6 @@ export class RecordsService {
         ${filterSql}
     `;
 
-    // 6. Thực thi truy vấn song song tối ưu hóa bằng Prisma Transaction
     const [records, countResult] = await this.prisma.$transaction([
       this.prisma.$queryRawUnsafe<any[]>(sqlQuery, ...queryParams),
       this.prisma.$queryRawUnsafe<any[]>(
@@ -228,106 +355,91 @@ export class RecordsService {
       where: { id } as any,
       include: {
         entity: { select: { id: true, name: true, code: true } },
-      },
+        outgoingRelations: true,
+      } as any,
     });
 
     if (!record) throw new NotFoundException('Không tìm thấy bản ghi dữ liệu.');
     return record;
   }
 
-  // --- HÀM NÂNG CẤP KÈM LOG CHẨN ĐOÁN CHI TIẾT ---
   async update(userId: number, id: number, dto: UpdateRecordDto) {
-    console.log('====================================');
-    console.log('=== [DEBUG] bat dau recordsService.update ===');
-    console.log('userId nhan duoc:', userId);
-    console.log('recordId nhan duoc:', id);
-    console.log('dto nhan duoc:', JSON.stringify(dto));
+    const store = tenantContext.getStore();
+    const tenantId = store?.tenantId || 0;
 
     const currentRecord = await this.findOne(id);
-    console.log(
-      'Du lieu record hien tai trong DB:',
-      JSON.stringify(currentRecord.data),
-    );
 
     const entity = await this.prisma.entity.findFirst({
       where: { id: currentRecord.entityId } as any,
     });
 
     const fields = await this.prisma.fieldRegistry.findMany({
-      where: { tenantId: (entity as any).tenantId } as any,
+      where: { tenantId: (entity as any)?.tenantId } as any,
     });
     const entityFields = fields.filter(
       (f) => (f.config as any)?.entityId === entity?.id,
     );
-    console.log('Tong so truong cua Entity:', entityFields?.length);
 
     let dataToSave = currentRecord.data;
     let patchData = {};
+    let isDataChanged = false;
+    let newTitle: string | null = (currentRecord as any).title;
 
     if (entity && dto.data) {
-      console.log('Phat hien dto.data hop le. Tien hanh gop du lieu...');
       const mergedData = { ...(currentRecord.data as object), ...dto.data };
-      console.log(
-        'Du lieu sau khi gop (mergedData):',
-        JSON.stringify(mergedData),
-      );
 
-      // Bước 1: Validate & Làm sạch dữ liệu gộp
       const cleanData = this.dynamicValidator.validateAndSanitize(
         entityFields as any,
         mergedData,
       );
-      console.log(
-        'Du lieu sau khi validate/sanitize (cleanData):',
-        JSON.stringify(cleanData),
-      );
 
-      // Bước 2: Tính toán lại các công thức
       dataToSave = this.formulaEngine.calculate(entityFields as any, cleanData);
-      console.log(
-        'Du lieu sau khi chay qua Formula Engine (dataToSave):',
-        JSON.stringify(dataToSave),
-      );
 
-      // Bước 3: Tính toán Bản vá (Diff)
       patchData = this.calculateDiff(currentRecord.data, dataToSave);
-      console.log(
-        'Ban va tinh ra duoc (patchData):',
-        JSON.stringify(patchData),
-      );
-    } else {
-      console.log(
-        'Bo qua khoi update vi entity hoac dto.data bi rong. dto.data =',
-        dto.data,
-      );
+      isDataChanged = Object.keys(patchData).length > 0;
+
+      // NÂNG CẤP DYNAMIC TITLE (Chạy lại mỗi khi update dữ liệu)
+      if (isDataChanged) {
+        newTitle = this.generateRecordTitle(
+          (entity as any).titlePattern,
+          dataToSave,
+          (currentRecord as any).businessCode,
+        );
+      }
     }
 
-    if (Object.keys(patchData).length === 0) {
-      console.log(
-        'Khong co thay doi du lieu thuc te -> Thoat som, tra ve ban ghi cu.',
-      );
-      return currentRecord;
-    }
-
-    console.log('Bat dau chay Prisma $transaction de ghi xuong DB...');
     return this.prisma.$transaction(async (tx) => {
-      const updatedRecord = await tx.record.update({
-        where: { id } as any,
-        data: {
-          data: dataToSave as any,
-        },
-      });
+      let updatedRecord: any = currentRecord;
 
-      // Tạo lịch sử sửa (Revision)
-      await tx.recordRevision.create({
-        data: {
-          recordId: id,
-          userId: userId,
-          patchData: patchData as any,
-        } as any,
-      });
+      if (isDataChanged) {
+        updatedRecord = await tx.record.update({
+          where: { id } as any,
+          data: {
+            title: newTitle, // CẬP NHẬT TIÊU ĐỀ NẾU DỮ LIỆU ĐỔI
+            data: dataToSave as any,
+          },
+        });
 
-      console.log('=== GHI DB THANH CONG! ===');
+        await tx.recordRevision.create({
+          data: {
+            recordId: id,
+            userId: userId,
+            patchData: patchData as any,
+          } as any,
+        });
+      }
+
+      if (entity && dto.data) {
+        await this.processGraphRelations(
+          tx,
+          tenantId,
+          id,
+          entity.id,
+          entityFields,
+          dataToSave,
+        );
+      }
+
       return updatedRecord;
     });
   }
@@ -345,7 +457,6 @@ export class RecordsService {
     return this.prisma.record.delete({ where: { id } as any });
   }
 
-  // Lấy lịch sử chỉnh sửa
   async getRecordRevisions(recordId: number) {
     return this.prisma.recordRevision.findMany({
       where: { recordId } as any,
@@ -361,7 +472,7 @@ export class RecordsService {
   // ==========================================
   async getLookupData(fieldId: number) {
     const field = await this.prisma.fieldRegistry.findFirst({
-      where: { id: fieldId } as any, // SỬA LỖI: FieldRegistry
+      where: { id: fieldId } as any,
     });
     if (!field)
       throw new NotFoundException('Không tìm thấy định nghĩa trường.');
@@ -378,37 +489,55 @@ export class RecordsService {
       );
     }
 
-    const queryConditions: any = {
-      entityId: lookupEntityId,
-    };
+    const tenantStore = tenantContext.getStore();
+    const tenantId = tenantStore?.tenantId || null;
+
+    let sqlQuery = `
+      SELECT r.* 
+      FROM records r
+    `;
 
     if (filterConfig.activeWorkflowOnly) {
-      queryConditions.instances = {
-        some: {
-          status: 'IN_PROGRESS',
-        },
-      };
+      sqlQuery += `
+        INNER JOIN workflow_instances wi ON r.id = wi.record_id
+        WHERE wi.status = 'IN_PROGRESS'
+      `;
+    } else {
+      sqlQuery += ` WHERE 1=1 `;
     }
 
-    const records = await this.prisma.record.findMany({
-      where: queryConditions,
-      orderBy: { id: 'desc' },
-    });
+    sqlQuery += `
+      AND r.entity_id = $1 
+      AND (r.tenant_id = $2 OR (r.tenant_id IS NULL AND $2 IS NULL))
+    `;
 
-    let filteredRecords = records;
+    const queryParams: any[] = [lookupEntityId, tenantId];
+    let paramIndex = 3;
+
     if (filterConfig.recordFilters) {
-      filteredRecords = records.filter((r) => {
-        const recordData = r.data as any;
-        return Object.entries(filterConfig.recordFilters).every(
-          ([key, val]) => recordData[key] === val,
-        );
-      });
+      for (const [key, val] of Object.entries(filterConfig.recordFilters)) {
+        sqlQuery += ` AND r.data->>${'$' + paramIndex} = ${'$' + (paramIndex + 1)}`;
+        queryParams.push(key, String(val));
+        paramIndex += 2;
+      }
     }
 
-    return filteredRecords.map((r: any) => {
+    sqlQuery += ` ORDER BY r.id DESC`;
+
+    const records = await this.prisma.$queryRawUnsafe<any[]>(
+      sqlQuery,
+      ...queryParams,
+    );
+
+    return records.map((r: any) => {
       const recordData = r.data as any;
-      const codePrefix = r.businessCode ? `[${r.businessCode}] ` : ''; // SỬA LỖI: V8.1 dùng businessCode
-      const labelValue = recordData[displayField] || `#${r.id}`;
+      const codePrefix = r.business_code ? `[${r.business_code}] ` : '';
+
+      // Ưu tiên hiển thị cột title nếu displayField không được định nghĩa cứng
+      let labelValue = recordData[displayField];
+      if (!labelValue && displayField === 'id') {
+        labelValue = r.title ? r.title : `#${r.id}`;
+      }
 
       return {
         id: r.id,
