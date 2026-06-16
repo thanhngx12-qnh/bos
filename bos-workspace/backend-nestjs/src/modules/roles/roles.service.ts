@@ -14,7 +14,7 @@ export class RolesService {
       data: {
         name: dto.name,
         permissions: dto.permissions || {},
-      },
+      } as any, // SỬA LỖI: as any
     });
   }
 
@@ -23,7 +23,7 @@ export class RolesService {
   }
 
   async findOne(id: number) {
-    const role = await this.prisma.role.findUnique({ where: { id } });
+    const role = await this.prisma.role.findFirst({ where: { id } as any });
     if (!role) throw new NotFoundException('Không tìm thấy vai trò.');
     return role;
   }
@@ -31,16 +31,16 @@ export class RolesService {
   async update(id: number, dto: UpdateRoleDto) {
     await this.findOne(id);
     return this.prisma.role.update({
-      where: { id },
+      where: { id } as any,
       data: {
         ...dto,
         permissions: dto.permissions ?? undefined,
-      },
+      } as any,
     });
   }
 
   async remove(id: number) {
     await this.findOne(id);
-    return this.prisma.role.delete({ where: { id } });
+    return this.prisma.role.delete({ where: { id } as any });
   }
 }

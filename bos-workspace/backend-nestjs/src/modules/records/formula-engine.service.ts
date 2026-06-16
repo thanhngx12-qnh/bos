@@ -1,13 +1,13 @@
 // File: src/modules/records/formula-engine.service.ts
 import { Injectable, BadRequestException } from '@nestjs/common';
-import { FieldDefinition } from '@prisma/client';
+import { FieldRegistry } from '@prisma/client'; // <-- ĐỔI THÀNH FieldRegistry
 import { FormulaParser } from './formula-parser.util';
 
 @Injectable()
 export class FormulaEngineService {
   // Quét qua danh sách trường và tự động tính toán các trường công thức
   public calculate(
-    fields: FieldDefinition[],
+    fields: FieldRegistry[], // <-- SỬA LỖI TẠI ĐÂY
     data: Record<string, any>,
   ): Record<string, any> {
     const calculatedData = { ...data };
@@ -16,7 +16,9 @@ export class FormulaEngineService {
     const formulaFields = fields.filter((f) => f.type === 'FORMULA');
 
     for (const field of formulaFields) {
-      const options: any = field.options || {};
+      // V8.1: Lấy thông tin từ cột config
+      const config: any = field.config || {};
+      const options: any = config.options || {};
       const expression = options.formula; // Cấu hình công thức từ Admin (VD: "total_amount * 0.1")
 
       if (expression) {

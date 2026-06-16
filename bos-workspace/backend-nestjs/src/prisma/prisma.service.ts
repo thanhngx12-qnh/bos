@@ -3,7 +3,7 @@ import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
-import { tenantContext } from './tenant-context'; // Import Context
+import { tenantContext } from './tenant-context';
 
 @Injectable()
 export class PrismaService
@@ -23,16 +23,26 @@ export class PrismaService
       query: {
         $allModels: {
           async $allOperations({ model, operation, args, query }) {
-            // Sửa mảng này trong src/prisma/prisma.service.ts
+            // SỬA LỖI TẠI ĐÂY: Đã bổ sung đầy đủ Department, DepartmentClosure, Role...
             const tenantModels = [
               'User',
+              'Role',
+              'Department',
+              'DepartmentClosure',
               'Entity',
+              'FieldRegistry',
+              'PrintTemplate',
               'Record',
-              'Workflow',
+              'RecordRevision',
               'Attachment',
-              'Notification',
+              'Workflow',
+              'WorkflowVersion',
+              'WorkflowStep',
+              'WorkflowTransition',
               'WorkflowInstance',
+              'WorkflowLog',
               'WebhookEndpoint',
+              'Notification',
               'SystemAuditLog',
             ];
 
@@ -42,7 +52,6 @@ export class PrismaService
               if (store && store.tenantId) {
                 const customArgs = args as any;
 
-                // CHỈ CHÈN `where` CHO CÁC HÀM THỰC SỰ HỖ TRỢ ĐIỀU KIỆN LỌC (Tránh lỗi 'Unknown argument where' khi create)
                 const operationsWithWhere = [
                   'findUnique',
                   'findUniqueOrThrow',
@@ -62,13 +71,11 @@ export class PrismaService
                 if (operationsWithWhere.includes(operation)) {
                   customArgs.where = customArgs.where || {};
 
-                  // Tự động gán bộ lọc where tenantId toàn cục
                   if (customArgs.where.tenantId === undefined) {
                     customArgs.where.tenantId = store.tenantId;
                   }
                 }
 
-                // Tự động gán trường tenantId vào dữ liệu (data) khi tạo mới (create)
                 if (
                   ['create', 'createMany'].includes(operation) &&
                   customArgs.data
@@ -83,7 +90,6 @@ export class PrismaService
       },
     });
 
-    // Trả về thực thể Prisma đã được mở rộng để giữ nguyên cách gọi api cũ
     return extended as any;
   }
 

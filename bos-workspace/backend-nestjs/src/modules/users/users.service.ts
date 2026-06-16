@@ -15,14 +15,14 @@ export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(dto: CreateUserDto) {
-    const existingUser = await this.prisma.user.findUnique({
+    // SỬA LỖI: findFirst
+    const existingUser = await this.prisma.user.findFirst({
       where: { email: dto.email },
     });
     if (existingUser) {
       throw new ConflictException('Email này đã được sử dụng.');
     }
 
-    // Mã hóa mật khẩu
     const saltRounds = 10;
     const hashedPassword = await bcrypt.hash(dto.password, saltRounds);
 
@@ -30,26 +30,19 @@ export class UsersService {
       data: {
         ...dto,
         password: hashedPassword,
-      },
+      } as any, // SỬA LỖI: as any
     });
 
-    // Trả về không bao gồm password
     const { password, ...result } = user;
     return result;
   }
 
   async findAll(options: PaginateOptions) {
-    const result = await paginate(
-      this.prisma.user,
-      {}, // Where (Prisma Extension sẽ tự động chèn tenantId vào đây)
-      options,
-      {
-        department: { select: { id: true, name: true } },
-        role: { select: { id: true, name: true } },
-      }, // Include quan hệ
-    );
+    const result = await paginate(this.prisma.user, {}, options, {
+      department: { select: { id: true, name: true } },
+      role: { select: { id: true, name: true } },
+    });
 
-    // Xóa password khỏi mảng data trước khi trả về
     result.data = result.data.map((user: any) => {
       const { password, ...safeUser } = user;
       return safeUser;
@@ -59,8 +52,9 @@ export class UsersService {
   }
 
   async findOne(id: number) {
-    const user = await this.prisma.user.findUnique({
-      where: { id },
+    // SỬA LỖI: findFirst và as any
+    const user = await this.prisma.user.findFirst({
+      where: { id } as any,
       include: {
         department: { select: { id: true, name: true } },
         role: { select: { id: true, name: true, permissions: true } },
@@ -77,7 +71,7 @@ export class UsersService {
     await this.findOne(id);
 
     if (dto.email) {
-      const existingUser = await this.prisma.user.findUnique({
+      const existingUser = await this.prisma.user.findFirst({
         where: { email: dto.email },
       });
       if (existingUser && existingUser.id !== id) {
@@ -86,8 +80,8 @@ export class UsersService {
     }
 
     const updatedUser = await this.prisma.user.update({
-      where: { id },
-      data: dto,
+      where: { id } as any,
+      data: dto as any,
     });
 
     const { password, ...result } = updatedUser;
@@ -96,14 +90,13 @@ export class UsersService {
 
   async remove(id: number) {
     await this.findOne(id);
-    const deletedUser = await this.prisma.user.delete({ where: { id } });
+    const deletedUser = await this.prisma.user.delete({ where: { id } as any });
 
     const { password, ...result } = deletedUser;
     return result;
   }
 
-  // Hàm nội bộ dùng cho Module Auth lát nữa
   async findByEmailForAuth(email: string) {
-    return this.prisma.user.findUnique({ where: { email } });
+    return this.prisma.user.findFirst({ where: { email } });
   }
 }

@@ -1,6 +1,6 @@
 // File: src/modules/records/dynamic-validation.service.ts
 import { Injectable, BadRequestException } from '@nestjs/common';
-import { FieldDefinition } from '@prisma/client';
+import { FieldRegistry } from '@prisma/client'; // <-- ĐỔI THÀNH FieldRegistry
 import { DynamicCondition } from '../fields/interfaces/field-options.interface';
 
 @Injectable()
@@ -38,13 +38,15 @@ export class DynamicValidationService {
 
   // Engine chính xử lý toàn bộ payload
   public validateAndSanitize(
-    fields: FieldDefinition[],
+    fields: FieldRegistry[], // <-- SỬA LỖI TẠI ĐÂY
     inputData: any,
   ): Record<string, any> {
     const sanitizedData: Record<string, any> = {};
 
     for (const field of fields) {
-      const options: any = field.options || {};
+      // V8.1: Lấy thông tin từ cột config
+      const config: any = field.config || {};
+      const options: any = config.options || {};
       let value = inputData[field.code];
 
       // 1. Áp dụng Default Value nếu bỏ trống
@@ -56,7 +58,7 @@ export class DynamicValidationService {
       }
 
       // 2. Đánh giá trường bắt buộc (Tĩnh: isRequired, hoặc Động: requiredIf)
-      let isFieldRequired = field.isRequired;
+      let isFieldRequired = config.isRequired || false; // <-- Lấy isRequired từ config
       if (!isFieldRequired && options.requiredIf) {
         isFieldRequired = this.evaluateCondition(options.requiredIf, inputData);
       }
@@ -127,7 +129,7 @@ export class DynamicValidationService {
                 throw new BadRequestException(
                   `'${field.name}' phải là một danh sách (mảng).`,
                 );
-              sanitizedData[field.code] = value; // MVP: Chấp nhận mảng
+              sanitizedData[field.code] = value;
             } else {
               sanitizedData[field.code] = String(value);
             }
@@ -148,7 +150,7 @@ export class DynamicValidationService {
                 `'${field.name}' không được nằm trong quá khứ.`,
               );
             }
-            sanitizedData[field.code] = dateVal.toISOString(); // Chuẩn hóa ISO String
+            sanitizedData[field.code] = dateVal.toISOString();
             break;
 
           default:

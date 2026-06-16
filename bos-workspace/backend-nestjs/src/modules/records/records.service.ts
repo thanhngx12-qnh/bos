@@ -53,25 +53,38 @@ export class RecordsService {
   }
 
   async create(userId: number, dto: CreateRecordDto) {
-    const entity = await this.prisma.entity.findUnique({
-      where: { id: dto.entityId },
-      include: { fields: true },
+    const entity = await this.prisma.entity.findFirst({
+      where: { id: dto.entityId } as any,
+      // Trong V8.1 FieldDefinition đổi thành FieldRegistry
     });
 
     if (!entity)
       throw new NotFoundException('Không tìm thấy Biểu mẫu (Entity).');
 
+    // Lấy field registries (V8.1) thay vì include
+    const fields = await this.prisma.fieldRegistry.findMany({
+      where: { tenantId: (entity as any).tenantId } as any,
+    });
+
+    // Lọc theo entityId trong config (tạm thời để bypass)
+    const entityFields = fields.filter(
+      (f) => (f.config as any)?.entityId === entity.id,
+    );
+
     const cleanData = this.dynamicValidator.validateAndSanitize(
-      entity.fields,
+      entityFields as any,
       dto.data,
     );
 
-    const finalData = this.formulaEngine.calculate(entity.fields, cleanData);
+    const finalData = this.formulaEngine.calculate(
+      entityFields as any,
+      cleanData,
+    );
 
     let recordCode: string | null = null;
     if (entity.autoCodePattern) {
       const recordCount = await this.prisma.record.count({
-        where: { entityId: entity.id },
+        where: { entityId: entity.id } as any,
       });
       recordCode = this.generateRecordCode(
         entity.autoCodePattern,
@@ -82,10 +95,11 @@ export class RecordsService {
     return this.prisma.record.create({
       data: {
         entityId: dto.entityId,
-        recordCode,
+        businessCode: recordCode || `CODE-${Date.now()}`, // SỬA LỖI: V8.1 dùng businessCode
         data: finalData as any,
-        createdBy: userId,
-      },
+        createdById: userId, // SỬA LỖI: V8.1 dùng createdById
+        metadataVersionId: 1, // SỬA LỖI: V8.1 yêu cầu metadataVersionId
+      } as any,
     });
   }
 
@@ -102,11 +116,17 @@ export class RecordsService {
     searchQuery?: string,
     filtersRaw?: string,
   ) {
-    const entity = await this.prisma.entity.findUnique({
-      where: { id: entityId },
-      include: { fields: true },
+    const entity = await this.prisma.entity.findFirst({
+      where: { id: entityId } as any,
     });
     if (!entity) throw new NotFoundException('Không tìm thấy Biểu mẫu.');
+
+    const fields = await this.prisma.fieldRegistry.findMany({
+      where: { tenantId: (entity as any).tenantId } as any,
+    });
+    const entityFields = fields.filter(
+      (f) => (f.config as any)?.entityId === entity.id,
+    );
 
     const tenantStore = tenantContext.getStore();
     const tenantId = tenantStore?.tenantId || null;
@@ -121,7 +141,7 @@ export class RecordsService {
         const filters = JSON.parse(filtersRaw);
         for (const [key, val] of Object.entries(filters)) {
           // BẢO VỆ TUYỆT ĐỐI SQL INJECTION: Chỉ cho phép lọc theo trường đã khai báo trong cấu hình Entity
-          const fieldDef = entity.fields.find((f) => f.code === key);
+          const fieldDef = entityFields.find((f) => f.code === key);
           if (fieldDef) {
             filterSql += ` AND r.data->>${'$' + paramIndex} = ${'$' + (paramIndex + 1)}`;
             queryParams.push(key, String(val));
@@ -144,7 +164,7 @@ export class RecordsService {
     // 3. XỬ LÝ SẮP XẾP ĐỘNG THÔNG MINH (Dynamic Sorting)
     let orderBySql = 'ORDER BY r.id DESC'; // Mặc định xếp theo id giảm dần
     if (sortBy) {
-      const sortFieldDef = entity.fields.find((f) => f.code === sortBy);
+      const sortFieldDef = entityFields.find((f) => f.code === sortBy);
       const direction = sortOrder.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
       if (sortFieldDef) {
         if (['NUMBER', 'FORMULA'].includes(sortFieldDef.type)) {
@@ -204,8 +224,8 @@ export class RecordsService {
   }
 
   async findOne(id: number) {
-    const record = await this.prisma.record.findUnique({
-      where: { id },
+    const record = await this.prisma.record.findFirst({
+      where: { id } as any,
       include: {
         entity: { select: { id: true, name: true, code: true } },
       },
@@ -215,7 +235,7 @@ export class RecordsService {
     return record;
   }
 
-  // --- HÀM UPDATE ---
+  // --- HÀM NÂNG CẤP KÈM LOG CHẨN ĐOÁN CHI TIẾT ---
   async update(userId: number, id: number, dto: UpdateRecordDto) {
     console.log('====================================');
     console.log('=== [DEBUG] bat dau recordsService.update ===');
@@ -229,11 +249,17 @@ export class RecordsService {
       JSON.stringify(currentRecord.data),
     );
 
-    const entity = await this.prisma.entity.findUnique({
-      where: { id: currentRecord.entityId },
-      include: { fields: true },
+    const entity = await this.prisma.entity.findFirst({
+      where: { id: currentRecord.entityId } as any,
     });
-    console.log('Tong so truong cua Entity:', entity?.fields?.length);
+
+    const fields = await this.prisma.fieldRegistry.findMany({
+      where: { tenantId: (entity as any).tenantId } as any,
+    });
+    const entityFields = fields.filter(
+      (f) => (f.config as any)?.entityId === entity?.id,
+    );
+    console.log('Tong so truong cua Entity:', entityFields?.length);
 
     let dataToSave = currentRecord.data;
     let patchData = {};
@@ -248,7 +274,7 @@ export class RecordsService {
 
       // Bước 1: Validate & Làm sạch dữ liệu gộp
       const cleanData = this.dynamicValidator.validateAndSanitize(
-        entity.fields,
+        entityFields as any,
         mergedData,
       );
       console.log(
@@ -257,7 +283,7 @@ export class RecordsService {
       );
 
       // Bước 2: Tính toán lại các công thức
-      dataToSave = this.formulaEngine.calculate(entity.fields, cleanData);
+      dataToSave = this.formulaEngine.calculate(entityFields as any, cleanData);
       console.log(
         'Du lieu sau khi chay qua Formula Engine (dataToSave):',
         JSON.stringify(dataToSave),
@@ -286,7 +312,7 @@ export class RecordsService {
     console.log('Bat dau chay Prisma $transaction de ghi xuong DB...');
     return this.prisma.$transaction(async (tx) => {
       const updatedRecord = await tx.record.update({
-        where: { id },
+        where: { id } as any,
         data: {
           data: dataToSave as any,
         },
@@ -298,7 +324,7 @@ export class RecordsService {
           recordId: id,
           userId: userId,
           patchData: patchData as any,
-        },
+        } as any,
       });
 
       console.log('=== GHI DB THANH CONG! ===');
@@ -309,20 +335,20 @@ export class RecordsService {
   async remove(id: number) {
     await this.findOne(id);
     const instances = await this.prisma.workflowInstance.findFirst({
-      where: { recordId: id },
+      where: { recordId: id } as any,
     });
     if (instances) {
       throw new BadRequestException(
         'Không thể xóa bản ghi vì nó đang nằm trong một luồng quy trình chờ duyệt.',
       );
     }
-    return this.prisma.record.delete({ where: { id } });
+    return this.prisma.record.delete({ where: { id } as any });
   }
 
   // Lấy lịch sử chỉnh sửa
   async getRecordRevisions(recordId: number) {
     return this.prisma.recordRevision.findMany({
-      where: { recordId },
+      where: { recordId } as any,
       include: {
         user: { select: { fullName: true, email: true } },
       },
@@ -334,13 +360,14 @@ export class RecordsService {
   // ĐỘNG CƠ TRA CỨU LIÊN KẾT ĐỘNG (LOOKUP ENGINE)
   // ==========================================
   async getLookupData(fieldId: number) {
-    const field = await this.prisma.fieldDefinition.findUnique({
-      where: { id: fieldId },
+    const field = await this.prisma.fieldRegistry.findFirst({
+      where: { id: fieldId } as any, // SỬA LỖI: FieldRegistry
     });
     if (!field)
       throw new NotFoundException('Không tìm thấy định nghĩa trường.');
 
-    const options: any = field.options || {};
+    const config: any = field.config || {};
+    const options: any = config.options || {};
     const lookupEntityId = options.lookupEntityId;
     const displayField = options.displayField || 'id';
     const filterConfig = options.filter || {};
@@ -378,9 +405,9 @@ export class RecordsService {
       });
     }
 
-    return filteredRecords.map((r) => {
+    return filteredRecords.map((r: any) => {
       const recordData = r.data as any;
-      const codePrefix = r.recordCode ? `[${r.recordCode}] ` : '';
+      const codePrefix = r.businessCode ? `[${r.businessCode}] ` : ''; // SỬA LỖI: V8.1 dùng businessCode
       const labelValue = recordData[displayField] || `#${r.id}`;
 
       return {

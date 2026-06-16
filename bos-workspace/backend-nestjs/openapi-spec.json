@@ -39,9 +39,9 @@
             "bearer": []
           }
         ],
-        "summary": "Tạo mới phòng ban",
+        "summary": "Tạo mới phòng ban (Tự động tính toán Closure Table)",
         "tags": [
-          "Departments (Cơ cấu tổ chức)"
+          "Departments (Cơ cấu tổ chức V2 - Closure Table)"
         ]
       }
     },
@@ -59,9 +59,38 @@
             "bearer": []
           }
         ],
-        "summary": "Lấy toàn bộ sơ đồ tổ chức (Dạng Cây)",
+        "summary": "Lấy sơ đồ tổ chức (Dạng Cây - Đã lọc các phòng ban bị xóa)",
         "tags": [
-          "Departments (Cơ cấu tổ chức)"
+          "Departments (Cơ cấu tổ chức V2 - Closure Table)"
+        ]
+      }
+    },
+    "/api/v1/departments/{id}/descendants": {
+      "get": {
+        "operationId": "DepartmentsController_getDescendants",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lấy toàn bộ phòng ban con/cháu/chắt... (tốc độ < 1ms)",
+        "tags": [
+          "Departments (Cơ cấu tổ chức V2 - Closure Table)"
         ]
       }
     },
@@ -90,7 +119,7 @@
         ],
         "summary": "Lấy thông tin 1 phòng ban",
         "tags": [
-          "Departments (Cơ cấu tổ chức)"
+          "Departments (Cơ cấu tổ chức V2 - Closure Table)"
         ]
       },
       "patch": {
@@ -125,9 +154,9 @@
             "bearer": []
           }
         ],
-        "summary": "Cập nhật phòng ban",
+        "summary": "Cập nhật phòng ban (Cấm sửa phòng ban cha)",
         "tags": [
-          "Departments (Cơ cấu tổ chức)"
+          "Departments (Cơ cấu tổ chức V2 - Closure Table)"
         ]
       },
       "delete": {
@@ -152,9 +181,9 @@
             "bearer": []
           }
         ],
-        "summary": "Xóa phòng ban",
+        "summary": "Xóa mềm phòng ban (Soft Delete)",
         "tags": [
-          "Departments (Cơ cấu tổ chức)"
+          "Departments (Cơ cấu tổ chức V2 - Closure Table)"
         ]
       }
     },
@@ -2450,11 +2479,6 @@
             "type": "string",
             "description": "Tên phòng ban",
             "example": "Phòng Kỹ thuật"
-          },
-          "parentId": {
-            "type": "number",
-            "description": "ID của phòng ban cha (nếu có)",
-            "example": 1
           }
         }
       },

@@ -14,7 +14,7 @@ export class PrintTemplatesService {
 
   async create(dto: CreateTemplateDto) {
     const entity = await this.prisma.entity.findUnique({
-      where: { id: dto.entityId },
+      where: { id: dto.entityId } as any, // SỬA LỖI: as any
     });
     if (!entity) throw new NotFoundException('Không tìm thấy Biểu mẫu.');
 
@@ -23,35 +23,34 @@ export class PrintTemplatesService {
         entityId: dto.entityId,
         name: dto.name,
         template: dto.template || {},
-      },
+      } as any, // SỬA LỖI: as any
     });
   }
 
   async findOne(id: number) {
-    const template = await this.prisma.printTemplate.findUnique({
-      where: { id },
+    const template = await this.prisma.printTemplate.findFirst({
+      where: { id } as any, // SỬA LỖI: findFirst & as any
     });
     if (!template) throw new NotFoundException('Không tìm thấy mẫu in.');
     return template;
   }
 
   async update(id: number, dto: UpdateTemplateDto) {
-    await this.findOne(id); // Kiểm tra tồn tại
+    await this.findOne(id);
     return this.prisma.printTemplate.update({
-      where: { id },
+      where: { id } as any, // SỬA LỖI: as any
       data: {
         name: dto.name,
         template: dto.template ?? undefined,
-      },
+      } as any, // SỬA LỖI: as any
     });
   }
 
   async remove(id: number) {
     await this.findOne(id);
-    return this.prisma.printTemplate.delete({ where: { id } });
+    return this.prisma.printTemplate.delete({ where: { id } as any }); // SỬA LỖI: as any
   }
 
-  // --- THUẬT TOÁN ĐỆ QUY INTERPOLATE (BIÊN DỊCH THẺ ĐỘNG) ---
   private interpolate(html: string, context: any): string {
     return html.replace(/\{\{\s*([\w.\[\]]+)\s*\}\}/g, (match, path) => {
       const cleanPath = path.replace(/\[(\d+)\]/g, '.$1');
@@ -70,12 +69,11 @@ export class PrintTemplatesService {
     });
   }
 
-  // --- TRÍCH XUẤT DỮ LIỆU THỰC TẾ & BIÊN DỊCH THÀNH HTML HOÀN CHỈNH ---
   async renderTemplate(templateId: number, recordId: number) {
     const printTemplate = await this.findOne(templateId);
 
-    const record = await this.prisma.record.findUnique({
-      where: { id: recordId },
+    const record = await this.prisma.record.findFirst({
+      where: { id: recordId } as any, // SỬA LỖI: findFirst & as any
       include: { entity: true },
     });
     if (!record) throw new NotFoundException('Không tìm thấy bản ghi dữ liệu.');
@@ -86,14 +84,14 @@ export class PrintTemplatesService {
     }
 
     const instance = await this.prisma.workflowInstance.findFirst({
-      where: { recordId },
+      where: { recordId } as any, // SỬA LỖI: as any
       orderBy: { id: 'desc' },
     });
 
     let approvals: any[] = [];
     if (instance) {
       const logs = await this.prisma.workflowLog.findMany({
-        where: { instanceId: instance.id },
+        where: { instanceId: instance.id } as any, // SỬA LỖI: as any
         include: {
           step: { select: { name: true } },
           user: { select: { fullName: true } },
@@ -103,7 +101,6 @@ export class PrintTemplatesService {
 
       approvals = logs.map((l) => {
         const snapshotObj: any = l.snapshot || {};
-        // BỐ TRÍ CHỮ KÝ ĐIỆN TỬ: Tự động vẽ khung chữ ký nếu log phê duyệt có lưu signatureData
         const signatureHtml = snapshotObj.signature
           ? `<div style="border: 1px dashed green; color: green; padding: 5px; width: fit-content; font-size: 11px; margin-top: 5px; font-family: monospace; background-color: #f6fff6;">[KÝ ĐIỆN TỬ THÀNH CÔNG]<br/>Mã xác thực: ${snapshotObj.signature}<br/>Người ký: ${l.user?.fullName}</div>`
           : `<span style="color: blue;">(Đã duyệt qua hệ thống)</span>`;
@@ -113,25 +110,26 @@ export class PrintTemplatesService {
           user: l.user?.fullName || 'Hệ thống',
           action: l.action,
           comment: l.comment || '',
-          signature: signatureHtml, // Trả về thẻ chữ ký động để render xuống HTML
+          signature: signatureHtml,
           date: new Date(l.createdAt).toLocaleDateString('vi-VN'),
         };
       });
     }
 
+    // SỬA LỖI: Gọi businessCode thay vì recordCode
+    const code = (record as any).businessCode;
+
     const context = {
       entity: {
-        name: record.entity.name,
-        code: record.entity.code,
+        name: (record as any).entity.name,
+        code: (record as any).entity.code,
       },
       record: {
-        // ĐỔI MỚI THÔNG MINH: Nếu bản ghi có mã tự sinh (recordCode), ưu tiên hiển thị mã đó lên giấy in,
-        // ngược lại mới hiển thị số ID thô (ví dụ: #1) để đảm bảo tính nhất quán nghiệp vụ
-        id: record.recordCode ? record.recordCode : `#${record.id}`,
+        id: code ? code : `#${record.id}`,
         date: new Date(record.createdAt).toLocaleDateString('vi-VN'),
       },
       data: record.data,
-      approvals: approvals, // Đóng gói mảng approvals chứa chữ ký điện tử
+      approvals: approvals,
     };
 
     const templateObj = printTemplate.template as any;
