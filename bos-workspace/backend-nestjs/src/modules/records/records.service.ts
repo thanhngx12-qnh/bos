@@ -10,6 +10,9 @@ import { UpdateRecordDto } from './dto/update-record.dto';
 import { DynamicValidationService } from './dynamic-validation.service';
 import { FormulaEngineService } from './formula-engine.service';
 import { tenantContext } from '../../prisma/tenant-context';
+import { OutboxService } from '../outbox/outbox.service'; // <-- IMPORT MỚI
+import { DomainEvent } from 'src/core/interfaces/domain-event.interface'; // <-- IMPORT MỚI
+import { v4 as uuidv4 } from 'uuid'; // <-- IMPORT MỚI
 
 @Injectable()
 export class RecordsService {
@@ -17,7 +20,26 @@ export class RecordsService {
     private readonly prisma: PrismaService,
     private readonly dynamicValidator: DynamicValidationService,
     private readonly formulaEngine: FormulaEngineService,
+    private readonly outboxService: OutboxService, // <-- INJECT OUTBOX
   ) {}
+
+  // --- HÀM TRỢ GIÚP MỚI: TẠO SỰ KIỆN DOMAIN ---
+  private createDomainEvent(
+    eventType: string,
+    payload: any,
+    metadata: any,
+  ): DomainEvent {
+    return {
+      eventType,
+      payload,
+      metadata: {
+        tenantId: metadata.tenantId,
+        correlationId: metadata.correlationId || uuidv4(),
+        userId: metadata.userId,
+        timestamp: new Date().toISOString(),
+      },
+    };
+  }
 
   private generateRecordCode(pattern: string, count: number): string {
     const regex = /\{SEQ:(\d+)\}/g;
@@ -228,13 +250,17 @@ export class RecordsService {
         finalData,
       );
 
+      // --- OUTBOX PATTERN ---
+      const event = this.createDomainEvent('record.created', newRecord, {
+        tenantId,
+        userId,
+      });
+      await this.outboxService.addToOutbox(tx, event);
+
       return newRecord;
     });
   }
 
-  // ====================================================
-  // ĐỘNG CƠ TRUY VẤN VẠN NĂNG TÍCH HỢP ROW-LEVEL SECURITY
-  // ====================================================
   async findAllByEntity(
     currentUser: any,
     entityId: number,
@@ -264,9 +290,7 @@ export class RecordsService {
     const queryParams: any[] = [entityId, tenantId];
     let paramIndex = 3;
 
-    // --- 1. ĐỘNG CƠ ROW-LEVEL SECURITY (DATA SCOPE POLICY) ---
-    let policy: any = null; // Sửa lỗi tại đây
-
+    let policy: any = null;
     if (currentUser.roleId) {
       policy = await this.prisma.permissionPolicy.findFirst({
         where: {
@@ -293,15 +317,8 @@ export class RecordsService {
        `;
       queryParams.push(currentUser.departmentId);
       paramIndex += 1;
-    } else if (dataScope === 'ALL') {
-      // Không nối thêm điều kiện chặn dòng
-    } else {
-      filterSql += ` AND r.created_by_id = ${'$' + paramIndex}`;
-      queryParams.push(currentUser.userId);
-      paramIndex += 1;
     }
 
-    // --- 2. XỬ LÝ LỌC ĐỘNG NHIỀU TRƯỜNG ---
     if (filtersRaw) {
       try {
         const filters = JSON.parse(filtersRaw);
@@ -320,7 +337,6 @@ export class RecordsService {
       }
     }
 
-    // --- 3. XỬ LÝ TÌM KIẾM TOÀN VĂN ---
     if (searchQuery) {
       const searchPattern = `%${searchQuery}%`;
       filterSql += ` AND (r.data::text ILIKE ${'$' + paramIndex} OR r.title ILIKE ${'$' + paramIndex})`;
@@ -461,6 +477,14 @@ export class RecordsService {
             patchData: patchData as any,
           } as any,
         });
+
+        // --- OUTBOX PATTERN ---
+        const event = this.createDomainEvent(
+          'record.updated',
+          { id, patch: patchData },
+          { tenantId, userId },
+        );
+        await this.outboxService.addToOutbox(tx, event);
       }
 
       if (entity && dto.data) {
@@ -488,7 +512,22 @@ export class RecordsService {
         'Không thể xóa bản ghi vì nó đang nằm trong một luồng quy trình chờ duyệt.',
       );
     }
-    return this.prisma.record.delete({ where: { id } as any });
+
+    return this.prisma.$transaction(async (tx) => {
+      const deletedRecord = await tx.record.delete({ where: { id } as any });
+      const store = tenantContext.getStore();
+      const tenantId = store?.tenantId || 0;
+
+      // --- OUTBOX PATTERN ---
+      const event = this.createDomainEvent(
+        'record.deleted',
+        { id: deletedRecord.id },
+        { tenantId },
+      );
+      await this.outboxService.addToOutbox(tx, event);
+
+      return deletedRecord;
+    });
   }
 
   async getRecordRevisions(recordId: number) {

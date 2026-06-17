@@ -28,6 +28,8 @@ import { AuditLogsModule } from './modules/audit-logs/audit-logs.module';
 import { AuditLogInterceptor } from './core/interceptors/audit-log.interceptor';
 import { TenantsModule } from './modules/tenants/tenants.module';
 import { MailerModule } from './modules/mailer/mailer.module';
+import { EventsModule } from './modules/events/events.module';
+import { OutboxModule } from './modules/outbox/outbox.module';
 
 @Module({
   imports: [
@@ -61,6 +63,8 @@ import { MailerModule } from './modules/mailer/mailer.module';
     AuditLogsModule,
     TenantsModule,
     MailerModule,
+    EventsModule,
+    OutboxModule,
   ],
   providers: [
     {
