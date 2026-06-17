@@ -1044,7 +1044,7 @@
             "bearer": []
           }
         ],
-        "summary": "Lấy danh sách bản ghi phân trang, tìm kiếm và lọc động vạn năng",
+        "summary": "Lấy danh sách bản ghi phân trang, tìm kiếm và lọc động vạn năng (Áp dụng RLS)",
         "tags": [
           "Metadata - Records (Dữ liệu bản ghi)"
         ]

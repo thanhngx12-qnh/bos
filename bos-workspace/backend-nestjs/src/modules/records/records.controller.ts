@@ -48,7 +48,8 @@ export class RecordsController {
 
   @Get()
   @ApiOperation({
-    summary: 'Lấy danh sách bản ghi phân trang, tìm kiếm và lọc động vạn năng',
+    summary:
+      'Lấy danh sách bản ghi phân trang, tìm kiếm và lọc động vạn năng (Áp dụng RLS)',
   })
   @ApiQuery({ name: 'entityId', required: true, type: Number })
   @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
@@ -78,6 +79,7 @@ export class RecordsController {
     description: 'JSON string: {"plug_status":"DA_RUT"}',
   })
   findAllByEntity(
+    @Request() req, // <-- TRUYỀN THÊM REQ.USER ĐỂ BẢO MẬT DÒNG (RLS)
     @Query('entityId', ParseIntPipe) entityId: number,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
@@ -86,7 +88,9 @@ export class RecordsController {
     @Query('searchQuery') searchQuery?: string,
     @Query('filters') filtersRaw?: string,
   ) {
+    const currentUser = req.user;
     return this.recordsService.findAllByEntity(
+      currentUser, // <-- TRUYỀN XUỐNG DỊCH VỤ
       entityId,
       page,
       limit,

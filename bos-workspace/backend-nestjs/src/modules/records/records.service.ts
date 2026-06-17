@@ -7,19 +7,18 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateRecordDto } from './dto/create-record.dto';
 import { UpdateRecordDto } from './dto/update-record.dto';
-import { DynamicValidationService } from './dynamic-validation.service'; // <-- KÍCH HOẠT ĐỘNG CƠ VALIDATE MỚI
-import { FormulaEngineService } from './formula-engine.service'; // <-- KÍCH HOẠT ĐỘNG CƠ CÔNG THỨC MỚI
-import { tenantContext } from '../../prisma/tenant-context'; // <-- IMPORT CONTEXT ĐỂ QUẢN TRỊ SAAS
+import { DynamicValidationService } from './dynamic-validation.service';
+import { FormulaEngineService } from './formula-engine.service';
+import { tenantContext } from '../../prisma/tenant-context';
 
 @Injectable()
 export class RecordsService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly dynamicValidator: DynamicValidationService, // <-- INJECT ĐỘNG CƠ VALIDATE
-    private readonly formulaEngine: FormulaEngineService, // <-- INJECT ĐỘNG CƠ CÔNG THỨC MỚI
+    private readonly dynamicValidator: DynamicValidationService,
+    private readonly formulaEngine: FormulaEngineService,
   ) {}
 
-  // --- THUẬT TOÁN BIÊN DỊCH MẪU TỰ SINH MÃ (AUTO-CODE GENERATOR) ---
   private generateRecordCode(pattern: string, count: number): string {
     const regex = /\{SEQ:(\d+)\}/g;
     return pattern.replace(regex, (match, length) => {
@@ -28,7 +27,6 @@ export class RecordsService {
     });
   }
 
-  // --- THUẬT TOÁN BIÊN DỊCH TIÊU ĐỀ BẢN GHI (DYNAMIC TITLE GENERATOR) ---
   private generateRecordTitle(
     pattern: string | null | undefined,
     data: Record<string, any>,
@@ -36,7 +34,6 @@ export class RecordsService {
   ): string | null {
     if (!pattern) return null;
 
-    // Tự động tìm các chuỗi nằm trong ngoặc nhọn {field_code} và thay bằng data
     return pattern.replace(/\{([^}]+)\}/g, (match, fieldCode) => {
       if (fieldCode === 'RECORD_CODE') return recordCode || '';
       const value = data[fieldCode];
@@ -44,7 +41,6 @@ export class RecordsService {
     });
   }
 
-  // --- THUẬT TOÁN JSON DIFF (TÌM SỰ KHÁC BIỆT DỮ LIỆU) ---
   private calculateDiff(
     oldData: any,
     newData: any,
@@ -127,7 +123,6 @@ export class RecordsService {
     }
   }
 
-  // --- HÀM TRỢ GIÚP: ĐẢM BẢO ENTITY VERSION TỒN TẠI ĐỂ GẮN VÀO RECORD ---
   private async ensureEntityVersionExists(
     tx: any,
     tenantId: number,
@@ -199,7 +194,6 @@ export class RecordsService {
       );
     }
 
-    // NÂNG CẤP DYNAMIC TITLE
     const businessCode = recordCode || `CODE-${Date.now()}`;
     const generatedTitle = this.generateRecordTitle(
       (entity as any).titlePattern,
@@ -208,26 +202,23 @@ export class RecordsService {
     );
 
     return this.prisma.$transaction(async (tx) => {
-      // 1. Đảm bảo EntityVersion tồn tại để tránh lỗi Foreign Key
       const validVersionId = await this.ensureEntityVersionExists(
         tx,
         tenantId,
         entity.id,
       );
 
-      // 2. Tạo Bản ghi
       const newRecord = await tx.record.create({
         data: {
           entityId: dto.entityId,
           businessCode: businessCode,
-          title: generatedTitle, // GHI TIÊU ĐỀ TỰ ĐỘNG XUỐNG DB
+          title: generatedTitle,
           data: finalData as any,
           createdById: userId,
           metadataVersionId: validVersionId,
         } as any,
       });
 
-      // 3. Vẽ liên kết (Edges)
       await this.processGraphRelations(
         tx,
         tenantId,
@@ -241,7 +232,11 @@ export class RecordsService {
     });
   }
 
+  // ====================================================
+  // ĐỘNG CƠ TRUY VẤN VẠN NĂNG TÍCH HỢP ROW-LEVEL SECURITY
+  // ====================================================
   async findAllByEntity(
+    currentUser: any,
     entityId: number,
     page: number = 1,
     limit: number = 10,
@@ -269,6 +264,44 @@ export class RecordsService {
     const queryParams: any[] = [entityId, tenantId];
     let paramIndex = 3;
 
+    // --- 1. ĐỘNG CƠ ROW-LEVEL SECURITY (DATA SCOPE POLICY) ---
+    let policy: any = null; // Sửa lỗi tại đây
+
+    if (currentUser.roleId) {
+      policy = await this.prisma.permissionPolicy.findFirst({
+        where: {
+          tenantId: tenantId,
+          roleId: currentUser.roleId,
+          entityId: entityId,
+        } as any,
+      });
+    }
+
+    const dataScope = policy ? policy.dataScope : 'OWNED';
+
+    if (dataScope === 'OWNED') {
+      filterSql += ` AND r.created_by_id = ${'$' + paramIndex}`;
+      queryParams.push(currentUser.userId);
+      paramIndex += 1;
+    } else if (dataScope === 'DEPARTMENT' && currentUser.departmentId) {
+      filterSql += ` 
+         AND r.created_by_id IN (
+           SELECT u.id FROM users u
+           JOIN department_closure dc ON u.department_id = dc.descendant_id
+           WHERE dc.ancestor_id = ${'$' + paramIndex} AND dc.tenant_id = $2
+         )
+       `;
+      queryParams.push(currentUser.departmentId);
+      paramIndex += 1;
+    } else if (dataScope === 'ALL') {
+      // Không nối thêm điều kiện chặn dòng
+    } else {
+      filterSql += ` AND r.created_by_id = ${'$' + paramIndex}`;
+      queryParams.push(currentUser.userId);
+      paramIndex += 1;
+    }
+
+    // --- 2. XỬ LÝ LỌC ĐỘNG NHIỀU TRƯỜNG ---
     if (filtersRaw) {
       try {
         const filters = JSON.parse(filtersRaw);
@@ -287,11 +320,13 @@ export class RecordsService {
       }
     }
 
-    const searchPattern = searchQuery ? `%${searchQuery}%` : '%';
-    // Mở rộng tìm kiếm toàn văn sang cả cột Title mới
-    filterSql += ` AND (r.data::text ILIKE ${'$' + paramIndex} OR r.title ILIKE ${'$' + paramIndex})`;
-    queryParams.push(searchPattern);
-    paramIndex += 1;
+    // --- 3. XỬ LÝ TÌM KIẾM TOÀN VĂN ---
+    if (searchQuery) {
+      const searchPattern = `%${searchQuery}%`;
+      filterSql += ` AND (r.data::text ILIKE ${'$' + paramIndex} OR r.title ILIKE ${'$' + paramIndex})`;
+      queryParams.push(searchPattern);
+      paramIndex += 1;
+    }
 
     let orderBySql = 'ORDER BY r.id DESC';
     if (sortBy) {
@@ -398,7 +433,6 @@ export class RecordsService {
       patchData = this.calculateDiff(currentRecord.data, dataToSave);
       isDataChanged = Object.keys(patchData).length > 0;
 
-      // NÂNG CẤP DYNAMIC TITLE (Chạy lại mỗi khi update dữ liệu)
       if (isDataChanged) {
         newTitle = this.generateRecordTitle(
           (entity as any).titlePattern,
@@ -415,7 +449,7 @@ export class RecordsService {
         updatedRecord = await tx.record.update({
           where: { id } as any,
           data: {
-            title: newTitle, // CẬP NHẬT TIÊU ĐỀ NẾU DỮ LIỆU ĐỔI
+            title: newTitle,
             data: dataToSave as any,
           },
         });
@@ -467,9 +501,6 @@ export class RecordsService {
     });
   }
 
-  // ==========================================
-  // ĐỘNG CƠ TRA CỨU LIÊN KẾT ĐỘNG (LOOKUP ENGINE)
-  // ==========================================
   async getLookupData(fieldId: number) {
     const field = await this.prisma.fieldRegistry.findFirst({
       where: { id: fieldId } as any,
@@ -533,7 +564,6 @@ export class RecordsService {
       const recordData = r.data as any;
       const codePrefix = r.business_code ? `[${r.business_code}] ` : '';
 
-      // Ưu tiên hiển thị cột title nếu displayField không được định nghĩa cứng
       let labelValue = recordData[displayField];
       if (!labelValue && displayField === 'id') {
         labelValue = r.title ? r.title : `#${r.id}`;
