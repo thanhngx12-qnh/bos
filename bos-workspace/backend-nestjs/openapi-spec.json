@@ -2435,6 +2435,189 @@
           "Mailer (Kiểm thử Gửi Email)"
         ]
       }
+    },
+    "/api/v1/tasks/my-tasks": {
+      "get": {
+        "operationId": "TasksController_findMyTasks",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": 10,
+              "type": "number"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "PENDING",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lấy danh sách nhiệm vụ của tôi (Có phân trang & lọc trạng thái)",
+        "tags": [
+          "Work Engine - Tasks (Nhiệm vụ & Giao việc)"
+        ]
+      }
+    },
+    "/api/v1/tasks/analytics": {
+      "get": {
+        "operationId": "TasksController_getAnalytics",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Thống kê KPI xử lý nhiệm vụ toàn công ty (Dành cho Quản lý)",
+        "tags": [
+          "Work Engine - Tasks (Nhiệm vụ & Giao việc)"
+        ]
+      }
+    },
+    "/api/v1/tasks/{id}/complete": {
+      "post": {
+        "operationId": "TasksController_completeTask",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompleteTaskDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Hoàn thành nhiệm vụ (Tự động tính thời gian SLA)",
+        "tags": [
+          "Work Engine - Tasks (Nhiệm vụ & Giao việc)"
+        ]
+      }
+    },
+    "/api/v1/tasks/{id}/delegate": {
+      "post": {
+        "operationId": "TasksController_delegateTask",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DelegateTaskDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Ủy quyền nhiệm vụ cho người khác",
+        "tags": [
+          "Work Engine - Tasks (Nhiệm vụ & Giao việc)"
+        ]
+      }
+    },
+    "/api/v1/tasks": {
+      "get": {
+        "operationId": "TasksController_findAll",
+        "parameters": [
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lấy toàn bộ danh sách Task (Super Admin)",
+        "tags": [
+          "Work Engine - Tasks (Nhiệm vụ & Giao việc)"
+        ]
+      }
     }
   },
   "info": {
@@ -3119,6 +3302,28 @@
             "type": "string",
             "example": "Công ty Cổ phần Vận tải BOS",
             "description": "Tên doanh nghiệp"
+          }
+        }
+      },
+      "CompleteTaskDto": {
+        "type": "object",
+        "properties": {
+          "comment": {
+            "type": "string",
+            "description": "Ý kiến khi hoàn thành/xử lý nhiệm vụ"
+          }
+        }
+      },
+      "DelegateTaskDto": {
+        "type": "object",
+        "properties": {
+          "assigneeId": {
+            "type": "number",
+            "description": "ID người được ủy quyền"
+          },
+          "reason": {
+            "type": "string",
+            "description": "Lý do ủy quyền"
           }
         }
       }

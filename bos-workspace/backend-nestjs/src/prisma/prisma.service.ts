@@ -36,14 +36,11 @@ export class PrismaService
               'RecordRevision',
               'Attachment',
               'Workflow',
-              'WorkflowVersion',
-              'WorkflowStep',
-              'WorkflowTransition',
               'WorkflowInstance',
-              'WorkflowLog',
               'WebhookEndpoint',
               'Notification',
               'SystemAuditLog',
+              'Task',
             ];
 
             if (tenantModels.includes(model)) {

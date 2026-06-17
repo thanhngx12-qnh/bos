@@ -1,7 +1,7 @@
 // File: bos-workspace/backend-nestjs/prisma/schema.prisma
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
   previewFeatures = ["fullTextSearch"]
 }
 
@@ -40,9 +40,9 @@ model Tenant {
   eventDefs        EventDefinition[]
   automationRules  AutomationRule[]
   policies         PermissionPolicy[]
-  departments      Department[]        // Quan hệ ngược
-  departmentClosure DepartmentClosure[] // Quan hệ ngược
-  recordRevisions  RecordRevision[]    // Quan hệ ngược
+  departments      Department[]
+  departmentClosure DepartmentClosure[]
+  recordRevisions  RecordRevision[]
 
   @@map("tenants")
 }
@@ -64,7 +64,7 @@ model Department {
   
   ancestors   DepartmentClosure[] @relation("Descendant")
   descendants DepartmentClosure[] @relation("Ancestor")
-  users       User[]              // Quan hệ ngược
+  users       User[]
 
   @@unique([tenantId, id]) 
   @@map("departments")
@@ -107,8 +107,8 @@ model User {
   recordRevisions RecordRevision[]
   notifications   Notification[]
   systemAuditLogs SystemAuditLog[]
-  recordsCreated  Record[] @relation("recordsCreated") // Đặt tên quan hệ
-  auditLogsActed  AuditLog[] @relation("auditLogsActed") // Đặt tên quan hệ
+  recordsCreated  Record[] @relation("recordsCreated")
+  auditLogsActed  AuditLog[] @relation("auditLogsActed")
 
   @@unique([tenantId, id]) 
   @@unique([tenantId, email])
@@ -409,7 +409,7 @@ model Attachment {
 // ==========================================
 
 model Outbox {
-  id            Int   @id @default(autoincrement())
+  id            Int      @id @default(autoincrement())
   tenantId      Int      @map("tenant_id")
   eventKey      String   @unique @map("event_key")
   eventType     String   @map("event_type")        
@@ -427,7 +427,7 @@ model Outbox {
 }
 
 model AuditLog {
-  id            Int   @id @default(autoincrement())
+  id            Int      @id @default(autoincrement())
   tenantId      Int      @map("tenant_id")
   entityType    String   @map("entity_type")
   entityId      Int      @map("entity_id")
@@ -451,7 +451,7 @@ model AuditLog {
 }
 
 model SystemAuditLog {
-  id          Int   @id @default(autoincrement())
+  id          Int      @id @default(autoincrement())
   tenantId    Int      @map("tenant_id")
   userId      Int      @map("user_id")
   action      String   
@@ -603,34 +603,36 @@ model WorkflowInstance {
   
   logs              WorkflowLog[]
   participants      WorkflowParticipant[]
-  tasks             Task[] // Bổ sung Task Engine
+  tasks             Task[]
 
   @@index([tenantId, recordId, status])
   @@map("workflow_instances")
 }
 
 model Task {
-  id                 Int      @id @default(autoincrement())
-  tenantId           Int      @map("tenant_id")
-  instanceId         Int      @map("instance_id")
-  stepId             Int      @map("step_id")
-  userId             Int?     @map("user_id")
-  roleId             Int?     @map("role_id")
+  id                      Int       @id @default(autoincrement())
+  tenantId                Int       @map("tenant_id")
+  instanceId              Int       @map("instance_id")
+  stepId                  Int       @map("step_id")
   
-  assignmentStrategy String   @default("ROLE") @map("assignment_strategy")
-  assignmentData     Json     @default("{}")   @map("assignment_data")
+  assignmentStrategy      String    @map("assignment_strategy")
+  assignmentData          Json      @map("assignment_data")
   
-  type               String   @default("APPROVAL")
-  status             String   @default("PENDING")
-  priority           Int      @default(0)
-  dueDate            DateTime? @map("due_date") 
+  assigneeType            String?   @map("assignee_type") // USER, ROLE
+  assigneeId              Int?      @map("assignee_id")   // userId hoặc roleId
   
-  createdAt          DateTime @default(now()) @map("created_at")
-  updatedAt          DateTime @updatedAt @map("updated_at")
+  status                  String    @default("PENDING")
+  
+  estimatedCompletionTime DateTime? @map("estimated_completion_time")
+  actualCompletionTime    DateTime? @map("actual_completion_time")
+  completionTimeSeconds   Int?      @map("completion_time_seconds")
+  
+  createdAt               DateTime  @default(now()) @map("created_at")
+  updatedAt               DateTime  @updatedAt @map("updated_at")
 
-  instance           WorkflowInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  instance                WorkflowInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
   
-  @@index([tenantId, userId, status])
+  @@index([tenantId, assigneeId, status])
   @@map("tasks")
 }
 

@@ -9,20 +9,24 @@ import { CreateWorkflowDto } from './dto/create-workflow.dto';
 import { UpdateWorkflowDto } from './dto/update-workflow.dto';
 import { CreateInstanceDto } from './dto/create-instance.dto';
 import { WorkflowActionDto } from './dto/workflow-action.dto';
-import { InjectQueue } from '@nestjs/bullmq'; // <-- IMPORT THƯ VIỆN ĐẨY QUENE
-import { Queue } from 'bullmq'; // <-- IMPORT THƯ VIỆN HÀNG ĐỢI
-import { NotificationsService } from '../notifications/notifications.service'; // <-- IMPORT DỊCH VỤ THÔNG BÁO
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
+import { NotificationsService } from '../notifications/notifications.service';
 import { paginate, PaginateOptions } from '../../prisma/prisma.helper';
+import { ConditionEvaluatorService } from '../../core/engines/condition-evaluator.service';
+import { TasksService } from '../tasks/tasks.service'; // <-- IMPORT TASK SERVICE
+import { OnEvent } from '@nestjs/event-emitter'; // <-- IMPORT EVENT LISTENER
 
 @Injectable()
 export class WorkflowsService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly notificationsService: NotificationsService, // <-- INJECT DỊCH VỤ THÔNG BÁO LÕI
-    @InjectQueue('webhook-queue') private readonly webhookQueue: Queue, // <-- INJECT HÀNG ĐỢI WEBHOOK LÕI
+    private readonly notificationsService: NotificationsService,
+    private readonly conditionEvaluator: ConditionEvaluatorService,
+    private readonly tasksService: TasksService, // <-- INJECT TASK SERVICE LÕI
+    @InjectQueue('webhook-queue') private readonly webhookQueue: Queue,
   ) {}
 
-  // --- HÀM TRỢ GIÚP: ĐÁNH GIÁ ĐIỀU KIỆN RẼ NHÁNH ---
   private evaluateTransitionCondition(logic: any, recordData: any): boolean {
     const rules = logic?.rules;
     if (!rules || !rules.field) return true;
@@ -48,7 +52,6 @@ export class WorkflowsService {
     }
   }
 
-  // --- CÁC API CƠ BẢN ---
   async create(dto: CreateWorkflowDto) {
     const entity = await this.prisma.entity.findFirst({
       where: { id: dto.entityId } as any,
@@ -62,7 +65,7 @@ export class WorkflowsService {
           entityId: dto.entityId,
           name: dto.name,
           description: dto.description,
-        } as any, // SỬA LỖI: as any
+        } as any,
       });
 
       const version = await tx.workflowVersion.create({
@@ -70,34 +73,24 @@ export class WorkflowsService {
           workflowId: workflow.id,
           version: 1,
           status: 'DRAFT',
-        } as any, // SỬA LỖI: as any
+        } as any,
       });
 
       return { ...workflow, versions: [version] };
     });
   }
 
-  // ====================================================
-  // BỘ LỌC TẦM NHÌN QUY TRÌNH (DATABASE-LEVEL VISIBILITY FILTER)
-  // Tích hợp phân trang, lọc chéo JSONB dưới Postgres cực nhanh
-  // ====================================================
   async findAll(currentUser: any, options: PaginateOptions) {
     const whereClause: any = {
-      // Prisma Client Extension sẽ tự động ghim thêm tenantId cô lập tại đây!
       OR: [
-        // Kịch bản 1: Cho phép tất cả xem (allowAll: true) hoặc chưa cấu hình tầm nhìn
         { visibility: { path: ['allowAll'], equals: true } },
         { visibility: { equals: {} } },
-
-        // Kịch bản 2: Lọc nghiêm ngặt theo loại tài khoản (allowedUserTypes chứa INTERNAL/EXTERNAL)
         {
           visibility: {
             path: ['allowedUserTypes'],
             array_contains: currentUser.userType,
           },
         },
-
-        // Kịch bản 3: Kiểm tra khớp chéo theo Phòng ban, Vai trò, hoặc User ID
         {
           visibility: {
             path: ['allowedDepartments'],
@@ -119,7 +112,6 @@ export class WorkflowsService {
       ],
     };
 
-    // Thực thi bộ phân trang toàn cục dùng chung
     return paginate(this.prisma.workflow, whereClause, options, {
       entity: { select: { id: true, name: true, code: true } },
       versions: { orderBy: { version: 'desc' } },
@@ -128,7 +120,7 @@ export class WorkflowsService {
 
   async findOne(id: number) {
     const workflow = await this.prisma.workflow.findFirst({
-      where: { id } as any, // SỬA LỖI: findFirst & as any
+      where: { id } as any,
       include: {
         versions: {
           include: { steps: true },
@@ -143,29 +135,28 @@ export class WorkflowsService {
   async update(id: number, dto: UpdateWorkflowDto) {
     await this.findOne(id);
     return this.prisma.workflow.update({
-      where: { id } as any, // SỬA LỖI: as any
-      data: dto as any, // SỬA LỖI: as any
+      where: { id } as any,
+      data: dto as any,
     });
   }
 
   async remove(id: number) {
     await this.findOne(id);
     const hasInstances = await this.prisma.workflowInstance.findFirst({
-      where: { version: { workflowId: id } } as any, // SỬA LỖI: as any
+      where: { version: { workflowId: id } } as any,
     });
     if (hasInstances) {
       throw new BadRequestException(
         'Không thể xóa: Quy trình này đã phát sinh các lượt chạy trong thực tế.',
       );
     }
-    return this.prisma.workflow.delete({ where: { id } as any }); // SỬA LỖI: as any
+    return this.prisma.workflow.delete({ where: { id } as any });
   }
 
   async cloneVersion(workflowId: number, sourceVersionId: number) {
     const workflow = await this.findOne(workflowId);
-    // Lấy kèm toàn bộ Steps và Transitions của phiên bản gốc
     const sourceVersion = await this.prisma.workflowVersion.findFirst({
-      where: { id: sourceVersionId } as any, // SỬA LỖI: as any
+      where: { id: sourceVersionId } as any,
       include: {
         steps: {
           include: { transitionsOut: true },
@@ -183,16 +174,14 @@ export class WorkflowsService {
     );
 
     return this.prisma.$transaction(async (tx) => {
-      // 1. Tạo vỏ Version mới
       const newVersion = await tx.workflowVersion.create({
         data: {
           workflowId,
           version: maxVersion + 1,
           status: 'DRAFT',
-        } as any, // SỬA LỖI: as any
+        } as any,
       });
 
-      // 2. Clone sâu (Deep Clone) toàn bộ Steps và Transitions
       const oldToNewStepIdMap = new Map<number, number>();
 
       for (const oldStep of sourceVersion.steps) {
@@ -203,7 +192,7 @@ export class WorkflowsService {
             stepType: oldStep.stepType,
             permissions: oldStep.permissions || {},
             orderIndex: oldStep.orderIndex,
-          } as any, // SỬA LỖI: as any
+          } as any,
         });
         oldToNewStepIdMap.set(oldStep.id, newStep.id);
       }
@@ -216,7 +205,7 @@ export class WorkflowsService {
               toStepId: oldToNewStepIdMap.get(oldTransition.toStepId)!,
               conditionLogic: oldTransition.conditionLogic || {},
               autoSkip: oldTransition.autoSkip,
-            } as any, // SỬA LỖI: as any
+            } as any,
           });
         }
       }
@@ -237,26 +226,25 @@ export class WorkflowsService {
 
     if (status === 'PUBLISHED') {
       await this.prisma.workflowVersion.updateMany({
-        where: { workflowId, status: 'PUBLISHED' } as any, // SỬA LỖI: as any
-        data: { status: 'ARCHIVED' } as any, // SỬA LỖI: as any
+        where: { workflowId, status: 'PUBLISHED' } as any,
+        data: { status: 'ARCHIVED' } as any,
       });
     }
 
     return this.prisma.workflowVersion.update({
-      where: { id: versionId, workflowId } as any, // SỬA LỖI: as any
-      data: { status } as any, // SỬA LỖI: as any
+      where: { id: versionId, workflowId } as any,
+      data: { status } as any,
     });
   }
 
-  // Thay thế hàm startInstance() cũ trong workflows.service.ts
   async startInstance(userId: number, dto: CreateInstanceDto) {
     const record = await this.prisma.record.findFirst({
-      where: { id: dto.recordId } as any, // SỬA LỖI: findFirst & as any
+      where: { id: dto.recordId } as any,
     });
     if (!record) throw new NotFoundException('Không tìm thấy Bản ghi dữ liệu.');
 
     const version = await this.prisma.workflowVersion.findFirst({
-      where: { id: dto.versionId } as any, // SỬA LỖI: findFirst & as any
+      where: { id: dto.versionId } as any,
       include: { steps: { orderBy: { orderIndex: 'asc' } } },
     });
 
@@ -269,7 +257,7 @@ export class WorkflowsService {
     }
 
     const activeInstance = await this.prisma.workflowInstance.findFirst({
-      where: { recordId: dto.recordId, status: 'IN_PROGRESS' } as any, // SỬA LỖI: as any
+      where: { recordId: dto.recordId, status: 'IN_PROGRESS' } as any,
     });
     if (activeInstance) {
       throw new BadRequestException(
@@ -284,9 +272,9 @@ export class WorkflowsService {
         data: {
           versionId: dto.versionId,
           recordId: dto.recordId,
-          currentStepId: firstStep.id, // SỬA LỖI: currentStepId
+          currentStepId: firstStep.id,
           status: 'IN_PROGRESS',
-        } as any, // SỬA LỖI: as any
+        } as any,
       });
 
       await tx.workflowLog.create({
@@ -296,28 +284,35 @@ export class WorkflowsService {
           userId,
           action: 'START',
           comment: 'Khởi chạy luồng quy trình phê duyệt.',
-        } as any, // SỬA LỖI: as any
+        } as any,
       });
+
+      // --- TÍCH HỢP TASK ENGINE: TỰ ĐỘNG GIAO VIỆC LẦN ĐẦU ---
+      await this.tasksService.createTasksForStep(
+        tx,
+        (record as any).tenantId,
+        newInstance.id,
+        firstStep,
+        record,
+      );
 
       return newInstance;
     });
 
-    // --- TỰ ĐỘNG BẮN EMAIL & THÔNG BÁO SSE ---
     const firstStepConfig: any = firstStep.permissions || {};
     const candidateUsers: number[] = firstStepConfig.candidateUsers || [];
 
     const initiator = await this.prisma.user.findFirst({
-      where: { id: userId } as any, // SỬA LỖI: findFirst & as any
+      where: { id: userId } as any,
     });
     const initiatorName = initiator?.fullName || 'Nhân sự';
-    const recordCode = (record as any).businessCode || `#${record.id}`; // SỬA LỖI: businessCode
+    const recordCode = (record as any).businessCode || `#${record.id}`;
 
     for (const candidateId of candidateUsers) {
       const recipient = await this.prisma.user.findFirst({
-        where: { id: candidateId } as any, // SỬA LỖI: findFirst & as any
+        where: { id: candidateId } as any,
       });
 
-      // Gửi thông báo In-app và Email đồng thời
       await this.notificationsService.createNotification(
         candidateId,
         'Yêu cầu phê duyệt mới',
@@ -337,15 +332,11 @@ export class WorkflowsService {
     return instance;
   }
 
-  // ====================================================
-  // BẢN NÂNG CẤP HOÀN HẢO: HÀM LÕI PHÊ DUYỆT TÍCH HỢP HÀNG ĐỢI WEBHOOK ĐỘNG & THÔNG BÁO LÕI
-  // ====================================================
   async handleAction(
     instanceId: number,
     userId: number,
     dto: WorkflowActionDto,
   ) {
-    // 1. Chạy Transaction cô lập dòng dữ liệu và phê duyệt
     const result = await this.prisma.$transaction(async (tx) => {
       await tx.$queryRawUnsafe(
         `SELECT id FROM workflow_instances WHERE id = $1 FOR UPDATE`,
@@ -353,13 +344,15 @@ export class WorkflowsService {
       );
 
       const instance = await tx.workflowInstance.findFirst({
-        where: { id: instanceId } as any, // SỬA LỖI: findFirst & as any
+        where: { id: instanceId } as any,
         include: {
           record: true,
           version: {
             include: {
-              steps: true,
-              workflow: { select: { name: true } }, // Lấy thêm tên quy trình để bắn webhook
+              steps: {
+                include: { transitionsOut: true },
+              },
+              workflow: { select: { name: true } },
             },
           },
         },
@@ -375,7 +368,7 @@ export class WorkflowsService {
       }
 
       const transition = await tx.workflowTransition.findFirst({
-        where: { id: dto.transitionId } as any, // SỬA LỖI: findFirst & as any
+        where: { id: dto.transitionId } as any,
         include: { fromStep: true, toStep: true },
       });
 
@@ -384,7 +377,6 @@ export class WorkflowsService {
           'Không tìm thấy đường nối quy trình (Nút bấm).',
         );
       if (transition.fromStepId !== (instance as any).currentStepId) {
-        // SỬA LỖI: currentStepId
         throw new BadRequestException(
           'Đường nối không thuộc về bước duyệt hiện tại của phiếu.',
         );
@@ -416,14 +408,14 @@ export class WorkflowsService {
       await tx.workflowLog.create({
         data: {
           instanceId,
-          stepId: (instance as any).currentStepId, // SỬA LỖI: currentStepId
+          stepId: (instance as any).currentStepId,
           userId,
           action: actionLabel,
           comment: dto.comment || `Đã thực hiện hành động: ${actionLabel}`,
           snapshot: dto.signatureData
             ? ({ signature: dto.signatureData } as any)
             : undefined,
-        } as any, // SỬA LỖI: as any
+        } as any,
       });
 
       let shouldTransition = true;
@@ -432,9 +424,9 @@ export class WorkflowsService {
         const approvedLogs = await tx.workflowLog.findMany({
           where: {
             instanceId,
-            stepId: (instance as any).currentStepId, // SỬA LỖI: currentStepId
+            stepId: (instance as any).currentStepId,
             action: actionLabel,
-          } as any, // SỬA LỖI: as any
+          } as any,
         });
 
         const approvedUserIds = approvedLogs.map((l) => l.userId);
@@ -452,35 +444,84 @@ export class WorkflowsService {
       let nextStepId: number | null = transition.toStepId;
 
       if (shouldTransition) {
-        if (nextStepObj.stepType === 'SYSTEM_TASK' || transition.autoSkip) {
-          finalStatus = 'COMPLETED';
+        // --- TASK ENGINE: HỦY BỎ CÁC TASK DƯ THỪA ---
+        // (Nếu duyệt đại diện OR-Gate, 1 người duyệt xong thì hủy task của những người kia)
+        await this.tasksService.cancelPendingTasks(
+          tx,
+          instanceId,
+          (instance as any).currentStepId,
+        );
+
+        let evaluatingStepObj = nextStepObj;
+
+        while (evaluatingStepObj) {
+          if (evaluatingStepObj.stepType === 'SYSTEM_TASK') {
+            finalStatus = 'COMPLETED';
+            break;
+          }
+
+          const fullStepData = instance.version.steps.find(
+            (s) => s.id === evaluatingStepObj.id,
+          );
+          const outgoingTransitions = fullStepData?.transitionsOut || [];
+
+          const autoSkipTransition = outgoingTransitions.find((t) => {
+            if (!t.autoSkip) return false;
+            const logic: any = t.conditionLogic || {};
+            return this.conditionEvaluator.evaluate(
+              logic.rules,
+              instance.record.data as any,
+            );
+          });
+
+          if (autoSkipTransition) {
+            console.log(
+              `[Auto-Skip] Bước '${evaluatingStepObj.name}' tự động bị bỏ qua!`,
+            );
+            nextStepId = autoSkipTransition.toStepId;
+            evaluatingStepObj = instance.version.steps.find(
+              (s) => s.id === nextStepId,
+            ) as any;
+          } else {
+            break;
+          }
         }
 
         await tx.workflowInstance.update({
-          where: { id: instanceId } as any, // SỬA LỖI: as any
+          where: { id: instanceId } as any,
           data: {
-            currentStepId: nextStepId, // SỬA LỖI: currentStepId
+            currentStepId: nextStepId,
             status: finalStatus,
-          } as any, // SỬA LỖI: as any
+          } as any,
         });
+
+        // --- TÍCH HỢP TASK ENGINE: TỰ ĐỘNG GIAO VIỆC CHO TRẠM MỚI ---
+        if (finalStatus === 'IN_PROGRESS' && evaluatingStepObj) {
+          await this.tasksService.createTasksForStep(
+            tx,
+            (instance as any).tenantId,
+            instanceId,
+            evaluatingStepObj,
+            instance.record,
+          );
+        }
       }
 
-      // Đóng gói dữ liệu sạch để xử lý tác vụ thông báo & Webhook ngầm
       const nextStepConfig: any = nextStepObj?.permissions || {};
       return {
         instanceId,
-        entityId: instance.record.entityId, // <-- BỔ SUNG TRƯỜNG NÀY ĐỂ TRUY VẤN WEBHOOK THEO BIỂU MẪU
+        entityId: instance.record.entityId,
         isCompleted: shouldTransition && finalStatus === 'COMPLETED',
         recordData: instance.record.data,
         recordCode:
-          (instance.record as any).businessCode || `#${instance.record.id}`, // SỬA LỖI: businessCode
-        initiatorId: (instance.record as any).createdById, // SỬA LỖI: createdById
+          (instance.record as any).businessCode || `#${instance.record.id}`,
+        initiatorId: (instance.record as any).createdById,
         workflowName: (instance.version as any).workflow.name,
         actionExecuted: actionLabel,
         isRejected: false,
         nextStepId: shouldTransition
           ? nextStepId
-          : (instance as any).currentStepId, // SỬA LỖI: currentStepId
+          : (instance as any).currentStepId,
         nextStepName: nextStepObj?.name || '',
         nextStepCandidates: nextStepConfig.candidateUsers || [],
         currentStepName: currentStepObj.name,
@@ -489,22 +530,20 @@ export class WorkflowsService {
     });
 
     const approver = await this.prisma.user.findFirst({
-      where: { id: userId } as any, // SỬA LỖI: findFirst & as any
+      where: { id: userId } as any,
     });
     const approverName = approver?.fullName || 'Người duyệt';
 
-    // --- 3. ĐỘNG CƠ THÔNG BÁO THỜI GIAN THỰC (REAL-TIME NOTIFICATION COCK) ---
     if (result.isCompleted) {
       const initiator = await this.prisma.user.findFirst({
-        where: { id: result.initiatorId } as any, // SỬA LỖI: findFirst & as any
+        where: { id: result.initiatorId } as any,
       });
       await this.notificationsService.createNotification(
         result.initiatorId,
         'Quy trình phê duyệt hoàn tất',
         `Hồ sơ ${result.recordCode} của bạn đã được PHÊ DUYỆT HOÀN TẤT qua tất cả các cấp!`,
         {
-          // Có thể tạo Job email 'send-workflow-completed' riêng
-          emailJobName: 'send-workflow-completed', // Giả sử chúng ta sẽ tạo template cho nó sau
+          emailJobName: 'send-workflow-completed',
           emailPayload: {
             recipientName: initiator?.fullName || 'Người dùng',
             recordCode: result.recordCode,
@@ -521,7 +560,7 @@ export class WorkflowsService {
 
       for (const candidateId of result.nextStepCandidates) {
         const recipient = await this.prisma.user.findFirst({
-          where: { id: candidateId } as any, // SỬA LỖI: findFirst & as any
+          where: { id: candidateId } as any,
         });
         await this.notificationsService.createNotification(
           candidateId,
@@ -532,7 +571,7 @@ export class WorkflowsService {
             emailPayload: {
               recipientName: recipient?.fullName || 'Thành viên',
               recordCode: result.recordCode,
-              initiatorName: approverName, // Người chuyển tiếp giờ là người khởi tạo của bước sau
+              initiatorName: approverName,
               stepName: result.nextStepName,
             },
           },
@@ -540,14 +579,13 @@ export class WorkflowsService {
       }
     }
 
-    // --- 4. ĐỘNG CƠ WEBHOOK ĐỘNG TRA CỨU DB & XỬ LÝ BẤT ĐỒNG BỘ (BULLMQ) ---
     if (result.isCompleted) {
       try {
         const configuredWebhooks = await this.prisma.webhookEndpoint.findMany({
           where: {
             entityId: result.entityId,
             isActive: true,
-          } as any, // SỬA LỖI: as any
+          } as any,
         });
 
         const activeWebhooks = configuredWebhooks.filter((w) => {
@@ -560,7 +598,7 @@ export class WorkflowsService {
             'send-webhook',
             {
               instanceId: result.instanceId,
-              webhookUrl: webhook.url, // Lấy URL động từ cơ sở dữ liệu
+              webhookUrl: webhook.url,
               payload: {
                 event: 'WORKFLOW_COMPLETED',
                 workflowName: result.workflowName,
@@ -586,7 +624,7 @@ export class WorkflowsService {
     }
 
     const updatedInstance = await this.prisma.workflowInstance.findFirst({
-      where: { id: instanceId } as any, // SỬA LỖI: findFirst & as any
+      where: { id: instanceId } as any,
     });
 
     return {
@@ -598,12 +636,89 @@ export class WorkflowsService {
 
   async getInstanceLogs(instanceId: number) {
     return this.prisma.workflowLog.findMany({
-      where: { instanceId } as any, // SỬA LỖI: as any
+      where: { instanceId } as any,
       include: {
         step: { select: { name: true } },
         user: { select: { fullName: true, email: true } },
       },
       orderBy: { createdAt: 'asc' },
     });
+  }
+
+  // ==========================================
+  // ĐỒNG BỘ TRẠNG THÁI TỪ EVENT BUS (TASK ENGINE)
+  // ==========================================
+  @OnEvent('task.completed')
+  async handleTaskCompletedEvent(payload: {
+    taskId: number;
+    instanceId: number;
+    stepId: number;
+    userId: number;
+    comment?: string;
+  }) {
+    console.log(
+      `[Workflow Event Bus] Nhận tín hiệu Task ${payload.taskId} hoàn thành. Kích hoạt rà soát trạm ${payload.stepId}...`,
+    );
+
+    // 1. Tải WorkflowInstance để kiểm tra
+    const instance = await this.prisma.workflowInstance.findFirst({
+      where: { id: payload.instanceId } as any,
+      include: {
+        version: {
+          include: { steps: true },
+        },
+      },
+    });
+
+    if (!instance || instance.status !== 'IN_PROGRESS') return;
+
+    // 2. Tìm trạm hiện tại
+    const currentStep = instance.version.steps.find(
+      (s) => s.id === instance.currentStepId,
+    );
+    if (!currentStep || currentStep.id !== payload.stepId) return;
+
+    // 3. Đọc cấu hình đồng thuận (ALL_OF / ANY_OF)
+    const stepConfig: any = currentStep.permissions || {};
+    const approverType = stepConfig.approverType || 'SINGLE';
+
+    // 4. Nếu là ALL_OF (Đồng thuận), kiểm tra xem TẤT CẢ các Task của trạm này đã PENDING = 0 chưa
+    if (approverType === 'ALL_OF') {
+      const pendingTasksCount = await this.prisma.task.count({
+        where: {
+          instanceId: payload.instanceId,
+          stepId: payload.stepId,
+          status: 'PENDING',
+        } as any,
+      });
+
+      if (pendingTasksCount > 0) {
+        console.log(
+          `[Workflow Event Bus] Trạm ${currentStep.name} vẫn còn ${pendingTasksCount} task chưa hoàn thành. Chờ tiếp...`,
+        );
+        return; // Chưa đủ người duyệt, thoát!
+      }
+    }
+
+    // 5. Nếu đủ điều kiện (hoặc là ANY_OF), TỰ ĐỘNG CHỌN ĐƯỜNG NỐI MẶC ĐỊNH ĐỂ ĐI TIẾP
+    // Tạm thời giả định hệ thống lấy đường nối đầu tiên (transition Out) làm đường mặc định.
+    // *Lưu ý: Nếu có nhiều đường nối, sẽ cần Logic Engine phân tích.
+    const transition = await this.prisma.workflowTransition.findFirst({
+      where: { fromStepId: currentStep.id } as any,
+    });
+
+    if (transition) {
+      console.log(
+        `[Workflow Event Bus] Đủ điều kiện đồng thuận! Tự động kích hoạt chuyển trạm...`,
+      );
+      // Giả lập DTO để gọi lại hàm handleAction
+      const actionDto: WorkflowActionDto = {
+        transitionId: transition.id,
+        comment: payload.comment || 'Tự động duyệt qua Task Engine',
+      };
+
+      // Gọi lại hàm handleAction nội bộ để tái sử dụng logic (Lock, Skip, Notification, Webhook)
+      await this.handleAction(payload.instanceId, payload.userId, actionDto);
+    }
   }
 }
