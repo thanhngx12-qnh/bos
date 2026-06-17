@@ -47,7 +47,6 @@ export class EntitiesService {
       return JSON.parse(cachedData);
     }
 
-    // Vì V8.1 đã tách fields thành FieldRegistry, không thể include 'fields' được nữa.
     const entity = await this.prisma.entity.findFirst({
       where: { id } as any,
       include: {
@@ -75,7 +74,7 @@ export class EntitiesService {
       data: {
         name: dto.name,
         description: dto.description,
-        autoCodePattern: dto.autoCodePattern,
+        autoCodePattern: dto.autoCodePattern, // Đã bổ sung lại
       } as any,
     });
 

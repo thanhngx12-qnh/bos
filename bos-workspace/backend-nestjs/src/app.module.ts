@@ -30,6 +30,7 @@ import { TenantsModule } from './modules/tenants/tenants.module';
 import { MailerModule } from './modules/mailer/mailer.module';
 import { EventsModule } from './modules/events/events.module';
 import { OutboxModule } from './modules/outbox/outbox.module';
+import { SearchModule } from './modules/search/search.module';
 
 @Module({
   imports: [
@@ -65,6 +66,7 @@ import { OutboxModule } from './modules/outbox/outbox.module';
     MailerModule,
     EventsModule,
     OutboxModule,
+    SearchModule,
   ],
   providers: [
     {

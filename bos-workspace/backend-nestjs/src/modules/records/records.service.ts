@@ -10,9 +10,9 @@ import { UpdateRecordDto } from './dto/update-record.dto';
 import { DynamicValidationService } from './dynamic-validation.service';
 import { FormulaEngineService } from './formula-engine.service';
 import { tenantContext } from '../../prisma/tenant-context';
-import { OutboxService } from '../outbox/outbox.service'; // <-- IMPORT MỚI
-import { DomainEvent } from 'src/core/interfaces/domain-event.interface'; // <-- IMPORT MỚI
-import { v4 as uuidv4 } from 'uuid'; // <-- IMPORT MỚI
+import { OutboxService } from '../outbox/outbox.service';
+import { DomainEvent } from 'src/core/interfaces/domain-event.interface';
+import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
 export class RecordsService {
@@ -20,10 +20,9 @@ export class RecordsService {
     private readonly prisma: PrismaService,
     private readonly dynamicValidator: DynamicValidationService,
     private readonly formulaEngine: FormulaEngineService,
-    private readonly outboxService: OutboxService, // <-- INJECT OUTBOX
+    private readonly outboxService: OutboxService,
   ) {}
 
-  // --- HÀM TRỢ GIÚP MỚI: TẠO SỰ KIỆN DOMAIN ---
   private createDomainEvent(
     eventType: string,
     payload: any,
@@ -250,7 +249,6 @@ export class RecordsService {
         finalData,
       );
 
-      // --- OUTBOX PATTERN ---
       const event = this.createDomainEvent('record.created', newRecord, {
         tenantId,
         userId,
@@ -261,6 +259,9 @@ export class RecordsService {
     });
   }
 
+  // ====================================================
+  // ĐỘNG CƠ TRUY VẤN VẠN NĂNG TÍCH HỢP ROW-LEVEL SECURITY (BẢN FINAL V8.1)
+  // ====================================================
   async findAllByEntity(
     currentUser: any,
     entityId: number,
@@ -286,10 +287,12 @@ export class RecordsService {
     const tenantStore = tenantContext.getStore();
     const tenantId = tenantStore?.tenantId || null;
 
-    let filterSql = '';
+    let joinSql = '';
+    const filterClauses: any[] = []; // SỬA LỖI TẠI ĐÂY: KHAI BÁO KIỂU ANY[]
     const queryParams: any[] = [entityId, tenantId];
     let paramIndex = 3;
 
+    // --- 1. ĐỘNG CƠ ROW-LEVEL SECURITY (DATA SCOPE POLICY) ---
     let policy: any = null;
     if (currentUser.roleId) {
       policy = await this.prisma.permissionPolicy.findFirst({
@@ -302,30 +305,28 @@ export class RecordsService {
     }
 
     const dataScope = policy ? policy.dataScope : 'OWNED';
-
     if (dataScope === 'OWNED') {
-      filterSql += ` AND r.created_by_id = ${'$' + paramIndex}`;
+      filterClauses.push(`r.created_by_id = ${'$' + paramIndex}`);
       queryParams.push(currentUser.userId);
       paramIndex += 1;
     } else if (dataScope === 'DEPARTMENT' && currentUser.departmentId) {
-      filterSql += ` 
-         AND r.created_by_id IN (
-           SELECT u.id FROM users u
-           JOIN department_closure dc ON u.department_id = dc.descendant_id
-           WHERE dc.ancestor_id = ${'$' + paramIndex} AND dc.tenant_id = $2
-         )
-       `;
+      filterClauses.push(
+        `r.created_by_id IN (SELECT u.id FROM users u JOIN department_closure dc ON u.department_id = dc.descendant_id WHERE dc.ancestor_id = ${'$' + paramIndex} AND dc.tenant_id = $2)`,
+      );
       queryParams.push(currentUser.departmentId);
       paramIndex += 1;
     }
 
+    // --- 2. XỬ LÝ LỌC ĐỘNG NHIỀU TRƯỜNG ---
     if (filtersRaw) {
       try {
         const filters = JSON.parse(filtersRaw);
         for (const [key, val] of Object.entries(filters)) {
           const fieldDef = entityFields.find((f) => f.code === key);
           if (fieldDef) {
-            filterSql += ` AND r.data->>${'$' + paramIndex} = ${'$' + (paramIndex + 1)}`;
+            filterClauses.push(
+              `r.data->>${'$' + paramIndex} = ${'$' + (paramIndex + 1)}`,
+            );
             queryParams.push(key, String(val));
             paramIndex += 2;
           }
@@ -337,12 +338,19 @@ export class RecordsService {
       }
     }
 
+    // --- 3. XỬ LÝ TÌM KIẾM BẰNG POSTGRESQL FULL-TEXT SEARCH (TSVECTOR) ---
     if (searchQuery) {
-      const searchPattern = `%${searchQuery}%`;
-      filterSql += ` AND (r.data::text ILIKE ${'$' + paramIndex} OR r.title ILIKE ${'$' + paramIndex})`;
-      queryParams.push(searchPattern);
+      const plainQuery = searchQuery.trim().split(/\s+/).join(' & ');
+      joinSql = ` INNER JOIN search_documents sd ON r.id = sd.record_id `;
+      filterClauses.push(
+        `sd.search_vector @@ plainto_tsquery('simple', ${'$' + paramIndex})`,
+      );
+      queryParams.push(plainQuery);
       paramIndex += 1;
     }
+
+    const filterSql =
+      filterClauses.length > 0 ? `AND ${filterClauses.join(' AND ')}` : '';
 
     let orderBySql = 'ORDER BY r.id DESC';
     if (sortBy) {
@@ -356,7 +364,6 @@ export class RecordsService {
         }
       }
     }
-
     const offset = (page - 1) * limit;
     const limitParamIndex = paramIndex;
     const offsetParamIndex = paramIndex + 1;
@@ -365,6 +372,7 @@ export class RecordsService {
     const sqlQuery = `
       SELECT r.* 
       FROM records r
+      ${joinSql}
       WHERE r.entity_id = $1 
         AND (r.tenant_id = $2 OR (r.tenant_id IS NULL AND $2 IS NULL))
         ${filterSql}
@@ -373,12 +381,18 @@ export class RecordsService {
     `;
 
     const sqlCountQuery = `
-      SELECT COUNT(*)::int as count
+      SELECT COUNT(r.*)::int as count
       FROM records r
+      ${joinSql}
       WHERE r.entity_id = $1 
         AND (r.tenant_id = $2 OR (r.tenant_id IS NULL AND $2 IS NULL))
         ${filterSql}
     `;
+
+    console.log('------------ DEBUG SQL QUERY ------------');
+    console.log('SQL:', sqlQuery);
+    console.log('PARAMS:', queryParams);
+    console.log('---------------------------------------');
 
     const [records, countResult] = await this.prisma.$transaction([
       this.prisma.$queryRawUnsafe<any[]>(sqlQuery, ...queryParams),
@@ -478,10 +492,9 @@ export class RecordsService {
           } as any,
         });
 
-        // --- OUTBOX PATTERN ---
         const event = this.createDomainEvent(
           'record.updated',
-          { id, patch: patchData },
+          { id, patch: patchData, updatedRecord },
           { tenantId, userId },
         );
         await this.outboxService.addToOutbox(tx, event);
@@ -503,7 +516,7 @@ export class RecordsService {
   }
 
   async remove(id: number) {
-    await this.findOne(id);
+    const currentRecord = await this.findOne(id);
     const instances = await this.prisma.workflowInstance.findFirst({
       where: { recordId: id } as any,
     });
@@ -518,10 +531,9 @@ export class RecordsService {
       const store = tenantContext.getStore();
       const tenantId = store?.tenantId || 0;
 
-      // --- OUTBOX PATTERN ---
       const event = this.createDomainEvent(
         'record.deleted',
-        { id: deletedRecord.id },
+        { id: deletedRecord.id, oldData: currentRecord.data },
         { tenantId },
       );
       await this.outboxService.addToOutbox(tx, event);
