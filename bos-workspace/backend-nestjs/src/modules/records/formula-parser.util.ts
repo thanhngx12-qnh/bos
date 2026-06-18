@@ -1,4 +1,4 @@
-// File: src/modules/records/formula-parser.util.ts
+// File: src/modules/records/formula-parser.util.tsw
 
 export class FormulaParser {
   private static readonly precedence: Record<string, number> = {
