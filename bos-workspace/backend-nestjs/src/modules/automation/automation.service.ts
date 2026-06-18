@@ -129,12 +129,27 @@ export class AutomationService {
             );
             break;
 
+          // Tìm đến khối case "CREATE_TASK" bên trong hàm executeActions và thay thế bằng đoạn mã này:
           case 'CREATE_TASK':
+            // BẢN VÁ BẢO MẬT: Kiểm tra chéo (Cross-tenant validation) để chống rò rỉ dữ liệu chéo Tenant
+            const targetUser = await this.prisma.user.findFirst({
+              where: {
+                id: action.assigneeId,
+                tenantId: metadata.tenantId,
+              } as any,
+            });
+
+            if (!targetUser) {
+              this.logger.error(
+                `[Automation Action] Chặn tạo Task: User ID ${action.assigneeId} không thuộc về Tenant ID ${metadata.tenantId}. Nguy cơ rò rỉ chéo dữ liệu.`,
+              );
+              break;
+            }
+
             // Giao một nhiệm vụ độc lập (không thuộc quy trình duyệt nào)
             await this.prisma.task.create({
               data: {
                 tenantId: metadata.tenantId,
-                // SỬA LỖI: Bỏ qua instanceId và stepId (để Prisma tự gán NULL)
                 assigneeType: 'USER',
                 assigneeId: action.assigneeId,
                 assignmentStrategy: 'STATIC',

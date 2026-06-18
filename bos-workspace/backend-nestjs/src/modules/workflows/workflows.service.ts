@@ -425,6 +425,17 @@ export class WorkflowsService {
         );
       }
 
+      // === BẢN VÁ 1: KIỂM TRA ĐIỀU KIỆN CHUYỂN BƯỚC ===
+      const isConditionMet = this.conditionEvaluator.evaluate(
+        transition.conditionLogic,
+        instance.record.data as any,
+      );
+      if (!isConditionMet) {
+        throw new BadRequestException(
+          `Dữ liệu hồ sơ hiện tại không đáp ứng điều kiện phê duyệt của nút bấm '${actionLabel}'.`,
+        );
+      }
+
       await tx.workflowLog.create({
         data: {
           instanceId,
@@ -487,7 +498,7 @@ export class WorkflowsService {
             if (!t.autoSkip) return false;
             const logic: any = t.conditionLogic || {};
             return this.conditionEvaluator.evaluate(
-              logic.rules,
+              logic, // <-- SỬA TẠI ĐÂY (Thay vì logic.rules)
               instance.record.data as any,
             );
           });

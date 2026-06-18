@@ -24,7 +24,7 @@ export class OutboxProcessor {
     }
 
     this.isProcessing = true;
-    this.logger.log('Start processing outbox...');
+    // this.logger.log('Start processing outbox...');
 
     try {
       const eventsToProcess = await this.prisma.$transaction(async (tx) => {

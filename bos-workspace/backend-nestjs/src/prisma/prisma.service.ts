@@ -24,6 +24,7 @@ export class PrismaService
         $allModels: {
           async $allOperations({ model, operation, args, query }) {
             // SỬA LỖI TẠI ĐÂY: Đã bổ sung đầy đủ Department, DepartmentClosure, Role...
+            // BẢN VÁ BẢO MẬT: Bổ sung đầy đủ 100% các bảng đa thuê bao để Prisma tự động cô lập truy vấn
             const tenantModels = [
               'User',
               'Role',
@@ -41,6 +42,16 @@ export class PrismaService
               'Notification',
               'SystemAuditLog',
               'Task',
+              // --- CÁC MODEL VÁ BỔ SUNG ---
+              'PermissionPolicy',
+              'DataScopeRule',
+              'EntityVersion',
+              'RelationDefinition',
+              'RecordRelation',
+              'EventDefinition',
+              'AutomationRule',
+              'BusinessCalendar',
+              'SequenceCounter',
             ];
 
             if (tenantModels.includes(model)) {

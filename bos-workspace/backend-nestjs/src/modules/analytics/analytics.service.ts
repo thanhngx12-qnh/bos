@@ -53,21 +53,22 @@ export class AnalyticsService {
   // Phép toán vĩ mô: Cộng dồn total_amount từ JSONB group theo Department của người tạo Record
   async getSpendingByDepartment() {
     try {
-      // Sử dụng raw query để tận dụng sức mạnh bóc tách JSONB của PostgreSQL
-      // Quy tắc mã hóa: Ép kiểu dữ liệu (data->>'total_amount')::numeric để tính SUM không bị lỗi
+      // BẢN VÁ:
+      // 1. Sửa r.created_by thành r.created_by_id để khớp cột vật lý trong Postgres
+      // 2. Chuyển JOIN departments thành LEFT JOIN để giữ lại các hồ sơ chưa được gán phòng ban (Coalesce về "Chưa phân phòng ban")
+      // 3. Sử dụng COALESCE lồng nhau để bóc tách cả 2 key "budget_amount" và "total_amount" từ JSONB một cách an toàn
       const result = await this.prisma.$queryRawUnsafe<any[]>(`
         SELECT 
-          d.name as "departmentName", 
-          COALESCE(SUM((r.data->>'total_amount')::numeric), 0) as "totalSpending"
+          COALESCE(d.name, 'Chưa phân phòng ban') as "departmentName", 
+          COALESCE(SUM((COALESCE(r.data->>'budget_amount', r.data->>'total_amount', '0'))::numeric), 0) as "totalSpending"
         FROM records r
-        JOIN users u ON r.created_by = u.id
-        JOIN departments d ON u.department_id = d.id
+        JOIN users u ON r.created_by_id = u.id
+        LEFT JOIN departments d ON u.department_id = d.id
         WHERE r.entity_id = 1
         GROUP BY d.name
         ORDER BY "totalSpending" DESC;
       `);
 
-      // Xử lý kiểu dữ liệu BigInt/Decimal trả về từ raw query của PostgreSQL sang dạng Number/String
       return result.map((item) => ({
         departmentName: item.departmentName,
         totalSpending: Number(item.totalSpending),

@@ -187,42 +187,57 @@ export class RecordsService {
       throw new NotFoundException('Không tìm thấy Biểu mẫu (Entity).');
 
     const fields = await this.prisma.fieldRegistry.findMany({
-      where: { tenantId: (entity as any).tenantId } as any,
+      where: { tenantId } as any,
     });
 
-    const entityFields = fields.filter(
-      (f) => (f.config as any)?.entityId === entity.id,
-    );
+    const activeInstance = await this.prisma.entityVersion.findFirst({
+      where: { entityId: entity.id, tenantId } as any,
+    });
 
+    // 1. Validate và tính toán công thức dữ liệu động
     const cleanData = this.dynamicValidator.validateAndSanitize(
-      entityFields as any,
+      fields as any,
       dto.data,
     );
 
-    const finalData = this.formulaEngine.calculate(
-      entityFields as any,
-      cleanData,
-    );
+    const finalData = this.formulaEngine.calculate(fields as any, cleanData);
 
-    let recordCode: string | null = null;
-    if (entity.autoCodePattern) {
-      const recordCount = await this.prisma.record.count({
-        where: { entityId: entity.id } as any,
-      });
-      recordCode = this.generateRecordCode(
-        entity.autoCodePattern,
-        recordCount + 1,
-      );
-    }
-
-    const businessCode = recordCode || `CODE-${Date.now()}`;
-    const generatedTitle = this.generateRecordTitle(
-      (entity as any).titlePattern,
-      finalData,
-      businessCode,
-    );
-
+    // 2. Chạy transaction nguyên tử
     return this.prisma.$transaction(async (tx) => {
+      let recordCode: string | null = null;
+
+      // === BẢN VÁ: SINH MÃ SỐ ĐA THUÊ BAO AN TOÀN NGUYÊN TỬ (ANTI-RACE CONDITION) === [1]
+      if (entity.autoCodePattern) {
+        const counter = await tx.sequenceCounter.upsert({
+          where: {
+            tenantId_code: {
+              tenantId,
+              code: entity.code,
+            },
+          } as any,
+          update: {
+            lastVal: { increment: 1 }, // Tăng tự động an toàn ở mức Database Engine
+          },
+          create: {
+            tenantId,
+            code: entity.code,
+            lastVal: 1,
+          },
+        });
+
+        recordCode = this.generateRecordCode(
+          entity.autoCodePattern,
+          counter.lastVal,
+        );
+      }
+
+      const businessCode = recordCode || `CODE-${Date.now()}`;
+      const generatedTitle = this.generateRecordTitle(
+        (entity as any).titlePattern,
+        finalData,
+        businessCode,
+      );
+
       const validVersionId = await this.ensureEntityVersionExists(
         tx,
         tenantId,
@@ -245,7 +260,7 @@ export class RecordsService {
         tenantId,
         newRecord.id,
         entity.id,
-        entityFields,
+        fields,
         finalData,
       );
 

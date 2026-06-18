@@ -15,7 +15,6 @@ export class EmailProcessor extends WorkerHost {
   async process(job: Job<any, any, string>): Promise<any> {
     this.logger.log(`[Email Worker] Bắt đầu xử lý Job gửi email: ${job.name}`);
 
-    // Dựa vào tên Job để gọi đúng hàm gửi email tương ứng
     switch (job.name) {
       case 'send-new-approval-request':
         const {
@@ -32,7 +31,37 @@ export class EmailProcessor extends WorkerHost {
           initiatorName,
           stepName,
         );
-      // Có thể thêm các case khác như: 'send-workflow-completed'...
+
+      // BẢN VÁ: Đăng ký đầy đủ Case xử lý cho Thông báo hoàn tất quy trình [1]
+      case 'send-workflow-completed':
+        const {
+          recipientEmail: completeEmail,
+          recipientName: completeName,
+          recordCode: completeCode,
+          status,
+        } = job.data;
+        return this.mailerService.sendWorkflowCompleted(
+          completeEmail,
+          completeName,
+          completeCode,
+          status,
+        );
+
+      // BẢN VÁ: Đăng ký đầy đủ Case xử lý cho Email tùy biến của Automation Engine [1]
+      case 'send-dynamic-email':
+        const {
+          recipientEmail: dynamicEmail,
+          subject,
+          body,
+          recordData,
+        } = job.data;
+        return this.mailerService.sendDynamicEmail(
+          dynamicEmail,
+          subject,
+          body,
+          recordData,
+        );
+
       default:
         this.logger.warn(
           `[Email Worker] Không tìm thấy xử lý cho Job: ${job.name}`,
