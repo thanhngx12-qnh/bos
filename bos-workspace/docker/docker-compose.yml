@@ -1,4 +1,5 @@
 version: "3.8"
+# File: docker/docker-compose.yml
 services:
   postgres:
     image: postgres:15-alpine
@@ -20,6 +21,26 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    restart: always
+
+  # --- DỊCH VỤ MỚI: PROMETHEUS (Thu thập số liệu) ---
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: bos_prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml # Map file cấu hình vào container
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+    restart: always
+
+  # --- DỊCH VỤ MỚI: GRAFANA (Vẽ biểu đồ Dashboard) ---
+  grafana:
+    image: grafana/grafana:latest
+    container_name: bos_grafana
+    ports:
+      - "3001:3000" # Mở cổng 3001 trên máy của bạn
     restart: always
 
 volumes:

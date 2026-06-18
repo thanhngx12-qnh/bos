@@ -1,0 +1,12 @@
+# File: docker/prometheus.yml
+
+global:
+  scrape_interval: 15s # Tần suất "cào" dữ liệu (15 giây 1 lần)
+
+scrape_configs:
+  - job_name: "nestjs-app"
+    # Do các container chạy trong cùng một network Docker,
+    # Prometheus sẽ dùng tên service "backend-nestjs" để tìm địa chỉ IP
+    static_configs:
+      # SỬA HOST.DOCKER.INTERNAL THÀNH TÊN SERVICE CỦA BACKEND TRONG DOCKER-COMPOSE
+      - targets: ["host.docker.internal:3000"]
