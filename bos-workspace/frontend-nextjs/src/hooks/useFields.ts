@@ -1,7 +1,9 @@
 // File: src/hooks/useFields.ts
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fieldService, CreateFieldRequest } from "@/services/field";
+import { useBuilderStore } from "@/hooks/useBuilderStore";
 import { message } from "antd";
+import { useMemo } from "react"; // 🛑 IMPORT: Dùng useMemo để ổn định tham chiếu [2]
 
 export function useFields(entityId?: number) {
   const queryClient = useQueryClient();
@@ -11,6 +13,18 @@ export function useFields(entityId?: number) {
     queryFn: () => fieldService.findAllByEntity(entityId!),
     enabled: !!entityId,
   });
+
+  // 🛑 CHỐT CHẶN V8.1: Sử dụng useMemo giữ nguyên tham chiếu mảng tránh vòng lặp vô hạn [2]
+  const fieldsArray = useMemo(() => {
+    const rawFields = fieldsQuery.data;
+    return Array.isArray(rawFields)
+      ? rawFields
+      : (rawFields as any)?.data && Array.isArray((rawFields as any).data)
+        ? (rawFields as any).data
+        : (rawFields as any)?.items && Array.isArray((rawFields as any).items)
+          ? (rawFields as any).items
+          : [];
+  }, [fieldsQuery.data]);
 
   const createFieldMutation = useMutation({
     mutationFn: fieldService.create,
@@ -42,7 +56,6 @@ export function useFields(entityId?: number) {
     },
   });
 
-  // 🛑 TRANSACTION SYNC MUTATION: Bộ đồng bộ nguyên tử hóa (Unit of Work Sync)
   const syncFieldsMutation = useMutation({
     mutationFn: async ({
       added,
@@ -53,44 +66,31 @@ export function useFields(entityId?: number) {
       updated: Record<number, any>;
       deleted: number[];
     }) => {
-      // 1. Thực thi xóa tuần tự (DELETE)
       for (const id of deleted) {
-        console.log(`[DEBUG-BOS-SYNC] Gửi API DELETE trường ID: ${id}`);
         await fieldService.remove(id);
       }
 
-      // 2. Thực thi tạo mới tuần tự (POST)
       for (const field of added) {
-        // Loại bỏ khóa ID tạm dạng string 'temp_' trước khi đẩy lên DB
         const { id, ...payload } = field;
         const formattedPayload = {
           ...payload,
-          entityId: Number(entityId), // Ép kiểu an toàn khớp cột Database
+          entityId: Number(entityId),
         };
-        console.log(
-          "[DEBUG-BOS-SYNC] Gửi API POST tạo trường:",
-          formattedPayload,
-        );
         await fieldService.create(formattedPayload as any);
       }
 
-      // 3. Thực thi cập nhật tuần tự (PATCH - dùng cho cập nhật thuộc tính và vị trí kéo thả sortOrder)
       for (const [idStr, payload] of Object.entries(updated)) {
         const id = Number(idStr);
-        console.log(
-          `[DEBUG-BOS-SYNC] Gửi API PATCH cập nhật trường ID: ${id}`,
-          payload,
-        );
         await fieldService.update(id, payload as any);
       }
     },
     onSuccess: () => {
       message.success("Đồng bộ cấu hình trường dữ liệu thành công!");
-      // Invalidate các queries liên quan để ép Client tải lại bộ dữ liệu sạch mới nhất từ Database
       queryClient.invalidateQueries({
         queryKey: ["entity-detail", String(entityId)],
       });
       queryClient.invalidateQueries({ queryKey: ["entities"] });
+      queryClient.invalidateQueries({ queryKey: ["fields", entityId] });
     },
     onError: (error: any) => {
       const backendError = error.response?.data?.message;
@@ -102,7 +102,7 @@ export function useFields(entityId?: number) {
   });
 
   return {
-    fields: fieldsQuery.data || [],
+    fields: fieldsArray, // Mảng phẳng ổn định tuyệt đối
     isLoading: fieldsQuery.isLoading,
     refetch: fieldsQuery.refetch,
     createField: createFieldMutation.mutateAsync,
@@ -110,7 +110,6 @@ export function useFields(entityId?: number) {
     removeField: removeFieldMutation.mutateAsync,
     isRemoving: removeFieldMutation.isPending,
 
-    // Xuất bản tính năng đồng bộ lưu thay đổi
     syncFields: syncFieldsMutation.mutateAsync,
     isSyncing: syncFieldsMutation.isPending,
   };

@@ -38,7 +38,8 @@ import {
 import { useRouter } from "next/navigation";
 import dayjs from "dayjs";
 import { useEntityDetail } from "@/hooks/useEntityDetail";
-import { useRecords } from "@/hooks/useRecords";
+import { useRecords, RecordItem } from "@/hooks/useRecords";
+import { useFields } from "@/hooks/useFields"; // 🛑 IMPORT: Nạp hook lấy cấu trúc trường độc lập [2]
 import { useWorkflow } from "@/hooks/useWorkflow";
 
 const { Title, Text, Paragraph } = Typography;
@@ -52,7 +53,7 @@ export default function EntityDataPage({ params }: PageProps) {
   const { id: entityId } = React.use(params);
   const router = useRouter();
 
-  // States quản trị phân trang & lọc dữ liệu từ Server-side
+  // States quản trị phân trang, tìm kiếm & sắp xếp từ Server-side
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(10);
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -61,17 +62,22 @@ export default function EntityDataPage({ params }: PageProps) {
     undefined,
   );
 
-  // States quản lý Drawer Form nhập liệu & Thu phóng Toàn màn hình (Full Screen)
+  // States quản lý Drawer Form nhập liệu & Chế độ Full Screen
   const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
-  const [isFullScreen, setIsFullScreen] = useState<boolean>(false); // Lưu trạng thái Full Screen [2]
-  const [editingRecord, setEditingRecord] = useState<any>(null);
+  const [isFullScreen, setIsFullScreen] = useState<boolean>(false);
+  const [editingRecord, setEditingRecord] = useState<RecordItem | null>(null);
 
   const [recordForm] = Form.useForm();
 
-  // 1. Tải cấu trúc trường thông tin Metadata của thực thể
+  // 1. Tải thông tin chung của thực thể
   const { entity, isLoading: isLoadingEntity } = useEntityDetail(entityId);
 
-  // 2. Tải danh sách bản ghi dữ liệu thực tế (dynamic records) liên quan
+  // 🛑 CHỐT CHẶN KIẾN TRÚC V8.1: Tải độc lập mảng Fields từ DB [2]
+  const { fields: entityFields, isLoading: isLoadingFields } = useFields(
+    Number(entityId),
+  );
+
+  // 2. Tải danh sách bản ghi dữ liệu thực tế
   const {
     records,
     meta,
@@ -157,21 +163,19 @@ export default function EntityDataPage({ params }: PageProps) {
     }
   };
 
-  // Mở Form tạo mới bản ghi trống
   const handleCreateOpen = () => {
     setEditingRecord(null);
-    setIsFullScreen(false); // Reset kích thước Drawer về mặc định
+    setIsFullScreen(false);
     recordForm.resetFields();
     setIsDrawerOpen(true);
   };
 
-  // Nạp dữ liệu bản ghi cũ và parse ngày tháng dayjs cho Form sửa
-  const handleEditOpen = (record: any) => {
+  const handleEditOpen = (record: RecordItem) => {
     setEditingRecord(record);
-    setIsFullScreen(false); // Reset kích thước Drawer về mặc định
+    setIsFullScreen(false);
     const formValues: Record<string, any> = {};
 
-    (entity?.fields || []).forEach((field: any) => {
+    (entityFields || []).forEach((field: any) => {
       const val = record.data?.[field.code];
       if (field.type === "DATE" && val) {
         formValues[field.code] = dayjs(val);
@@ -190,12 +194,11 @@ export default function EntityDataPage({ params }: PageProps) {
     } catch (e) {}
   };
 
-  // Xử lý gửi Form tạo/sửa bản ghi an toàn
   const handleFormSubmit = async (values: any) => {
     try {
       const formattedData: Record<string, any> = {};
 
-      (entity?.fields || []).forEach((field: any) => {
+      (entityFields || []).forEach((field: any) => {
         const val = values[field.code];
         if (field.type === "DATE" && val) {
           formattedData[field.code] = val.format("YYYY-MM-DD");
@@ -215,8 +218,8 @@ export default function EntityDataPage({ params }: PageProps) {
     } catch (e) {}
   };
 
-  // ĐỒNG BỘ ĐẦU CỘT DỰA TRÊN METADATA (Metadata-Driven Columns) [2]
-  const dynamicColumns = (entity?.fields || []).map((field: any) => ({
+  // 🛑 ĐỒNG BỘ ĐẦU CỘT DỰA TRÊN METADATA DÒNG (V8.1)
+  const dynamicColumns = (entityFields || []).map((field: any) => ({
     title: field.name,
     dataIndex: ["data", field.code],
     key: field.code,
@@ -236,7 +239,7 @@ export default function EntityDataPage({ params }: PageProps) {
         case "SELECT":
           if (field.options?.multiple && Array.isArray(value)) {
             return (
-              <Space size={2}>
+              <Space size={2} wrap>
                 {value.map((v: any) => {
                   const choice = (field.options?.choices || []).find(
                     (c: any) => c.value === v,
@@ -267,22 +270,35 @@ export default function EntityDataPage({ params }: PageProps) {
 
   const columns = [
     {
-      title: "Mã bản ghi",
+      title: "Mã nghiệp vụ",
       dataIndex: "recordCode",
       key: "recordCode",
+      fixed: "left" as const,
+      width: 140,
       sorter: true,
       render: (code: string, record: any) => (
         <Text strong style={{ color: "#1677ff" }}>
-          {code || `#${record.id}`}
+          {record.recordCode || `#${record.id}`}
         </Text>
+      ),
+    },
+    {
+      title: "Tiêu đề bản ghi (Title)",
+      dataIndex: "title",
+      key: "title",
+      fixed: "left" as const,
+      width: 240,
+      render: (text: string, record: any) => (
+        <Text strong>{record.title || `Bản ghi #${record.id}`}</Text>
       ),
     },
     ...dynamicColumns,
     {
       title: "Hành động",
       key: "actions",
+      fixed: "right" as const,
       width: 130,
-      render: (_: any, record: any) => (
+      render: (_: any, record: RecordItem) => (
         <Space size="small">
           <Button
             type="text"
@@ -305,7 +321,6 @@ export default function EntityDataPage({ params }: PageProps) {
     },
   ];
 
-  // Sắp xếp và chuyển đổi Steps thành dòng thời gian phê duyệt
   const stepTimelineItems = (pipelineSteps || [])
     .sort((a: any, b: any) => a.orderIndex - b.orderIndex)
     .map((step: any) => {
@@ -356,7 +371,7 @@ export default function EntityDataPage({ params }: PageProps) {
       };
     });
 
-  if (isLoadingEntity) {
+  if (isLoadingEntity || isLoadingFields) {
     return (
       <div
         style={{
@@ -368,7 +383,7 @@ export default function EntityDataPage({ params }: PageProps) {
       >
         <Space orientation="vertical" align="center">
           <Spin size="large" />
-          <Text type="secondary">Đang nạp bộ Grid Dữ liệu động...</Text>
+          <Text type="secondary">Đang nạp cấu trúc lưới danh sách...</Text>
         </Space>
       </div>
     );
@@ -392,11 +407,11 @@ export default function EntityDataPage({ params }: PageProps) {
           />
           <div>
             <Title level={3} style={{ margin: 0 }}>
-              Dữ liệu: {entity?.name}
+              Quản lý dữ liệu: {entity?.name}
             </Title>
             <Paragraph type="secondary" style={{ marginBottom: 0 }}>
               Mã code: <strong>{entity?.code}</strong> | Quản trị vận hành dữ
-              liệu dựa trên cấu hình Metadata.
+              liệu biểu mẫu trên nền tảng dynamic aPaaS.
             </Paragraph>
           </div>
         </Space>
@@ -449,10 +464,10 @@ export default function EntityDataPage({ params }: PageProps) {
             pageSizeOptions: ["10", "20", "50"],
             showTotal: (total) => `Tổng số ${total} bản ghi`,
           }}
+          scroll={{ x: "max-content" }}
         />
       </Card>
 
-      {/* DRAWER NHẬP LIỆU ĐỘNG (DYNAMIC FORM + WORKFLOW TIMELINE + FULL SCREEN MODE) [2] */}
       <Drawer
         title={
           <Space>
@@ -464,9 +479,8 @@ export default function EntityDataPage({ params }: PageProps) {
         }
         open={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}
-        width={isFullScreen ? "100vw" : 850} // Thay đổi chiều rộng động dựa trên trạng thái Full Screen [2]
+        width={isFullScreen ? "100vw" : 850}
         destroyOnHidden
-        // Tích hợp Nút Thu phóng Toàn màn hình vào góc trên bên phải của Drawer Header [2]
         extra={
           <Button
             type="text"
@@ -490,9 +504,8 @@ export default function EntityDataPage({ params }: PageProps) {
           onFinish={handleFormSubmit}
           requiredMark={true}
         >
-          {/* Tận dụng tối đa Lưới của AntD để co giãn 2 cột mượt mà khi Full Screen [2] */}
           <Row gutter={24}>
-            {/* CỘT TRÁI (60%): DYNAMIC FORM RENDERER [2] */}
+            {/* CỘT TRÁI (60%): DYNAMIC FORM RENDERER */}
             <Col
               xs={24}
               lg={isFullScreen ? 16 : 14}
@@ -503,7 +516,7 @@ export default function EntityDataPage({ params }: PageProps) {
                 Metadata.
               </Paragraph>
 
-              {(entity?.fields || []).map((field: any) => {
+              {(entityFields || []).map((field: any) => {
                 const getFieldHelperText = () => {
                   const parts = [];
                   if (field.type === "NUMBER") {
@@ -620,7 +633,7 @@ export default function EntityDataPage({ params }: PageProps) {
               })}
             </Col>
 
-            {/* CỘT PHẢI (40%): SƠ ĐỒ TIẾN TRÌNH LUỒNG PHÊ DUYỆT ĐỘNG (WORKFLOW VIEW) */}
+            {/* CỘT PHẢI (40%): SƠ ĐỒ TIẾN TRÌNH LUỒNG PHÊ DUYỆT ĐỘNG */}
             <Col xs={24} lg={isFullScreen ? 8 : 10}>
               <div
                 style={{

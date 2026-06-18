@@ -1,7 +1,7 @@
 // File: src/components/metadata/WorkflowTab.tsx
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react"; // 🛑 IMPORT: useMemo [2]
 import {
   Row,
   Col,
@@ -83,9 +83,17 @@ export default function WorkflowTab({ entityId, entity }: WorkflowTabProps) {
     isUpdatingStatus,
   } = useWorkflow(activeVersionId, workflowId, entityId);
 
-  const versions = Array.isArray(activeWorkflowDetail?.versions)
-    ? activeWorkflowDetail.versions
-    : [];
+  // 🛑 CHỐT CHẶN PHÒNG VỆ: Ổn định hóa mảng versions bằng useMemo [2]
+  const versions = useMemo(() => {
+    return Array.isArray(activeWorkflowDetail?.versions)
+      ? activeWorkflowDetail.versions
+      : [];
+  }, [activeWorkflowDetail?.versions]);
+
+  // 🛑 CHỐT CHẶN PHÒNG VỆ: Khóa chuỗi băm phiên bản để useEffect so sánh giá trị nguyên thủy [2]
+  const versionsHash = useMemo(() => {
+    return versions.map((v: any) => v.id).join(",");
+  }, [versions]);
 
   useEffect(() => {
     if (!isLoadingWorkflows) {
@@ -99,12 +107,24 @@ export default function WorkflowTab({ entityId, entity }: WorkflowTabProps) {
         ) {
           setActiveVersionId(sortedVersions[0].id);
         }
-        setHasNoWorkflow(false);
+
+        // CHỐT CHẶN AN TOÀN: Chỉ cập nhật State khi giá trị thực sự thay đổi [2]
+        if (hasNoWorkflow) {
+          setHasNoWorkflow(false);
+        }
       } else if (!workflowId) {
-        setHasNoWorkflow(true);
+        if (!hasNoWorkflow) {
+          setHasNoWorkflow(true);
+        }
       }
     }
-  }, [workflowId, versions, activeVersionId, isLoadingWorkflows]);
+  }, [
+    workflowId,
+    versionsHash,
+    activeVersionId,
+    isLoadingWorkflows,
+    hasNoWorkflow,
+  ]);
 
   // States quản lý Modal
   const [isStepModalOpen, setIsEntityModalOpen] = useState(false);
@@ -196,7 +216,6 @@ export default function WorkflowTab({ entityId, entity }: WorkflowTabProps) {
     } catch (e) {}
   };
 
-  // 🛑 KHẮC PHỤC: Truyền rõ ID động khi thực thi Mutation tránh lỗi bám dính undefined scope [2]
   const handleCloneVersion = async () => {
     try {
       const newVersion = await cloneVersion({
@@ -209,7 +228,6 @@ export default function WorkflowTab({ entityId, entity }: WorkflowTabProps) {
     } catch (e) {}
   };
 
-  // 🛑 KHẮC PHỤC: Truyền rõ ID động khi thực thi Mutation tránh lỗi bám dính undefined scope [2]
   const handlePublishVersion = async () => {
     try {
       await updateVersionStatus({
@@ -220,7 +238,6 @@ export default function WorkflowTab({ entityId, entity }: WorkflowTabProps) {
     } catch (e) {}
   };
 
-  // 🛑 KHẮC PHỤC: Truyền rõ ID động khi thực thi Mutation tránh lỗi bám dính undefined scope [2]
   const handleArchiveVersion = async () => {
     try {
       await updateVersionStatus({

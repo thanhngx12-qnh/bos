@@ -30,7 +30,7 @@ import { arrayMove } from "@dnd-kit/sortable";
 
 import { useBuilderStore } from "@/hooks/useBuilderStore";
 import { useEntityDetail } from "@/hooks/useEntityDetail";
-import { useFields } from "@/hooks/useFields";
+import { useFields } from "@/hooks/useFields"; // 🛑 IMPORT: Nạp hook lấy cấu trúc trường độc lập [2]
 import SettingsTab from "@/components/metadata/SettingsTab";
 import Toolbox from "@/components/metadata/Toolbox";
 import Canvas from "@/components/metadata/Canvas";
@@ -73,6 +73,7 @@ export default function BuilderPage({ params }: PageProps) {
     clearStore,
   } = useBuilderStore();
 
+  // 1. Tải thông tin chung của Thực thể
   const {
     entity: fetchedEntity,
     isLoading: isFetchingEntity,
@@ -80,15 +81,27 @@ export default function BuilderPage({ params }: PageProps) {
     isUpdating,
   } = useEntityDetail(entityId);
 
-  // Gọi Custom Hook thực thi đồng bộ hàng loạt (Unit of Work Sync)
-  const { syncFields, isSyncing } = useFields(Number(entityId));
+  // 🛑 2. CHỐT CHẶN KIẾN TRÚC V8.1: Gọi đồng bộ danh sách trường dữ liệu động và hàm Lưu hàng loạt [2]
+  const {
+    fields: dbFields,
+    isLoading: isLoadingFields,
+    syncFields,
+    isSyncing,
+  } = useFields(Number(entityId));
 
+  // 3. Đồng bộ hóa thông tin Thực thể vào Zustand Store khi tải xong
   useEffect(() => {
     if (fetchedEntity) {
       setEntity(fetchedEntity);
-      initializeFields(fetchedEntity.fields || []);
     }
-  }, [fetchedEntity, setEntity, initializeFields]);
+  }, [fetchedEntity, setEntity]);
+
+  // 🛑 4. ĐỒNG BỘ HOÀN HẢO V8.1: Nạp mảng trường dynamic từ DB độc lập vào Zustand Store để thiết kế [2]
+  useEffect(() => {
+    if (dbFields) {
+      initializeFields(dbFields);
+    }
+  }, [dbFields, initializeFields]);
 
   useEffect(() => {
     return () => {
@@ -151,7 +164,8 @@ export default function BuilderPage({ params }: PageProps) {
     }
   };
 
-  if (isFetchingEntity) {
+  // Khóa màn hình chờ thông minh: Chỉ mở khóa khi cả Entity và Fields đều nạp xong [2]
+  if (isFetchingEntity || isLoadingFields) {
     return (
       <div
         style={{
@@ -212,7 +226,6 @@ export default function BuilderPage({ params }: PageProps) {
         </span>
       ),
       children: (
-        // ĐẤU NỐI TRỰC TIẾP TAB WORKFLOW MỚI REFACTOR
         <WorkflowTab entityId={Number(entityId)} entity={fetchedEntity} />
       ),
     },
