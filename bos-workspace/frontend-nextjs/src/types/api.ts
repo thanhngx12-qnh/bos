@@ -29,7 +29,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Tạo mới phòng ban */
+        /** Tạo mới phòng ban (Tự động tính toán Closure Table) */
         post: operations["DepartmentsController_create"];
         delete?: never;
         options?: never;
@@ -44,8 +44,25 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Lấy toàn bộ sơ đồ tổ chức (Dạng Cây) */
+        /** Lấy sơ đồ tổ chức (Dạng Cây - Đã lọc các phòng ban bị xóa) */
         get: operations["DepartmentsController_getTree"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/departments/{id}/descendants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lấy toàn bộ phòng ban con/cháu/chắt... (tốc độ < 1ms) */
+        get: operations["DepartmentsController_getDescendants"];
         put?: never;
         post?: never;
         delete?: never;
@@ -65,11 +82,11 @@ export interface paths {
         get: operations["DepartmentsController_findOne"];
         put?: never;
         post?: never;
-        /** Xóa phòng ban */
+        /** Xóa mềm phòng ban (Soft Delete) */
         delete: operations["DepartmentsController_remove"];
         options?: never;
         head?: never;
-        /** Cập nhật phòng ban */
+        /** Cập nhật phòng ban (Cấm sửa phòng ban cha) */
         patch: operations["DepartmentsController_update"];
         trace?: never;
     };
@@ -262,7 +279,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Lấy danh sách bản ghi phân trang, tìm kiếm và lọc động vạn năng */
+        /** Lấy danh sách bản ghi phân trang, tìm kiếm và lọc động vạn năng (Áp dụng RLS) */
         get: operations["RecordsController_findAllByEntity"];
         put?: never;
         /** Thêm mới một bản ghi (Submit Form) */
@@ -829,6 +846,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tasks/my-tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lấy danh sách nhiệm vụ của tôi (Có phân trang & lọc trạng thái) */
+        get: operations["TasksController_findMyTasks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/analytics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Thống kê KPI xử lý nhiệm vụ toàn công ty (Dành cho Quản lý) */
+        get: operations["TasksController_getAnalytics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Hoàn thành nhiệm vụ (Tự động tính thời gian SLA) */
+        post: operations["TasksController_completeTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{id}/delegate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ủy quyền nhiệm vụ cho người khác */
+        post: operations["TasksController_delegateTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lấy toàn bộ danh sách Task (Super Admin) */
+        get: operations["TasksController_findAll"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -851,11 +953,6 @@ export interface components {
              * @example Phòng Kỹ thuật
              */
             name?: string;
-            /**
-             * @description ID của phòng ban cha (nếu có)
-             * @example 1
-             */
-            parentId?: number;
         };
         CreateRoleDto: {
             /**
@@ -1356,6 +1453,16 @@ export interface components {
              */
             name?: string;
         };
+        CompleteTaskDto: {
+            /** @description Ý kiến khi hoàn thành/xử lý nhiệm vụ */
+            comment?: string;
+        };
+        DelegateTaskDto: {
+            /** @description ID người được ủy quyền */
+            assigneeId?: number;
+            /** @description Lý do ủy quyền */
+            reason?: string;
+        };
     };
     responses: never;
     parameters: never;
@@ -1408,6 +1515,25 @@ export interface operations {
             query?: never;
             header?: never;
             path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    DepartmentsController_getDescendants: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -2874,6 +3000,110 @@ export interface operations {
         requestBody?: never;
         responses: {
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    TasksController_findMyTasks: {
+        parameters: {
+            query?: {
+                page?: number;
+                limit?: number;
+                status?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    TasksController_getAnalytics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    TasksController_completeTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompleteTaskDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    TasksController_delegateTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DelegateTaskDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    TasksController_findAll: {
+        parameters: {
+            query: {
+                page: number;
+                limit: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };

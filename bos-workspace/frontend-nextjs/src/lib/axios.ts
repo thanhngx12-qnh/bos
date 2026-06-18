@@ -8,7 +8,7 @@ const axiosInstance = axios.create({
   },
 });
 
-// Interceptor tự động đính kèm Authorization Token và x-tenant-id cho mọi request từ Client
+// Interceptor tự động bắt Token và Tenant ID đồng bộ từ Zustand Auth Store hoặc LocalStorage
 axiosInstance.interceptors.request.use(
   (config) => {
     if (typeof window !== "undefined") {
@@ -25,6 +25,21 @@ axiosInstance.interceptors.request.use(
     return config;
   },
   (error) => {
+    return Promise.reject(error);
+  },
+);
+
+// Interceptor phản hồi: Tự động điều hướng về /login khi Token hết hạn (401)
+axiosInstance.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 401) {
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("token");
+        localStorage.removeItem("tenant_id");
+        window.location.href = "/login";
+      }
+    }
     return Promise.reject(error);
   },
 );
