@@ -67,18 +67,16 @@ export class FormulaParser {
       if (/^[0-9]+(?:\.[0-9]+)?$/.test(token)) {
         stack.push(Number(token));
       } else if (/^[a-z_][a-z0-9_]*$/i.test(token)) {
-        // --- NÂNG CẤP CHUYÊN SÂU: TỰ ĐỘNG CHUYỂN NGÀY THÁNG SANG MILISECONDS ---
         const rawVal = context[token];
         let val = 0;
 
         if (rawVal !== undefined && rawVal !== null) {
-          // Kiểm tra nếu giá trị là chuỗi ngày tháng hợp lệ (ISO Date) chứ không phải là số thuần
           if (
             typeof rawVal === 'string' &&
             !isNaN(Date.parse(rawVal)) &&
             isNaN(Number(rawVal))
           ) {
-            val = Date.parse(rawVal); // Tự động quy đổi sang số miliseconds (Ví dụ: 1781510400000)
+            val = Date.parse(rawVal);
           } else {
             val = Number(rawVal || 0);
           }

@@ -33,6 +33,7 @@ import { OutboxModule } from './modules/outbox/outbox.module';
 import { SearchModule } from './modules/search/search.module';
 import { CoreEnginesModule } from './core/engines/core-engines.module';
 import { TasksModule } from './modules/tasks/tasks.module';
+import { AutomationModule } from './modules/automation/automation.module';
 
 @Module({
   imports: [
@@ -71,6 +72,7 @@ import { TasksModule } from './modules/tasks/tasks.module';
     SearchModule,
     CoreEnginesModule,
     TasksModule,
+    AutomationModule,
   ],
   providers: [
     {

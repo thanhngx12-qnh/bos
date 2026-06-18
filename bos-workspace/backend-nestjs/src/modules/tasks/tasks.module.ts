@@ -2,11 +2,12 @@
 import { Module, Global } from '@nestjs/common';
 import { TasksService } from './tasks.service';
 import { TasksController } from './tasks.controller';
+import { TasksScheduler } from './tasks.scheduler'; // <-- IMPORT MỚI
 
-@Global() // Để WorkflowsService dễ dàng gọi đến nếu cần
+@Global()
 @Module({
   controllers: [TasksController],
-  providers: [TasksService],
+  providers: [TasksService, TasksScheduler], // <-- KÍCH HOẠT SCHEDULER VÀO ĐÂY
   exports: [TasksService],
 })
 export class TasksModule {}

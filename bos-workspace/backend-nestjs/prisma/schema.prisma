@@ -609,28 +609,32 @@ model WorkflowInstance {
   @@map("workflow_instances")
 }
 
+// Trong file bos-workspace/backend-nestjs/prisma/schema.prisma
+
 model Task {
   id                      Int       @id @default(autoincrement())
   tenantId                Int       @map("tenant_id")
-  instanceId              Int       @map("instance_id")
-  stepId                  Int       @map("step_id")
+  
+  // SỬA TẠI ĐÂY: Thêm dấu ? để cho phép NULL
+  instanceId              Int?      @map("instance_id")
+  stepId                  Int?      @map("step_id")
   
   assignmentStrategy      String    @map("assignment_strategy")
   assignmentData          Json      @map("assignment_data")
   
-  assigneeType            String?   @map("assignee_type") // USER, ROLE
-  assigneeId              Int?      @map("assignee_id")   // userId hoặc roleId
+  assigneeType            String?   @map("assignee_type") 
+  assigneeId              Int?      @map("assignee_id")   
   
   status                  String    @default("PENDING")
   
-  estimatedCompletionTime DateTime? @map("estimated_completion_time")
-  actualCompletionTime    DateTime? @map("actual_completion_time")
-  completionTimeSeconds   Int?      @map("completion_time_seconds")
+  estimatedCompletionTime DateTime? @map("estimated_completion_time") 
+  actualCompletionTime    DateTime? @map("actual_completion_time")    
+  completionTimeSeconds   Int?      @map("completion_time_seconds")   
   
   createdAt               DateTime  @default(now()) @map("created_at")
   updatedAt               DateTime  @updatedAt @map("updated_at")
 
-  instance                WorkflowInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  instance                WorkflowInstance? @relation(fields: [instanceId], references: [id], onDelete: Cascade)
   
   @@index([tenantId, assigneeId, status])
   @@map("tasks")
