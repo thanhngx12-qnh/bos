@@ -14,8 +14,9 @@ import { Queue } from 'bullmq';
 import { NotificationsService } from '../notifications/notifications.service';
 import { paginate, PaginateOptions } from '../../prisma/prisma.helper';
 import { ConditionEvaluatorService } from '../../core/engines/condition-evaluator.service';
-import { TasksService } from '../tasks/tasks.service'; // <-- IMPORT TASK SERVICE
-import { OnEvent } from '@nestjs/event-emitter'; // <-- IMPORT EVENT LISTENER
+import { TasksService } from '../tasks/tasks.service';
+import { OnEvent } from '@nestjs/event-emitter';
+import { ReferenceResolverService } from '../../core/engines/reference-resolver.service';
 
 @Injectable()
 export class WorkflowsService {
@@ -23,7 +24,8 @@ export class WorkflowsService {
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
     private readonly conditionEvaluator: ConditionEvaluatorService,
-    private readonly tasksService: TasksService, // <-- INJECT TASK SERVICE LÕI
+    private readonly referenceResolver: ReferenceResolverService,
+    private readonly tasksService: TasksService,
     @InjectQueue('webhook-queue') private readonly webhookQueue: Queue,
   ) {}
 
@@ -287,7 +289,21 @@ export class WorkflowsService {
         } as any,
       });
 
-      // --- TÍCH HỢP TASK ENGINE: TỰ ĐỘNG GIAO VIỆC LẦN ĐẦU ---
+      const stepConfig: any = firstStep.permissions || {};
+      const assigneeExpression = stepConfig.assigneeExpression;
+
+      if (assigneeExpression) {
+        const resolvedUserIds = await this.referenceResolver.resolveCandidates(
+          assigneeExpression,
+          dto.recordId,
+          userId,
+        );
+        if (resolvedUserIds.length > 0) {
+          stepConfig.candidateUsers = resolvedUserIds;
+          firstStep.permissions = stepConfig;
+        }
+      }
+
       await this.tasksService.createTasksForStep(
         tx,
         (record as any).tenantId,
@@ -332,6 +348,9 @@ export class WorkflowsService {
     return instance;
   }
 
+  // ====================================================
+  // BẢN NÂNG CẤP HOÀN HẢO: ĐỒNG BỘ TRẠNG THÁI RECORD
+  // ====================================================
   async handleAction(
     instanceId: number,
     userId: number,
@@ -383,7 +402,7 @@ export class WorkflowsService {
       }
 
       const currentStepObj = transition.fromStep;
-      const nextStepObj = transition.toStep;
+      let nextStepObj = transition.toStep;
 
       const stepConfig: any = currentStepObj.permissions || {};
       const approverType = stepConfig.approverType || 'SINGLE';
@@ -444,8 +463,6 @@ export class WorkflowsService {
       let nextStepId: number | null = transition.toStepId;
 
       if (shouldTransition) {
-        // --- TASK ENGINE: HỦY BỎ CÁC TASK DƯ THỪA ---
-        // (Nếu duyệt đại diện OR-Gate, 1 người duyệt xong thì hủy task của những người kia)
         await this.tasksService.cancelPendingTasks(
           tx,
           instanceId,
@@ -495,8 +512,31 @@ export class WorkflowsService {
           } as any,
         });
 
-        // --- TÍCH HỢP TASK ENGINE: TỰ ĐỘNG GIAO VIỆC CHO TRẠM MỚI ---
+        // --- BẢN VÁ: ĐỒNG BỘ TRẠNG THÁI VỀ BẢNG RECORD ---
+        if (finalStatus === 'COMPLETED' || finalStatus === 'REJECTED') {
+          await tx.record.update({
+            where: { id: instance.recordId } as any,
+            data: { status: finalStatus } as any,
+          });
+        }
+
         if (finalStatus === 'IN_PROGRESS' && evaluatingStepObj) {
+          const nextStepConfig: any = evaluatingStepObj.permissions || {};
+          const nextAssigneeExpression = nextStepConfig.assigneeExpression;
+
+          if (nextAssigneeExpression) {
+            const resolvedUsers =
+              await this.referenceResolver.resolveCandidates(
+                nextAssigneeExpression,
+                instance.recordId,
+                (instance.record as any).createdById,
+              );
+            if (resolvedUsers.length > 0) {
+              nextStepConfig.candidateUsers = resolvedUsers;
+              evaluatingStepObj.permissions = nextStepConfig;
+            }
+          }
+
           await this.tasksService.createTasksForStep(
             tx,
             (instance as any).tenantId,
@@ -504,6 +544,8 @@ export class WorkflowsService {
             evaluatingStepObj,
             instance.record,
           );
+
+          nextStepObj = evaluatingStepObj;
         }
       }
 
@@ -660,7 +702,6 @@ export class WorkflowsService {
       `[Workflow Event Bus] Nhận tín hiệu Task ${payload.taskId} hoàn thành. Kích hoạt rà soát trạm ${payload.stepId}...`,
     );
 
-    // 1. Tải WorkflowInstance để kiểm tra
     const instance = await this.prisma.workflowInstance.findFirst({
       where: { id: payload.instanceId } as any,
       include: {
@@ -672,17 +713,14 @@ export class WorkflowsService {
 
     if (!instance || instance.status !== 'IN_PROGRESS') return;
 
-    // 2. Tìm trạm hiện tại
     const currentStep = instance.version.steps.find(
-      (s) => s.id === instance.currentStepId,
+      (s) => s.id === (instance as any).currentStepId,
     );
     if (!currentStep || currentStep.id !== payload.stepId) return;
 
-    // 3. Đọc cấu hình đồng thuận (ALL_OF / ANY_OF)
     const stepConfig: any = currentStep.permissions || {};
     const approverType = stepConfig.approverType || 'SINGLE';
 
-    // 4. Nếu là ALL_OF (Đồng thuận), kiểm tra xem TẤT CẢ các Task của trạm này đã PENDING = 0 chưa
     if (approverType === 'ALL_OF') {
       const pendingTasksCount = await this.prisma.task.count({
         where: {
@@ -696,13 +734,10 @@ export class WorkflowsService {
         console.log(
           `[Workflow Event Bus] Trạm ${currentStep.name} vẫn còn ${pendingTasksCount} task chưa hoàn thành. Chờ tiếp...`,
         );
-        return; // Chưa đủ người duyệt, thoát!
+        return;
       }
     }
 
-    // 5. Nếu đủ điều kiện (hoặc là ANY_OF), TỰ ĐỘNG CHỌN ĐƯỜNG NỐI MẶC ĐỊNH ĐỂ ĐI TIẾP
-    // Tạm thời giả định hệ thống lấy đường nối đầu tiên (transition Out) làm đường mặc định.
-    // *Lưu ý: Nếu có nhiều đường nối, sẽ cần Logic Engine phân tích.
     const transition = await this.prisma.workflowTransition.findFirst({
       where: { fromStepId: currentStep.id } as any,
     });
@@ -711,13 +746,11 @@ export class WorkflowsService {
       console.log(
         `[Workflow Event Bus] Đủ điều kiện đồng thuận! Tự động kích hoạt chuyển trạm...`,
       );
-      // Giả lập DTO để gọi lại hàm handleAction
       const actionDto: WorkflowActionDto = {
         transitionId: transition.id,
         comment: payload.comment || 'Tự động duyệt qua Task Engine',
       };
 
-      // Gọi lại hàm handleAction nội bộ để tái sử dụng logic (Lock, Skip, Notification, Webhook)
       await this.handleAction(payload.instanceId, payload.userId, actionDto);
     }
   }
