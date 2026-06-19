@@ -1,0 +1,702 @@
+// File: bos-workspace/backend-nestjs/prisma/schema.prisma
+
+generator client {
+provider = "prisma-client-js"
+previewFeatures = ["fullTextSearch"]
+}
+
+datasource db {
+provider = "postgresql"
+}
+
+// ==========================================
+// BLOCK 0: SAAS MULTI-TENANCY & IDENTITY
+// ==========================================
+model Tenant {
+id Int @id @default(autoincrement())
+name String
+code String @unique
+status String @default("ACTIVE")
+createdAt DateTime @default(now()) @map("created_at")
+updatedAt DateTime @updatedAt @map("updated_at")
+
+users User[]
+roles Role[]  
+ entities Entity[]
+records Record[]
+workflows Workflow[]
+attachments Attachment[]
+notifications Notification[]
+instances WorkflowInstance[]
+webhookEndpoints WebhookEndpoint[]  
+ systemAuditLogs SystemAuditLog[]
+calendars BusinessCalendar[]
+sequenceCounters SequenceCounter[]
+relations RecordRelation[]
+relationDefs RelationDefinition[]
+fieldRegistries FieldRegistry[]
+entityVersions EntityVersion[]
+printTemplates PrintTemplate[]
+eventDefs EventDefinition[]
+automationRules AutomationRule[]
+policies PermissionPolicy[]
+departments Department[]
+departmentClosure DepartmentClosure[]
+recordRevisions RecordRevision[]
+
+@@map("tenants")
+}
+
+// ==========================================
+// BLOCK 1: ORG STRUCTURE & SECURITY (RLS & CLOSURE)
+// ==========================================
+model Department {
+id Int @id @default(autoincrement())
+tenantId Int @map("tenant_id")
+name String
+parentId Int? @map("parent_id")
+deletedAt DateTime? @map("deleted_at")
+deletedById Int? @map("deleted_by_id")
+
+tenant Tenant @relation(fields: [tenantId], references: [id])
+parent Department? @relation("Hierarchy", fields: [tenantId, parentId], references: [tenantId, id])
+children Department[] @relation("Hierarchy")
+
+ancestors DepartmentClosure[] @relation("Descendant")
+descendants DepartmentClosure[] @relation("Ancestor")
+users User[]
+
+@@unique([tenantId, id])
+@@map("departments")
+}
+
+model DepartmentClosure {
+tenantId Int @map("tenant_id")
+ancestorId Int @map("ancestor_id")
+descendantId Int @map("descendant_id")
+depth Int
+
+tenant Tenant @relation(fields: [tenantId], references: [id])
+ancestor Department @relation("Ancestor", fields: [tenantId, ancestorId], references: [tenantId, id])
+descendant Department @relation("Descendant", fields: [tenantId, descendantId], references: [tenantId, id])
+
+@@id([tenantId, ancestorId, descendantId])
+@@map("department_closure")
+}
+
+model User {
+id Int @id @default(autoincrement())
+tenantId Int @map("tenant_id")
+email String  
+ password String
+fullName String @map("full_name")
+departmentId Int? @map("department_id")
+roleId Int? @map("role_id")
+status String @default("ACTIVE")
+userType String @default("INTERNAL") @map("user_type")
+createdAt DateTime @default(now()) @map("created_at")
+updatedAt DateTime @updatedAt @map("updated_at")
+
+tenant Tenant @relation(fields: [tenantId], references: [id])
+department Department? @relation(fields: [tenantId, departmentId], references: [tenantId, id])
+role Role? @relation(fields: [tenantId, roleId], references: [tenantId, id])
+
+instances WorkflowInstance[]
+workflowLogs WorkflowLog[]
+participations WorkflowParticipant[]
+recordRevisions RecordRevision[]
+notifications Notification[]
+systemAuditLogs SystemAuditLog[]
+recordsCreated Record[] @relation("recordsCreated")
+auditLogsActed AuditLog[] @relation("auditLogsActed")
+
+@@unique([tenantId, id])
+@@unique([tenantId, email])
+@@index([email])
+@@map("users")
+}
+
+model Role {
+id Int @id @default(autoincrement())
+tenantId Int @map("tenant_id")
+name String
+permissions Json @default("{}")
+createdAt DateTime @default(now()) @map("created_at")
+updatedAt DateTime @updatedAt @map("updated_at")
+
+tenant Tenant @relation(fields: [tenantId], references: [id])
+users User[]
+policies PermissionPolicy[]
+
+@@unique([tenantId, id])
+@@unique([tenantId, name])
+@@map("roles")
+}
+
+model PermissionPolicy {
+id Int @id @default(autoincrement())
+tenantId Int @map("tenant_id")
+roleId Int @map("role_id")
+entityId Int @map("entity_id")
+actions Json  
+ dataScope String @default("OWNED") @map("data_scope")
+
+tenant Tenant @relation(fields: [tenantId], references: [id])
+role Role @relation(fields: [tenantId, roleId], references: [tenantId, id], onDelete: Cascade)
+entity Entity @relation(fields: [tenantId, entityId], references: [tenantId, id], onDelete: Cascade)
+rules DataScopeRule[]
+
+@@unique([tenantId, roleId, entityId])
+@@map("permission_policies")
+}
+
+model DataScopeRule {
+id Int @id @default(autoincrement())
+policyId Int @map("policy_id")
+fieldCode String @map("field_code")
+operator String
+value String
+
+policy PermissionPolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+@@map("data_scope_rules")
+}
+
+// ==========================================
+// BLOCK 2: METADATA, REGISTRY & DEEP VERSIONING
+// ==========================================
+model FieldRegistry {
+id Int @id @default(autoincrement())
+tenantId Int @map("tenant_id")
+code String  
+ name String  
+ type String  
+ config Json @default("{}")
+createdAt DateTime @default(now()) @map("created_at")
+
+tenant Tenant @relation(fields: [tenantId], references: [id])
+
+@@unique([tenantId, code])
+@@map("field_registry")
+}
+
+model EventDefinition {
+id Int @id @default(autoincrement())
+tenantId Int @map("tenant_id")
+code String
+name String
+schema Json
+
+tenant Tenant @relation(fields: [tenantId], references: [id])
+rules AutomationRule[]
+
+@@unique([tenantId, code])
+@@map("event_definitions")
+}
+
+model AutomationRule {
+id Int @id @default(autoincrement())
+tenantId Int @map("tenant_id")
+eventId Int @map("event_id")
+name String
+conditions Json
+actions Json
+isActive Boolean @default(true) @map("is_active")
+
+tenant Tenant @relation(fields: [tenantId], references: [id])
+eventDef EventDefinition @relation(fields: [eventId], references: [id])
+
+@@unique([tenantId, id])
+@@map("automation_rules")
+}
+
+model Entity {
+id Int @id @default(autoincrement())
+tenantId Int @map("tenant_id")
+code String  
+ name String
+description String?
+
+displayMode String @default("TITLE") @map("display_mode")
+titlePattern String? @map("title_pattern")
+icon String?
+color String?
+autoCodePattern String? @map("auto_code_pattern")
+
+deletedAt DateTime? @map("deleted_at")
+deletedById Int? @map("deleted_by_id")
+
+tenant Tenant @relation(fields: [tenantId], references: [id])
+versions EntityVersion[]
+records Record[]
+workflows Workflow[]
+printTemplates PrintTemplate[]
+webhookEndpoints WebhookEndpoint[]
+policies PermissionPolicy[]
+relationSources RelationDefinition[] @relation("SourceEntity")
+relationTargets RelationDefinition[] @relation("TargetEntity")
+
+@@unique([tenantId, id])  
+ @@map("entities")
+}
+
+model EntityVersion {
+id Int @id @default(autoincrement())
+tenantId Int @map("tenant_id")
+entityId Int @map("entity_id")
+version Int
+status String @default("DRAFT")
+snapshotHash String @map("snapshot_hash")
+
+fieldsSnapshot Json @map("fields_snapshot")  
+ workflowSnapshot Json? @map("workflow_snapshot")  
+ permissionsSnapshot Json? @map("permissions_snapshot")
+relationsSnapshot Json? @map("relations_snapshot")
+resolversSnapshot Json? @map("resolvers_snapshot")
+automationSnapshot Json? @map("automation_snapshot")  
+ printTemplateSnapshot Json? @map("print_template_snapshot")
+
+createdAt DateTime @default(now()) @map("created_at")
+
+tenant Tenant @relation(fields: [tenantId], references: [id])
+entity Entity @relation(fields: [tenantId, entityId], references: [tenantId, id])
+records Record[]
+
+@@unique([tenantId, entityId, version])
+@@map("entity_versions")
+}
+
+model PrintTemplate {
+id Int @id @default(autoincrement())
+tenantId Int @map("tenant_id")
+entityId Int @map("entity_id")
+name String
+template Json
+createdAt DateTime @default(now()) @map("created_at")
+
+tenant Tenant @relation(fields: [tenantId], references: [id])
+entity Entity @relation(fields: [tenantId, entityId], references: [tenantId, id])
+
+@@map("print_templates")
+}
+
+// ==========================================
+// BLOCK 3: HYBRID RECORD & GRAPH RELATION
+// ==========================================
+model Record {
+id Int @id @default(autoincrement())
+tenantId Int @map("tenant_id")
+entityId Int @map("entity_id")
+metadataVersionId Int @map("metadata_version_id")
+
+businessCode String @map("business_code")
+title String?  
+ status String @default("DRAFT")
+currentStepId Int? @map("current_step_id")
+
+createdById Int @map("created_by_id")
+departmentId Int? @map("department_id")
+
+version Int @default(1)
+
+deletedAt DateTime? @map("deleted_at")
+deletedById Int? @map("deleted_by_id")
+
+data Json @default("{}")
+schemaHash String? @map("schema_hash")
+
+createdAt DateTime @default(now()) @map("created_at")
+updatedAt DateTime @updatedAt @map("updated_at")
+
+tenant Tenant @relation(fields: [tenantId], references: [id])
+entity Entity @relation(fields: [tenantId, entityId], references: [tenantId, id])
+createdBy User @relation("recordsCreated", fields: [createdById], references: [id])
+metadataVersion EntityVersion @relation(fields: [metadataVersionId], references: [id])
+
+instances WorkflowInstance[]
+revisions RecordRevision[]
+attachments Attachment[]
+outgoingRelations RecordRelation[] @relation("SourceRecord")
+incomingRelations RecordRelation[] @relation("TargetRecord")
+
+@@unique([tenantId, businessCode])
+@@unique([tenantId, id])
+@@index([tenantId, entityId, status])
+@@map("records")
+}
+
+model RecordRevision {
+id Int @id @default(autoincrement())
+tenantId Int @map("tenant_id")
+recordId Int @map("record_id")
+userId Int @map("user_id")
+patchData Json @map("patch_data")
+createdAt DateTime @default(now()) @map("created_at")
+
+tenant Tenant @relation(fields: [tenantId], references: [id])
+record Record @relation(fields: [tenantId, recordId], references: [tenantId, id], onDelete: Cascade)
+user User @relation(fields: [userId], references: [id])
+
+@@index([tenantId, recordId])
+@@map("record_revisions")
+}
+
+model RelationDefinition {
+id Int @id @default(autoincrement())
+tenantId Int @map("tenant_id")
+code String  
+ name String  
+ sourceEntityId Int @map("source_entity_id")
+targetEntityId Int @map("target_entity_id")
+cardinality String @default("ONE_TO_MANY")
+createdAt DateTime @default(now()) @map("created_at")
+
+tenant Tenant @relation(fields: [tenantId], references: [id])
+sourceEntity Entity @relation("SourceEntity", fields: [tenantId, sourceEntityId], references: [tenantId, id])
+targetEntity Entity @relation("TargetEntity", fields: [tenantId, targetEntityId], references: [tenantId, id])
+relations RecordRelation[]
+
+@@unique([tenantId, id])
+@@unique([tenantId, code])
+@@map("relation_definitions")
+}
+
+model RecordRelation {
+id Int @id @default(autoincrement())
+tenantId Int @map("tenant_id")
+definitionId Int @map("definition_id")
+sourceRecordId Int @map("source_record_id")
+targetRecordId Int @map("target_record_id")
+direction String @default("FORWARD")
+weight Float @default(1.0)
+metadata Json? @default("{}")
+
+tenant Tenant @relation(fields: [tenantId], references: [id])
+definition RelationDefinition @relation(fields: [tenantId, definitionId], references: [tenantId, id])
+sourceRecord Record @relation("SourceRecord", fields: [tenantId, sourceRecordId], references: [tenantId, id])
+targetRecord Record @relation("TargetRecord", fields: [tenantId, targetRecordId], references: [tenantId, id])
+
+@@unique([definitionId, sourceRecordId, targetRecordId])
+@@index([tenantId, sourceRecordId])
+@@index([tenantId, targetRecordId])
+@@map("record_relations")
+}
+
+model Attachment {
+id Int @id @default(autoincrement())
+recordId Int? @map("record_id")
+tenantId Int? @map("tenant_id")
+fileName String @map("file_name")
+s3Key String @unique @map("s3_key")
+mimeType String @map("mime_type")
+fileSize Int @map("file_size")
+
+storageClass String @default("STANDARD") @map("storage_class")
+checksum String?  
+ etag String?  
+ virusScanStatus String @default("PENDING") @map("virus_scan_status")
+retentionUntil DateTime? @map("retention_until")
+
+createdAt DateTime @default(now()) @map("created_at")
+
+record Record? @relation(fields: [tenantId, recordId], references: [tenantId, id], onDelete: Cascade)
+tenant Tenant? @relation(fields: [tenantId], references: [id])
+
+@@map("attachments")
+}
+
+// ==========================================
+// BLOCK 4: PLATFORM CORE SERVICES (DISTRIBUTED TRACING & AUDIT)
+// ==========================================
+
+model Outbox {
+id Int @id @default(autoincrement())
+tenantId Int @map("tenant_id")
+eventKey String @unique @map("event_key")
+eventType String @map("event_type")  
+ payload Json
+status String @default("PENDING")
+
+correlationId String? @map("correlation_id")
+causationId String? @map("causation_id")  
+ requestId String? @map("request_id")
+
+createdAt DateTime @default(now()) @map("created_at")
+
+@@index([tenantId, status])
+@@map("outbox")
+}
+
+model AuditLog {
+id Int @id @default(autoincrement())
+tenantId Int @map("tenant_id")
+entityType String @map("entity_type")
+entityId Int @map("entity_id")
+action String
+actorId Int @map("actor_id")
+oldData Json? @map("old_data")
+newData Json? @map("new_data")
+
+correlationId String? @map("correlation_id")
+causationId String? @map("causation_id")  
+ requestId String? @map("request_id")  
+ ipAddress String? @map("ip_address")
+
+createdAt DateTime @default(now()) @map("created_at")
+
+actor User @relation("auditLogsActed", fields: [actorId], references: [id])
+
+@@index([tenantId, entityType, entityId])
+@@index([tenantId, correlationId])
+@@map("audit_logs")
+}
+
+model SystemAuditLog {
+id Int @id @default(autoincrement())
+tenantId Int @map("tenant_id")
+userId Int @map("user_id")
+action String  
+ resource String  
+ resourceId Int? @map("resource_id")
+payload Json @default("{}")
+ipAddress String? @map("ip_address")
+createdAt DateTime @default(now()) @map("created_at")
+
+user User @relation(fields: [userId], references: [id])
+tenant Tenant @relation(fields: [tenantId], references: [id])
+
+@@index([tenantId, resource, resourceId])
+@@map("system_audit_logs")
+}
+
+model SearchDocument {
+id Int @id @default(autoincrement())
+recordId Int @unique @map("record_id")
+tenantId Int @map("tenant_id")
+entityId Int @map("entity_id")
+title String?
+keywords String?  
+ content String? @db.Text
+searchData Json @map("search_data")
+vectorVersion Int @default(1) @map("vector_version")
+updatedAt DateTime @updatedAt @map("updated_at")
+
+searchVector Unsupported("tsvector")? @map("search_vector")
+
+@@index([searchVector], type: Gin)
+@@index([tenantId])
+@@index([tenantId, entityId])
+@@map("search_documents")
+}
+
+model BusinessCalendar {
+id Int @id @default(autoincrement())
+tenantId Int @map("tenant_id")
+name String
+isDefault Boolean @default(false) @map("is_default")
+shifts Json @default("[]")
+holidays Json @default("[]")
+
+tenant Tenant @relation(fields: [tenantId], references: [id])
+
+@@unique([tenantId, name])
+@@map("business_calendars")
+}
+
+model SequenceCounter {
+tenantId Int @map("tenant_id")
+code String  
+ lastVal Int @default(0) @map("last_val")
+
+tenant Tenant @relation(fields: [tenantId], references: [id])
+
+@@id([tenantId, code])
+@@map("sequence_counters")
+}
+
+// ==========================================
+// BLOCK 5: WORKFLOWS & TASKS
+// ==========================================
+model Workflow {
+id Int @id @default(autoincrement())
+entityId Int @map("entity_id")
+tenantId Int @map("tenant_id")
+name String
+description String?
+visibility Json @default("{}")
+deletedAt DateTime? @map("deleted_at")
+deletedById Int? @map("deleted_by_id")
+createdAt DateTime @default(now()) @map("created_at")
+updatedAt DateTime @updatedAt @map("updated_at")
+
+entity Entity @relation(fields: [tenantId, entityId], references: [tenantId, id])
+tenant Tenant @relation(fields: [tenantId], references: [id])
+versions WorkflowVersion[]
+
+@@unique([tenantId, name])
+@@map("workflows")
+}
+
+model WorkflowVersion {
+id Int @id @default(autoincrement())
+workflowId Int @map("workflow_id")
+version Int @default(1)
+status String @default("DRAFT")
+createdAt DateTime @default(now()) @map("created_at")
+updatedAt DateTime @updatedAt @map("updated_at")
+
+workflow Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+steps WorkflowStep[]
+instances WorkflowInstance[]
+
+@@unique([workflowId, version])
+@@map("workflow_versions")
+}
+
+model WorkflowStep {
+id Int @id @default(autoincrement())
+versionId Int @map("version_id")
+name String
+stepType String @default("USER_TASK")
+permissions Json @default("{}")
+transitionRules Json @default("{}")
+orderIndex Int @default(0) @map("order_index")
+createdAt DateTime @default(now()) @map("created_at")
+updatedAt DateTime @updatedAt @map("updated_at")
+
+version WorkflowVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+transitionsOut WorkflowTransition[] @relation("FromStep")
+transitionsIn WorkflowTransition[] @relation("ToStep")
+logs WorkflowLog[]
+instances WorkflowInstance[]
+
+@@map("workflow_steps")
+}
+
+model WorkflowTransition {
+id Int @id @default(autoincrement())
+fromStepId Int @map("from_step_id")
+toStepId Int @map("to_step_id")
+conditionLogic Json
+autoSkip Boolean @default(false) @map("auto_skip")
+
+fromStep WorkflowStep @relation("FromStep", fields: [fromStepId], references: [id])
+toStep WorkflowStep @relation("ToStep", fields: [toStepId], references: [id])
+@@map("workflow_transitions")
+}
+
+model WorkflowInstance {
+id Int @id @default(autoincrement())
+versionId Int @map("version_id")
+recordId Int @map("record_id")
+currentStepId Int @map("current_step_id")
+status String @default("IN_PROGRESS")
+assigneeId Int? @map("assignee_id")
+tenantId Int @map("tenant_id")
+createdAt DateTime @default(now()) @map("created_at")
+updatedAt DateTime @updatedAt @map("updated_at")
+
+version WorkflowVersion @relation(fields: [versionId], references: [id])
+record Record @relation(fields: [tenantId, recordId], references: [tenantId, id])
+currentStep WorkflowStep @relation(fields: [currentStepId], references: [id])
+assignee User? @relation(fields: [assigneeId], references: [id])
+tenant Tenant @relation(fields: [tenantId], references: [id])
+
+logs WorkflowLog[]
+participants WorkflowParticipant[]
+tasks Task[]
+
+@@index([tenantId, recordId, status])
+@@map("workflow_instances")
+}
+
+// Trong file bos-workspace/backend-nestjs/prisma/schema.prisma
+
+model Task {
+id Int @id @default(autoincrement())
+tenantId Int @map("tenant_id")
+
+// SỬA TẠI ĐÂY: Thêm dấu ? để cho phép NULL
+instanceId Int? @map("instance_id")
+stepId Int? @map("step_id")
+
+assignmentStrategy String @map("assignment_strategy")
+assignmentData Json @map("assignment_data")
+
+assigneeType String? @map("assignee_type")
+assigneeId Int? @map("assignee_id")
+
+status String @default("PENDING")
+
+estimatedCompletionTime DateTime? @map("estimated_completion_time")
+actualCompletionTime DateTime? @map("actual_completion_time")  
+ completionTimeSeconds Int? @map("completion_time_seconds")
+
+createdAt DateTime @default(now()) @map("created_at")
+updatedAt DateTime @updatedAt @map("updated_at")
+
+instance WorkflowInstance? @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+
+@@index([tenantId, assigneeId, status])
+@@map("tasks")
+}
+
+model WorkflowParticipant {
+id Int @id @default(autoincrement())
+instanceId Int @map("instance_id")
+userId Int @map("user_id")
+role String
+
+instance WorkflowInstance @relation(fields: [instanceId], references: [id])
+user User @relation(fields: [userId], references: [id])
+
+@@map("workflow_participants")
+}
+
+model WorkflowLog {
+id Int @id @default(autoincrement())
+instanceId Int @map("instance_id")
+stepId Int? @map("step_id")
+userId Int? @map("user_id")
+action String
+comment String?
+snapshot Json?
+createdAt DateTime @default(now()) @map("created_at")
+
+instance WorkflowInstance @relation(fields: [instanceId], references: [id])
+step WorkflowStep? @relation(fields: [stepId], references: [id])
+user User? @relation(fields: [userId], references: [id])
+@@map("workflow_logs")
+}
+
+model WebhookEndpoint {
+id Int @id @default(autoincrement())
+tenantId Int @map("tenant_id")
+entityId Int @map("entity_id")
+url String  
+ secretKey String? @map("secret_key")
+events Json  
+ isActive Boolean @default(true) @map("is_active")
+createdAt DateTime @default(now()) @map("created_at")
+
+tenant Tenant @relation(fields: [tenantId], references: [id])
+entity Entity @relation(fields: [tenantId, entityId], references: [tenantId, id])
+
+@@unique([tenantId, entityId, url])
+@@map("webhook_endpoints")
+}
+
+model Notification {
+id Int @id @default(autoincrement())
+userId Int @map("user_id")
+tenantId Int? @map("tenant_id")
+title String
+message String
+isRead Boolean @default(false) @map("is_read")
+createdAt DateTime @default(now()) @map("created_at")
+
+user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+tenant Tenant? @relation(fields: [tenantId], references: [id])
+
+@@index([userId, isRead])
+@@map("notifications")
+}

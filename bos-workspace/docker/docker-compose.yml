@@ -1,5 +1,5 @@
-version: "3.8"
 # File: docker/docker-compose.yml
+version: "3.8"
 services:
   postgres:
     image: postgres:15-alpine

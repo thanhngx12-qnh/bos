@@ -23,6 +23,7 @@ import {
   Table,
   Spin,
   App,
+  Popconfirm,
 } from "antd";
 import {
   CheckCircleOutlined,
@@ -73,11 +74,13 @@ export default function DragDropCanvas({
   const { message } = App.useApp();
   const updateStepMutation = useUpdateStep();
 
+  // Đổi quyền trực tiếp lưu thẳng vào Database theo thời gian thực [1]
   const handlePermissionChange = (
     fieldCode: string,
     value: "WRITE" | "READ" | "HIDDEN",
   ) => {
     if (!activeStep) return;
+
     const updatedPermissions = {
       ...(activeStep.permissions || {}),
       [fieldCode]: value,
@@ -105,7 +108,6 @@ export default function DragDropCanvas({
     );
   };
 
-  // Trực quan hóa bản xem trước (Form Preview) của TOÀN BỘ 20+ KIỂU TRƯỜNG DỮ LIỆU ĐỘNG [1]
   const renderInputPreview = (field: Field) => {
     const placeholder = field.config?.options?.placeholder || "Nhập dữ liệu...";
     const choices = field.config?.options?.choices || [];
@@ -500,6 +502,8 @@ export default function DragDropCanvas({
                             onEditClick(field);
                           }}
                         />
+
+                        {/* THÊM KHAI BÁO IMPORT POPCONFIRM SỬA TRIỆT ĐỂ LỖI REFERENCEERROR */}
                         <Popconfirm
                           title="Xóa trường?"
                           onConfirm={(e) => {

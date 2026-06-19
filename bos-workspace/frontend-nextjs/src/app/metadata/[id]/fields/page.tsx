@@ -1,7 +1,7 @@
 // File: src/app/metadata/[id]/fields/page.tsx
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Layout,
   Menu,
@@ -22,7 +22,6 @@ import {
   theme,
   App,
   Spin,
-  Collapse,
 } from "antd";
 import {
   DashboardOutlined,
@@ -46,6 +45,7 @@ import {
   Field,
 } from "@/hooks/useFields";
 import { useWorkflows, WorkflowStep } from "@/hooks/useWorkflows";
+import { useTenantDetail } from "@/hooks/useTenant";
 
 import WorkflowStepsController from "./components/WorkflowStepsController";
 import DragDropCanvas from "./components/DragDropCanvas";
@@ -68,11 +68,29 @@ export default function WorkspaceContainerPage({
   } = theme.useToken();
   const { message } = App.useApp();
 
+  // Đọc động ID Doanh nghiệp và Tên nhân viên từ LocalStorage [1]
+  const [tenantId, setTenantId] = useState<number | null>(null);
+  const [userName, setUserName] = useState<string>("Thành viên BOS");
+  const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const storedTenantId = localStorage.getItem("bos_tenant_id");
+      const storedUserName = localStorage.getItem("bos_user_name");
+      if (storedTenantId) {
+        setTenantId(Number(storedTenantId));
+      }
+      if (storedUserName) {
+        setUserName(storedUserName);
+      }
+    }
+  }, []);
+
   // Trạng thái liên kết đồng bộ 3 phân khu [1]
   const [activeStep, setActiveStep] = useState<WorkflowStep | null>(null);
   const [selectedField, setSelectedField] = useState<Field | null>(null);
 
-  // Gọi API Hooks
+  // Gọi API Hooks Hệ thống thực tế
   const entitiesQuery = useEntities();
   const activeEntity = entitiesQuery.data?.data?.find(
     (e) => e.id === entityIdNum,
@@ -82,6 +100,9 @@ export default function WorkspaceContainerPage({
   const createField = useCreateField();
   const updateField = useUpdateField();
   const deleteField = useDeleteField();
+
+  // Gọi API Hook truy vấn thông tin Doanh nghiệp ĐỘNG từ database [1]
+  const tenantQuery = useTenantDetail(tenantId);
 
   // Gọi API Hooks liên kết luồng quy trình của Entity [1]
   const workflowsQuery = useWorkflows(entityIdNum);
@@ -206,7 +227,8 @@ export default function WorkspaceContainerPage({
     <Layout style={{ minHeight: "100vh" }}>
       <Sider
         collapsible
-        collapsed={false}
+        collapsed={collapsed}
+        onCollapse={setCollapsed}
         theme="light"
         style={{ borderRight: "1px solid #f0f0f0" }}
       >
@@ -265,8 +287,13 @@ export default function WorkspaceContainerPage({
           }}
           className="flex justify-between w-full"
         >
-          <Button icon={<GlobalOutlined />}>
-            <Text strong>{activeTenant}</Text>
+          {/* TRUY VẤN TÊN DOANH NGHIỆP THỜI GIAN THỰC TỪ DATABASE [1] */}
+          <Button icon={<GlobalOutlined />} loading={tenantQuery.isLoading}>
+            <Text strong>
+              {tenantQuery.data
+                ? `${tenantQuery.data.name} (${tenantQuery.data.code})`
+                : "Đang tải thông tin doanh nghiệp..."}
+            </Text>
           </Button>
           <Space size="large">
             <Badge count={3} dot>
@@ -277,8 +304,9 @@ export default function WorkspaceContainerPage({
                 icon={<UserOutlined />}
                 style={{ backgroundColor: "#0050b3" }}
               />
+              {/* HIỂN THỊ ĐỘNG TÊN THÀNH VIÊN ĐÃ ĐĂNG NHẬP [1] */}
               <Text strong className="hidden md:block">
-                Hệ thống Admin
+                {userName}
               </Text>
             </Space>
           </Space>
@@ -403,7 +431,6 @@ export default function WorkspaceContainerPage({
                 <Input placeholder="unit_price" />
               </Form.Item>
             </Col>
-            {/* HOÀN TOÀN KHẮC PHỤC CHẶT CHẼ THẺ ĐÓNG </Form.Item> */}
             <Col span={12}>
               <Form.Item name="type" label="Kiểu trường">
                 <Select

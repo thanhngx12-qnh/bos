@@ -46,7 +46,6 @@ import { Entity } from "@/hooks/useEntities";
 import FormulaBuilder from "./FormulaBuilder";
 
 const { Text, Paragraph } = Typography;
-const { Panel } = Collapse;
 
 interface ToolboxAndInspectorProps {
   fields: Field[];
@@ -68,7 +67,7 @@ export default function ToolboxAndInspector({
   const [form] = Form.useForm();
   const watchedType = Form.useWatch("type", form);
 
-  // Đồng bộ hóa dữ liệu từ Canvas trường được chọn lên Inspector [1]
+  // Đồng bộ hóa dữ liệu từ Canvas trường được chọn lên Inspector để sửa [1]
   useEffect(() => {
     if (selectedField) {
       form.setFieldsValue({
@@ -108,6 +107,256 @@ export default function ToolboxAndInspector({
     });
   };
 
+  // Thiết lập cấu trúc mảng items chuẩn hóa thay thế cho Collapse.Panel bị deprecated [1]
+  const collapseItems = [
+    {
+      key: "van_ban",
+      label: (
+        <Text strong style={{ color: "#0050b3" }}>
+          Văn Bản
+        </Text>
+      ),
+      children: (
+        <Space direction="vertical" className="w-full" size="small">
+          <Button
+            block
+            icon={<FileTextOutlined style={{ color: "#1890ff" }} />}
+            onClick={() => onAddQuickField("TEXT")}
+            style={{ textAlign: "left" }}
+          >
+            Chuỗi chữ (TEXT)
+          </Button>
+          <Button
+            block
+            icon={<MailOutlined style={{ color: "#1890ff" }} />}
+            onClick={() => onAddQuickField("EMAIL")}
+            style={{ textAlign: "left" }}
+          >
+            Thư điện tử (EMAIL)
+          </Button>
+          <Button
+            block
+            icon={<PhoneOutlined style={{ color: "#1890ff" }} />}
+            onClick={() => onAddQuickField("PHONE")}
+            style={{ textAlign: "left" }}
+          >
+            Số điện thoại (PHONE)
+          </Button>
+          <Button
+            block
+            icon={<FileTextOutlined style={{ color: "#1890ff" }} />}
+            onClick={() => onAddQuickField("TEXTAREA")}
+            style={{ textAlign: "left" }}
+          >
+            Văn bản dài (TEXTAREA)
+          </Button>
+        </Space>
+      ),
+    },
+    {
+      key: "so_lieu",
+      label: (
+        <Text strong style={{ color: "#52c41a" }}>
+          Số liệu
+        </Text>
+      ),
+      children: (
+        <Space direction="vertical" className="w-full" size="small">
+          <Button
+            block
+            icon={<NumberOutlined style={{ color: "#52c41a" }} />}
+            onClick={() => onAddQuickField("NUMBER")}
+            style={{ textAlign: "left" }}
+          >
+            Số nguyên (NUMBER)
+          </Button>
+          <Button
+            block
+            icon={<NumberOutlined style={{ color: "#52c41a" }} />}
+            onClick={() => onAddQuickField("DECIMAL")}
+            style={{ textAlign: "left" }}
+          >
+            Số thập phân (DECIMAL)
+          </Button>
+          <Button
+            block
+            icon={<NumberOutlined style={{ color: "#52c41a" }} />}
+            onClick={() => onAddQuickField("CURRENCY")}
+            style={{ textAlign: "left" }}
+          >
+            Tiền tệ (CURRENCY)
+          </Button>
+          <Button
+            block
+            icon={<NumberOutlined style={{ color: "#52c41a" }} />}
+            onClick={() => onAddQuickField("PERCENTAGE")}
+            style={{ textAlign: "left" }}
+          >
+            Phần trăm (PERCENTAGE)
+          </Button>
+        </Space>
+      ),
+    },
+    {
+      key: "thoi_gian",
+      label: (
+        <Text strong style={{ color: "#fa8c16" }}>
+          Thời gian
+        </Text>
+      ),
+      children: (
+        <Space direction="vertical" className="w-full" size="small">
+          <Button
+            block
+            icon={<CalendarOutlined style={{ color: "#fa8c16" }} />}
+            onClick={() => onAddQuickField("DATE")}
+            style={{ textAlign: "left" }}
+          >
+            Ngày (DATE)
+          </Button>
+          <Button
+            block
+            icon={<ClockCircleOutlined style={{ color: "#fa8c16" }} />}
+            onClick={() => onAddQuickField("TIME")}
+            style={{ textAlign: "left" }}
+          >
+            Giờ (TIME)
+          </Button>
+          <Button
+            block
+            icon={<CalendarOutlined style={{ color: "#fa8c16" }} />}
+            onClick={() => onAddQuickField("DATETIME")}
+            style={{ textAlign: "left" }}
+          >
+            Ngày & Giờ (DATETIME)
+          </Button>
+          <Button
+            block
+            icon={<CalendarOutlined style={{ color: "#fa8c16" }} />}
+            onClick={() => onAddQuickField("MONTH_YEAR")}
+            style={{ textAlign: "left" }}
+          >
+            Tháng / Năm (MONTH_YEAR)
+          </Button>
+        </Space>
+      ),
+    },
+    {
+      key: "lua_chon",
+      label: (
+        <Text strong style={{ color: "#722ed1" }}>
+          Lựa chọn & Tổ chức
+        </Text>
+      ),
+      children: (
+        <Space direction="vertical" className="w-full" size="small">
+          <Button
+            block
+            icon={<UnorderedListOutlined style={{ color: "#722ed1" }} />}
+            onClick={() => onAddQuickField("SELECT")}
+            style={{ textAlign: "left" }}
+          >
+            Chọn một (SELECT)
+          </Button>
+          <Button
+            block
+            icon={<UnorderedListOutlined style={{ color: "#722ed1" }} />}
+            onClick={() => onAddQuickField("MULTI_SELECT")}
+            style={{ textAlign: "left" }}
+          >
+            Chọn nhiều (MULTI_SELECT)
+          </Button>
+          <Button
+            block
+            icon={<UnorderedListOutlined style={{ color: "#722ed1" }} />}
+            onClick={() => onAddQuickField("CHECKBOX")}
+            style={{ textAlign: "left" }}
+          >
+            Đóng mở (CHECKBOX/SWITCH)
+          </Button>
+          <Divider style={{ margin: "4px 0" }} />
+          <Button
+            block
+            icon={<UserOutlined style={{ color: "#eb2f96" }} />}
+            onClick={() => onAddQuickField("USER_REF")}
+            style={{ textAlign: "left" }}
+          >
+            Thành viên (USER_REF)
+          </Button>
+          <Button
+            block
+            icon={<PartitionOutlined style={{ color: "#eb2f96" }} />}
+            onClick={() => onAddQuickField("DEPT_REF")}
+            style={{ textAlign: "left" }}
+          >
+            Phòng ban (DEPT_REF)
+          </Button>
+          <Button
+            block
+            icon={<SafetyCertificateOutlined style={{ color: "#eb2f96" }} />}
+            onClick={() => onAddQuickField("ROLE_REF")}
+            style={{ textAlign: "left" }}
+          >
+            Vai trò (ROLE_REF)
+          </Button>
+        </Space>
+      ),
+    },
+    {
+      key: "nang_cao",
+      label: (
+        <Text strong style={{ color: "#fa541c" }}>
+          Tệp tin & Nâng cao
+        </Text>
+      ),
+      children: (
+        <Space direction="vertical" className="w-full" size="small">
+          <Button
+            block
+            icon={<UploadOutlined style={{ color: "#13c2c2" }} />}
+            onClick={() => onAddQuickField("FILE")}
+            style={{ textAlign: "left" }}
+          >
+            Tài liệu đính kèm (FILE)
+          </Button>
+          <Button
+            block
+            icon={<PictureOutlined style={{ color: "#13c2c2" }} />}
+            onClick={() => onAddQuickField("IMAGE")}
+            style={{ textAlign: "left" }}
+          >
+            Hình ảnh (IMAGE)
+          </Button>
+          <Divider style={{ margin: "4px 0" }} />
+          <Button
+            block
+            icon={<LinkOutlined style={{ color: "#fa143c" }} />}
+            onClick={() => onAddQuickField("LOOKUP")}
+            style={{ textAlign: "left" }}
+          >
+            Liên kết chéo (LOOKUP)
+          </Button>
+          <Button
+            block
+            icon={<CalculatorOutlined style={{ color: "#fa541c" }} />}
+            onClick={() => onAddQuickField("FORMULA")}
+            style={{ textAlign: "left" }}
+          >
+            Công thức toán (FORMULA)
+          </Button>
+          <Button
+            block
+            icon={<TableOutlined style={{ color: "#2f54eb" }} />}
+            onClick={() => onAddQuickField("TABLE")}
+            style={{ textAlign: "left" }}
+          >
+            Lưới bảng con (TABLE)
+          </Button>
+        </Space>
+      ),
+    },
+  ];
+
   return (
     <Card className="shadow-sm h-full" styles={{ body: { padding: "16px" } }}>
       <Tabs
@@ -124,6 +373,7 @@ export default function ToolboxAndInspector({
             ),
             children: (
               <div style={{ marginTop: "12px" }}>
+                {/* Thay thế hoàn toàn children bằng mảng items để loại bỏ warning [1] */}
                 <Collapse
                   defaultActiveKey={[
                     "van_ban",
@@ -134,278 +384,8 @@ export default function ToolboxAndInspector({
                   ]}
                   ghost
                   expandIconPosition="end"
-                >
-                  {/* 1. Nhóm văn bản */}
-                  <Panel
-                    header={
-                      <Text strong style={{ color: "#0050b3" }}>
-                        Văn Bản
-                      </Text>
-                    }
-                    key="van_ban"
-                  >
-                    <Space direction="vertical" className="w-full" size="small">
-                      <Button
-                        block
-                        icon={<FileTextOutlined style={{ color: "#1890ff" }} />}
-                        onClick={() => onAddQuickField("TEXT")}
-                        style={{ textAlign: "left" }}
-                      >
-                        Chuỗi chữ (TEXT)
-                      </Button>
-                      <Button
-                        block
-                        icon={<MailOutlined style={{ color: "#1890ff" }} />}
-                        onClick={() => onAddQuickField("EMAIL")}
-                        style={{ textAlign: "left" }}
-                      >
-                        Thư điện tử (EMAIL)
-                      </Button>
-                      <Button
-                        block
-                        icon={<PhoneOutlined style={{ color: "#1890ff" }} />}
-                        onClick={() => onAddQuickField("PHONE")}
-                        style={{ textAlign: "left" }}
-                      >
-                        Số điện thoại (PHONE)
-                      </Button>
-                      <Button
-                        block
-                        icon={<FileTextOutlined style={{ color: "#1890ff" }} />}
-                        onClick={() => onAddQuickField("TEXTAREA")}
-                        style={{ textAlign: "left" }}
-                      >
-                        Văn bản dài (TEXTAREA)
-                      </Button>
-                    </Space>
-                  </Panel>
-
-                  {/* 2. Nhóm Số liệu */}
-                  <Panel
-                    header={
-                      <Text strong style={{ color: "#52c41a" }}>
-                        Số liệu
-                      </Text>
-                    }
-                    key="so_lieu"
-                  >
-                    <Space direction="vertical" className="w-full" size="small">
-                      <Button
-                        block
-                        icon={<NumberOutlined style={{ color: "#52c41a" }} />}
-                        onClick={() => onAddQuickField("NUMBER")}
-                        style={{ textAlign: "left" }}
-                      >
-                        Số nguyên (NUMBER)
-                      </Button>
-                      <Button
-                        block
-                        icon={<NumberOutlined style={{ color: "#52c41a" }} />}
-                        onClick={() => onAddQuickField("DECIMAL")}
-                        style={{ textAlign: "left" }}
-                      >
-                        Số thập phân (DECIMAL)
-                      </Button>
-                      <Button
-                        block
-                        icon={<NumberOutlined style={{ color: "#52c41a" }} />}
-                        onClick={() => onAddQuickField("CURRENCY")}
-                        style={{ textAlign: "left" }}
-                      >
-                        Tiền tệ (CURRENCY)
-                      </Button>
-                      <Button
-                        block
-                        icon={<NumberOutlined style={{ color: "#52c41a" }} />}
-                        onClick={() => onAddQuickField("PERCENTAGE")}
-                        style={{ textAlign: "left" }}
-                      >
-                        Phần trăm (PERCENTAGE)
-                      </Button>
-                    </Space>
-                  </Panel>
-
-                  {/* 3. Nhóm Thời gian */}
-                  <Panel
-                    header={
-                      <Text strong style={{ color: "#fa8c16" }}>
-                        Thời gian
-                      </Text>
-                    }
-                    key="thoi_gian"
-                  >
-                    <Space direction="vertical" className="w-full" size="small">
-                      <Button
-                        block
-                        icon={<CalendarOutlined style={{ color: "#fa8c16" }} />}
-                        onClick={() => onAddQuickField("DATE")}
-                        style={{ textAlign: "left" }}
-                      >
-                        Ngày (DATE)
-                      </Button>
-                      <Button
-                        block
-                        icon={
-                          <ClockCircleOutlined style={{ color: "#fa8c16" }} />
-                        }
-                        onClick={() => onAddQuickField("TIME")}
-                        style={{ textAlign: "left" }}
-                      >
-                        Giờ (TIME)
-                      </Button>
-                      <Button
-                        block
-                        icon={<CalendarOutlined style={{ color: "#fa8c16" }} />}
-                        onClick={() => onAddQuickField("DATETIME")}
-                        style={{ textAlign: "left" }}
-                      >
-                        Ngày & Giờ (DATETIME)
-                      </Button>
-                      <Button
-                        block
-                        icon={<CalendarOutlined style={{ color: "#fa8c16" }} />}
-                        onClick={() => onAddQuickField("MONTH_YEAR")}
-                        style={{ textAlign: "left" }}
-                      >
-                        Tháng / Năm (MONTH_YEAR)
-                      </Button>
-                    </Space>
-                  </Panel>
-
-                  {/* 4. Nhóm Lựa chọn */}
-                  <Panel
-                    header={
-                      <Text strong style={{ color: "#722ed1" }}>
-                        Lựa chọn & Tổ chức
-                      </Text>
-                    }
-                    key="lua_chon"
-                  >
-                    <Space direction="vertical" className="w-full" size="small">
-                      <Button
-                        block
-                        icon={
-                          <UnorderedListOutlined style={{ color: "#722ed1" }} />
-                        }
-                        onClick={() => onAddQuickField("SELECT")}
-                        style={{ textAlign: "left" }}
-                      >
-                        Chọn một (SELECT)
-                      </Button>
-                      <Button
-                        block
-                        icon={
-                          <UnorderedListOutlined style={{ color: "#722ed1" }} />
-                        }
-                        onClick={() => onAddQuickField("MULTI_SELECT")}
-                        style={{ textAlign: "left" }}
-                      >
-                        Chọn nhiều (MULTI_SELECT)
-                      </Button>
-                      <Button
-                        block
-                        icon={
-                          <Checkbox
-                            disabled
-                            checked
-                            style={{ color: "#722ed1" }}
-                          />
-                        }
-                        onClick={() => onAddQuickField("CHECKBOX")}
-                        style={{ textAlign: "left" }}
-                      >
-                        Đóng mở (CHECKBOX/SWITCH)
-                      </Button>
-                      <Divider style={{ margin: "4px 0" }} />
-                      <Button
-                        block
-                        icon={<UserOutlined style={{ color: "#eb2f96" }} />}
-                        onClick={() => onAddQuickField("USER_REF")}
-                        style={{ textAlign: "left" }}
-                      >
-                        Thành viên (USER_REF)
-                      </Button>
-                      <Button
-                        block
-                        icon={
-                          <PartitionOutlined style={{ color: "#eb2f96" }} />
-                        }
-                        onClick={() => onAddQuickField("DEPT_REF")}
-                        style={{ textAlign: "left" }}
-                      >
-                        Phòng ban (DEPT_REF)
-                      </Button>
-                      <Button
-                        block
-                        icon={
-                          <SafetyCertificateOutlined
-                            style={{ color: "#eb2f96" }}
-                          />
-                        }
-                        onClick={() => onAddQuickField("ROLE_REF")}
-                        style={{ textAlign: "left" }}
-                      >
-                        Vai trò (ROLE_REF)
-                      </Button>
-                    </Space>
-                  </Panel>
-
-                  {/* 5. Tệp tin & Nâng cao */}
-                  <Panel
-                    header={
-                      <Text strong style={{ color: "#fa541c" }}>
-                        Tệp tin & Nâng cao
-                      </Text>
-                    }
-                    key="nang_cao"
-                  >
-                    <Space direction="vertical" className="w-full" size="small">
-                      <Button
-                        block
-                        icon={<UploadOutlined style={{ color: "#13c2c2" }} />}
-                        onClick={() => onAddQuickField("FILE")}
-                        style={{ textAlign: "left" }}
-                      >
-                        Tài liệu đính kèm (FILE)
-                      </Button>
-                      <Button
-                        block
-                        icon={<PictureOutlined style={{ color: "#13c2c2" }} />}
-                        onClick={() => onAddQuickField("IMAGE")}
-                        style={{ textAlign: "left" }}
-                      >
-                        Hình ảnh (IMAGE)
-                      </Button>
-                      <Divider style={{ margin: "4px 0" }} />
-                      <Button
-                        block
-                        icon={<LinkOutlined style={{ color: "#fa143c" }} />}
-                        onClick={() => onAddQuickField("LOOKUP")}
-                        style={{ textAlign: "left" }}
-                      >
-                        Liên kết chéo (LOOKUP)
-                      </Button>
-                      <Button
-                        block
-                        icon={
-                          <CalculatorOutlined style={{ color: "#fa541c" }} />
-                        }
-                        onClick={() => onAddQuickField("FORMULA")}
-                        style={{ textAlign: "left" }}
-                      >
-                        Công thức toán (FORMULA)
-                      </Button>
-                      <Button
-                        block
-                        icon={<TableOutlined style={{ color: "#2f54eb" }} />}
-                        onClick={() => onAddQuickField("TABLE")}
-                        style={{ textAlign: "left" }}
-                      >
-                        Lưới bảng con (TABLE)
-                      </Button>
-                    </Space>
-                  </Panel>
-                </Collapse>
+                  items={collapseItems}
+                />
               </div>
             ),
           },
@@ -611,7 +591,7 @@ export default function ToolboxAndInspector({
                     size="small"
                     title="Thiết kế Cột cho Bảng con"
                     style={{ marginBottom: "16px" }}
-                    headStyle={{ background: "#fafafa" }}
+                    styles={{ header: { background: "#fafafa" } }}
                   >
                     <Form.List name={["options", "columns"]}>
                       {(columns, { add, remove }) => (
