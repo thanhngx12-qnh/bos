@@ -1,7 +1,7 @@
 // File: src/app/page.tsx
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Layout, 
   Menu, 
@@ -17,7 +17,8 @@ import {
   Typography, 
   Row, 
   Col,
-  theme
+  theme,
+  App as AntdApp
 } from 'antd';
 import { 
   DashboardOutlined, 
@@ -30,31 +31,58 @@ import {
   ArrowRightOutlined,
   LoadingOutlined
 } from '@ant-design/icons';
+import { useRouter } from 'next/navigation';
+import { useTenantDetail } from '@/hooks/useTenant';
 
 const { Header, Sider, Content } = Layout;
 const { Title, Paragraph, Text } = Typography;
 
 export default function DashboardPortal() {
+  const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
-  const [activeTenant, setActiveTenant] = useState('Công ty Vận tải BOS (vantai_bos)');
   
+  // State quản lý Tenant và User động
+  const [tenantId, setTenantId] = useState<number | null>(null);
+  const [userName, setUserName] = useState<string>('Thành viên BOS');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const token = localStorage.getItem('bos_token');
+      if (!token) {
+        router.push('/auth/login');
+        return;
+      }
+      const storedTenantId = localStorage.getItem('bos_tenant_id');
+      const storedUserName = localStorage.getItem('bos_user_name');
+      if (storedTenantId) {
+        setTenantId(Number(storedTenantId));
+      }
+      if (storedUserName) {
+        setUserName(storedUserName);
+      }
+    }
+  }, [router]);
+
+  const tenantQuery = useTenantDetail(tenantId);
+  const activeTenantName = tenantQuery.data
+    ? `${tenantQuery.data.name} (${tenantQuery.data.code})`
+    : 'Đang tải thông tin doanh nghiệp...';
+
   const {
     token: { colorBgContainer, borderRadiusLG },
   } = theme.useToken();
 
-  const tenantMenu = {
-    items: [
-      {
-        key: '1',
-        label: 'Tập đoàn Công nghệ BOS',
-        onClick: () => setActiveTenant('Tập đoàn Công nghệ BOS (tech_bos)'),
-      },
-      {
-        key: '2',
-        label: 'Công ty Vận tải BOS',
-        onClick: () => setActiveTenant('Công ty Vận tải BOS (vantai_bos)'),
-      },
-    ],
+  const handleLogout = () => {
+    localStorage.removeItem('bos_token');
+    localStorage.removeItem('bos_tenant_id');
+    localStorage.removeItem('bos_user_name');
+    router.push('/auth/login');
+  };
+
+  const handleMenuClick = (e: { key: string }) => {
+    if (e.key === 'dashboard') router.push('/');
+    if (e.key === 'organization') router.push('/organization');
+    if (e.key === 'metadata') router.push('/metadata');
   };
 
   const userMenu = {
@@ -64,6 +92,11 @@ export default function DashboardPortal() {
       { type: 'divider' as const },
       { key: 'logout', label: 'Đăng xuất hệ thống', danger: true },
     ],
+    onClick: (info: any) => {
+      if (info.key === 'logout') {
+        handleLogout();
+      }
+    }
   };
 
   return (
@@ -83,8 +116,9 @@ export default function DashboardPortal() {
         </div>
         <Menu
           theme="light"
-          defaultSelectedKeys={['dashboard']}
+          selectedKeys={['dashboard']}
           mode="inline"
+          onClick={handleMenuClick}
           items={[
             { key: 'dashboard', icon: <DashboardOutlined />, label: 'Bảng tổng quan' },
             { key: 'tenants', icon: <GlobalOutlined />, label: 'Quản trị SaaS Tenant' },
@@ -109,14 +143,11 @@ export default function DashboardPortal() {
           }}
         >
           <Space size="middle">
-            {/* Bộ chọn Tenant thông minh */}
-            <Dropdown menu={tenantMenu} trigger={['click']}>
-              <Button icon={<GlobalOutlined />}>
-                <Space>
-                  <Text strong>{activeTenant}</Text>
-                </Space>
-              </Button>
-            </Dropdown>
+            <Button icon={<GlobalOutlined />} loading={tenantQuery.isLoading}>
+              <Space>
+                <Text strong>{activeTenantName}</Text>
+              </Space>
+            </Button>
           </Space>
 
           {/* Công cụ góc phải */}
@@ -128,12 +159,13 @@ export default function DashboardPortal() {
               <Space style={{ cursor: 'pointer' }}>
                 <Avatar icon={<UserOutlined />} style={{ backgroundColor: '#0050b3' }} />
                 <div className="hidden md:block">
-                  <Text strong>Hệ thống Admin</Text>
+                  <Text strong>{userName}</Text>
                 </div>
               </Space>
             </Dropdown>
           </Space>
         </Header>
+
 
         {/* Content Section */}
         <Content style={{ margin: '24px 24px 0', overflow: 'initial' }}>

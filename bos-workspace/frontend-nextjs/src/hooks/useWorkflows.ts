@@ -23,7 +23,7 @@ export interface WorkflowStep {
   versionId: number;
   name: string;
   stepType: "USER_TASK" | "SYSTEM_TASK";
-  permissions: Record<string, "WRITE" | "READ" | "HIDDEN">;
+  permissions: Record<string, any>;
   orderIndex: number;
   transitionsOut?: any[];
   transitionsIn?: any[];
@@ -73,7 +73,7 @@ export function useUpdateStep() {
     }: {
       id: number;
       versionId: number;
-      payload: { permissions: any };
+      payload: { permissions?: any; name?: string; stepType?: string; orderIndex?: number };
     }) => {
       const { data } = await api.patch(
         `/api/v1/workflow-pipeline/steps/${id}`,
@@ -88,3 +88,106 @@ export function useUpdateStep() {
     },
   });
 }
+
+// Khởi tạo Quy trình mới kèm Version 1 (DRAFT) cho Entity [1]
+export function useCreateWorkflow() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: {
+      entityId: number;
+      name: string;
+      description?: string;
+    }) => {
+      const { data } = await api.post("/api/v1/workflows", payload);
+      return data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ["workflows", variables.entityId],
+      });
+    },
+  });
+}
+
+// Khởi tạo Bước duyệt mới trong Version quy trình [1]
+export function useCreateStep() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: {
+      versionId: number;
+      name: string;
+      stepType?: string;
+      orderIndex?: number;
+      permissions?: any;
+    }) => {
+      const { data } = await api.post("/api/v1/workflow-pipeline/steps", payload);
+      return data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ["workflowSteps", variables.versionId],
+      });
+    },
+  });
+}
+
+// Xóa Bước duyệt khỏi Version quy trình [1]
+export function useDeleteStep() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, versionId }: { id: number; versionId: number }) => {
+      const { data } = await api.delete(`/api/v1/workflow-pipeline/steps/${id}`);
+      return data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ["workflowSteps", variables.versionId],
+      });
+    },
+  });
+}
+
+// Nhân bản (Clone) phiên bản quy trình sang DRAFT mới [1]
+export function useCloneWorkflowVersion() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ workflowId, versionId }: { workflowId: number; versionId: number }) => {
+      const { data } = await api.post(`/api/v1/workflows/${workflowId}/versions/${versionId}/clone`);
+      return data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ["workflows", variables.workflowId],
+      });
+    },
+  });
+}
+
+// Cập nhật trạng thái phiên bản quy trình (DRAFT -> PUBLISHED / ARCHIVED) [1]
+export function useUpdateWorkflowVersionStatus() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      workflowId,
+      versionId,
+      status,
+    }: {
+      workflowId: number;
+      versionId: number;
+      status: "DRAFT" | "PUBLISHED" | "ARCHIVED";
+    }) => {
+      const { data } = await api.patch(
+        `/api/v1/workflows/${workflowId}/versions/${versionId}/status`,
+        { status }
+      );
+      return data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ["workflows", variables.workflowId],
+      });
+    },
+  });
+}
+
+

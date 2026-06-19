@@ -13,11 +13,16 @@ import {
   InputNumber,
   Select,
   Button,
-  Row,
+  theme,
+  App,
   Col,
-  Empty,
+  Row,
+  Modal,
+  Dropdown,
+  Tag,
   Divider,
   Collapse,
+  Empty,
 } from "antd";
 import {
   SettingOutlined,
@@ -47,6 +52,35 @@ import FormulaBuilder from "./FormulaBuilder";
 
 const { Text, Paragraph } = Typography;
 
+const COMMON_REGEX_PATTERNS = [
+  {
+    label: "Số điện thoại VN",
+    pattern: "^(0|84)[3|5|7|8|9][0-9]{8}$",
+    error: "Số điện thoại Việt Nam không hợp lệ (10 số, bắt đầu bằng 0 hoặc 84)",
+  },
+  {
+    label: "Email chuẩn",
+    pattern: "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$",
+    error: "Địa chỉ Email không đúng định dạng",
+  },
+  {
+    label: "Mã Code (Chữ hoa & số)",
+    pattern: "^[A-Z0-9_]+$",
+    error: "Chỉ chấp nhận chữ in hoa không dấu, chữ số và gạch dưới (_)",
+  },
+  {
+    label: "Chỉ nhập số",
+    pattern: "^[0-9]+$",
+    error: "Chỉ cho phép nhập ký tự số",
+  },
+  {
+    label: "Chỉ nhập chữ",
+    pattern: "^[a-zA-ZÀ-ỹ\\s]+$",
+    error: "Chỉ cho phép nhập ký tự chữ và khoảng trắng",
+  },
+];
+
+
 interface ToolboxAndInspectorProps {
   fields: Field[];
   entities: Entity[];
@@ -66,10 +100,12 @@ export default function ToolboxAndInspector({
 }: ToolboxAndInspectorProps) {
   const [form] = Form.useForm();
   const watchedType = Form.useWatch("type", form);
+  const [activeTab, setActiveTab] = React.useState("toolbox");
 
   // Đồng bộ hóa dữ liệu từ Canvas trường được chọn lên Inspector để sửa [1]
   useEffect(() => {
     if (selectedField) {
+      setActiveTab("inspector");
       form.setFieldsValue({
         name: selectedField.name,
         code: selectedField.code,
@@ -90,10 +126,21 @@ export default function ToolboxAndInspector({
           maxLength: selectedField.config?.options?.maxLength,
           regexPattern: selectedField.config?.options?.regexPattern || "",
           errorMessage: selectedField.config?.options?.errorMessage || "",
-          columns: selectedField.config?.options?.columns || [],
+          columns: (selectedField.config?.options?.columns || []).map((col: any) => {
+            if (col.type === "SELECT" && Array.isArray(col.choices)) {
+              return {
+                ...col,
+                choices: col.choices.join(", "),
+              };
+            }
+            return col;
+          }),
+          showIf: selectedField.config?.options?.showIf || { logicalOperator: "AND", rules: [] },
+          requiredIf: selectedField.config?.options?.requiredIf || { logicalOperator: "AND", rules: [] },
         },
       });
     } else {
+      setActiveTab("toolbox");
       form.resetFields();
     }
   }, [selectedField, form]);
@@ -360,7 +407,8 @@ export default function ToolboxAndInspector({
   return (
     <Card className="shadow-sm h-full" styles={{ body: { padding: "16px" } }}>
       <Tabs
-        defaultActiveKey="toolbox"
+        activeKey={activeTab}
+        onChange={setActiveTab}
         items={[
           // I. PHÂN KHU THƯ VIỆN KHỐI 20+ KIỂU TRƯỜNG DỰNG CHUẨN V8.1 [1]
           {
@@ -421,7 +469,7 @@ export default function ToolboxAndInspector({
                   label="Nhãn hiển thị (Label)"
                   rules={[{ required: true, message: "Nhập nhãn trường" }]}
                 >
-                  <Input />
+                  <Input placeholder="Ví dụ: Họ và tên, Email, Số điện thoại..." />
                 </Form.Item>
                 <Form.Item
                   name="code"
@@ -434,7 +482,7 @@ export default function ToolboxAndInspector({
                   <Input disabled />
                 </Form.Item>
                 <Form.Item name="orderIndex" label="Thứ tự sắp xếp">
-                  <InputNumber className="w-full" />
+                  <InputNumber className="w-full" placeholder="Ví dụ: 1, 2, 3..." />
                 </Form.Item>
                 <Form.Item name="isRequired" valuePropName="checked">
                   <Checkbox>Bắt buộc nhập (Required)</Checkbox>
@@ -443,8 +491,9 @@ export default function ToolboxAndInspector({
                   name={["options", "placeholder"]}
                   label="Gợi ý nhập liệu (Placeholder)"
                 >
-                  <Input />
+                  <Input placeholder="Ví dụ: Nhập họ và tên..." />
                 </Form.Item>
+
 
                 {/* 1. options cho nhóm TEXT (TEXT, EMAIL, PHONE, TEXTAREA) */}
                 {(watchedType === "TEXT" ||
@@ -456,9 +505,9 @@ export default function ToolboxAndInspector({
                       <Col span={12}>
                         <Form.Item
                           name={["options", "minLength"]}
-                          label="Độ dài tối thiểu"
+                          label="Đó dài tối thiểu"
                         >
-                          <InputNumber className="w-full" />
+                          <InputNumber className="w-full" placeholder="Ví dụ: 2" />
                         </Form.Item>
                       </Col>
                       <Col span={12}>
@@ -466,16 +515,47 @@ export default function ToolboxAndInspector({
                           name={["options", "maxLength"]}
                           label="Độ dài tối đa"
                         >
-                          <InputNumber className="w-full" />
+                          <InputNumber className="w-full" placeholder="Ví dụ: 255" />
                         </Form.Item>
                       </Col>
                     </Row>
                     <Form.Item
                       name={["options", "regexPattern"]}
                       label="Biểu thức kiểm tra (Regex Pattern)"
+                      extra="Kiểm tra định dạng đầu vào khi người dùng nhập dữ liệu."
                     >
-                      <Input placeholder="Ví dụ: ^[A-Z]+$" />
+                      <Input placeholder="Ví dụ: ^(0|84)[3|5|7|8|9][0-9]{8}$" />
                     </Form.Item>
+                    
+                    {/* Hộp gợi ý các mẫu regex hay dùng */}
+                    <div style={{ marginBottom: "16px", padding: "8px", background: "#f9f9f9", borderRadius: "6px", border: "1px solid #e8e8e8" }}>
+                      <div style={{ marginBottom: "6px" }}>
+                        <Text type="secondary" style={{ fontSize: "11px", fontWeight: "bold" }}>
+                          Mẫu gợi ý kiểm tra Regex nhanh:
+                        </Text>
+                      </div>
+                      <Space wrap size={[4, 6]}>
+                        {COMMON_REGEX_PATTERNS.map((item, idx) => (
+                          <Tag
+                            key={idx}
+                            color="blue"
+                            style={{ cursor: "pointer", fontSize: "11px" }}
+                            onClick={() => {
+                              form.setFieldsValue({
+                                options: {
+                                  ...form.getFieldValue("options"),
+                                  regexPattern: item.pattern,
+                                  errorMessage: item.error,
+                                },
+                              });
+                            }}
+                          >
+                            {item.label}
+                          </Tag>
+                        ))}
+                      </Space>
+                    </div>
+
                     <Form.Item
                       name={["options", "errorMessage"]}
                       label="Thông báo lỗi Regex"
@@ -494,12 +574,12 @@ export default function ToolboxAndInspector({
                     <Row gutter={12}>
                       <Col span={12}>
                         <Form.Item name={["options", "min"]} label="Min">
-                          <InputNumber className="w-full" />
+                          <InputNumber className="w-full" placeholder="Ví dụ: 0" />
                         </Form.Item>
                       </Col>
                       <Col span={12}>
                         <Form.Item name={["options", "max"]} label="Max">
-                          <InputNumber className="w-full" />
+                          <InputNumber className="w-full" placeholder="Ví dụ: 9999" />
                         </Form.Item>
                       </Col>
                     </Row>
@@ -508,9 +588,10 @@ export default function ToolboxAndInspector({
                         name={["options", "prefix"]}
                         label="Ký hiệu tiền tệ"
                       >
-                        <Input placeholder="vd: $, VNĐ, €" />
+                        <Input placeholder="Ví dụ: VNĐ, $, €..." />
                       </Form.Item>
                     )}
+
                   </>
                 )}
 
@@ -525,9 +606,10 @@ export default function ToolboxAndInspector({
                       { required: true, message: "Vui lòng nhập choices" },
                     ]}
                   >
-                    <Input />
+                    <Input placeholder="Ví dụ: Lựa chọn 1, Lựa chọn 2, Lựa chọn 3..." />
                   </Form.Item>
                 )}
+
 
                 {/* 4. options cho kiểu LOOKUP */}
                 {watchedType === "LOOKUP" && (
@@ -550,8 +632,9 @@ export default function ToolboxAndInspector({
                       label="Cột hiển thị nhãn"
                       rules={[{ required: true, message: "Nhập displayField" }]}
                     >
-                      <Input placeholder="project_name" />
+                      <Input placeholder="Ví dụ: project_name, full_name..." />
                     </Form.Item>
+
                   </>
                 )}
 
@@ -618,7 +701,7 @@ export default function ToolboxAndInspector({
                                   ]}
                                   style={{ marginBottom: 4 }}
                                 >
-                                  <Input size="small" />
+                                  <Input size="small" placeholder="Ví dụ: Tên sản phẩm" />
                                 </Form.Item>
                                 <Form.Item
                                   {...restField}
@@ -629,23 +712,91 @@ export default function ToolboxAndInspector({
                                   ]}
                                   style={{ marginBottom: 4 }}
                                 >
-                                  <Input size="small" />
+                                  <Input size="small" placeholder="Ví dụ: product_code" />
                                 </Form.Item>
                                 <Form.Item
                                   {...restField}
                                   name={[name, "type"]}
                                   label="Loại"
-                                  rules={[{ required: true }]}
+                                  rules={[{ required: true, message: "Chọn loại cột" }]}
                                   style={{ marginBottom: 4 }}
                                 >
                                   <Select
                                     size="small"
+                                    placeholder="Chọn loại cột..."
                                     options={[
-                                      { value: "TEXT", label: "TEXT" },
-                                      { value: "NUMBER", label: "NUMBER" },
+                                      { value: "TEXT", label: "Chữ (TEXT)" },
+                                      { value: "NUMBER", label: "Số (NUMBER)" },
+                                      { value: "DATE", label: "Ngày (DATE)" },
+                                      { value: "SELECT", label: "Hộp chọn (SELECT)" },
+                                      { value: "CHECKBOX", label: "Đóng mở (CHECKBOX)" },
+                                      { value: "STT", label: "Số thứ tự (STT)" },
+                                      { value: "FORMULA", label: "Công thức toán (FORMULA)" },
                                     ]}
                                   />
                                 </Form.Item>
+
+                                <Form.Item
+                                  noStyle
+                                  shouldUpdate={(prevValues, currentValues) => {
+                                    const prevCol = prevValues?.options?.columns?.[name]?.type;
+                                    const currCol = currentValues?.options?.columns?.[name]?.type;
+                                    return prevCol !== currCol;
+                                  }}
+                                >
+                                   {({ getFieldValue }) => {
+                                     const colType = getFieldValue(["options", "columns", name, "type"]);
+                                     const isNumeric = colType === "NUMBER" || colType === "FORMULA";
+                                     return (
+                                       <>
+                                         {colType === "FORMULA" && (
+                                           <Form.Item
+                                             {...restField}
+                                             name={[name, "formula"]}
+                                             label="Công thức của cột"
+                                             rules={[{ required: true, message: "Nhập công thức cột" }]}
+                                             style={{ marginBottom: 4 }}
+                                           >
+                                             <Input size="small" placeholder="Ví dụ: {don_gia} * {so_luong}" />
+                                           </Form.Item>
+                                         )}
+                                         {colType === "SELECT" && (
+                                           <Form.Item
+                                             {...restField}
+                                             name={[name, "choices"]}
+                                             label="Lựa chọn (choices) - Cách nhau bằng dấu phẩy"
+                                             rules={[{ required: true, message: "Nhập các lựa chọn" }]}
+                                             style={{ marginBottom: 4 }}
+                                           >
+                                             <Input size="small" placeholder="Ví dụ: Lựa chọn 1, Lựa chọn 2" />
+                                           </Form.Item>
+                                         )}
+                                         {isNumeric && (
+                                           <Form.Item
+                                             {...restField}
+                                             name={[name, "summaryType"]}
+                                             label="Hàm tổng hợp chân trang"
+                                             style={{ marginBottom: 4 }}
+                                             initialValue="NONE"
+                                           >
+                                             <Select
+                                               size="small"
+                                               placeholder="Chọn hàm tổng hợp..."
+                                               options={[
+                                                 { value: "NONE", label: "Không tính" },
+                                                 { value: "SUM", label: "Tổng cộng (SUM)" },
+                                                 { value: "AVG", label: "Trung bình cộng (AVG)" },
+                                                 { value: "MIN", label: "Nhỏ nhất (MIN)" },
+                                                 { value: "MAX", label: "Lớn nhất (MAX)" },
+                                               ]}
+                                             />
+                                           </Form.Item>
+                                         )}
+                                       </>
+                                     );
+                                   }}
+                                </Form.Item>
+
                                 <Form.Item
                                   {...restField}
                                   name={[name, "isRequired"]}
@@ -687,6 +838,224 @@ export default function ToolboxAndInspector({
                     </Form.List>
                   </Card>
                 )}
+
+                {/* 7. Thiết lập điều kiện showIf (Điều kiện hiển thị) */}
+                <Card
+                  size="small"
+                  title="Điều kiện Hiển thị (showIf)"
+                  style={{ marginBottom: "16px", background: "#f9fcfc" }}
+                  styles={{ header: { background: "#e6f7ff" } }}
+                >
+                  <Form.Item
+                    name={["options", "showIf", "logicalOperator"]}
+                    label="Kết hợp logic"
+                    initialValue="AND"
+                    style={{ marginBottom: "12px" }}
+                  >
+                    <Select
+                      options={[
+                        { value: "AND", label: "Tất cả điều kiện đúng (AND)" },
+                        { value: "OR", label: "Chỉ cần 1 điều kiện đúng (OR)" },
+                      ]}
+                    />
+                  </Form.Item>
+                  
+                  <Form.List name={["options", "showIf", "rules"]}>
+                    {(rules, { add, remove }) => (
+                      <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                        {rules.map(({ key, name, ...restField }) => (
+                          <Card key={key} size="small" style={{ background: "white", border: "1px solid #f0f0f0" }}>
+                            <Form.Item
+                              {...restField}
+                              name={[name, "fieldCode"]}
+                              label="Trường kiểm tra"
+                              rules={[{ required: true, message: "Chọn trường" }]}
+                              style={{ marginBottom: "8px" }}
+                            >
+                              <Select
+                                placeholder="Chọn trường..."
+                                options={fields
+                                  .filter((f) => f.code !== selectedField?.code)
+                                  .map((f) => ({ value: f.code, label: `${f.name} (${f.code})` }))}
+                              />
+                            </Form.Item>
+                            
+                            <Form.Item
+                              {...restField}
+                              name={[name, "operator"]}
+                              label="Phép so sánh"
+                              rules={[{ required: true }]}
+                              style={{ marginBottom: "8px" }}
+                            >
+                              <Select
+                                options={[
+                                  { value: "EQUALS", label: "Bằng (=)" },
+                                  { value: "NOT_EQUALS", label: "Khác (!=)" },
+                                  { value: "CONTAINS", label: "Chứa chuỗi" },
+                                  { value: "IS_EMPTY", label: "Bị trống" },
+                                  { value: "IS_NOT_EMPTY", label: "Không bị trống" },
+                                ]}
+                              />
+                            </Form.Item>
+
+                            <Form.Item
+                              noStyle
+                              shouldUpdate={(prevValues, currentValues) => {
+                                const prevOp = prevValues?.options?.showIf?.rules?.[name]?.operator;
+                                const currOp = currentValues?.options?.showIf?.rules?.[name]?.operator;
+                                return prevOp !== currOp;
+                              }}
+                            >
+                              {({ getFieldValue }) => {
+                                const op = getFieldValue(["options", "showIf", "rules", name, "operator"]);
+                                if (op === "IS_EMPTY" || op === "IS_NOT_EMPTY") return null;
+                                return (
+                                  <Form.Item
+                                    {...restField}
+                                    name={[name, "value"]}
+                                    label="Giá trị so sánh"
+                                    rules={[{ required: true, message: "Nhập giá trị" }]}
+                                    style={{ marginBottom: "8px" }}
+                                  >
+                                    <Input placeholder="Giá trị..." />
+                                  </Form.Item>
+                                );
+                              }}
+                            </Form.Item>
+
+                            <Button
+                              type="text"
+                              danger
+                              size="small"
+                              onClick={() => remove(name)}
+                              icon={<MinusCircleOutlined />}
+                            >
+                              Xóa quy tắc
+                            </Button>
+                          </Card>
+                        ))}
+                        <Button
+                          type="dashed"
+                          onClick={() => add({ fieldCode: "", operator: "EQUALS", value: "" })}
+                          block
+                          icon={<PlusOutlined />}
+                          size="small"
+                        >
+                          Thêm quy tắc hiển thị
+                        </Button>
+                      </div>
+                    )}
+                  </Form.List>
+                </Card>
+
+                {/* 8. Thiết lập điều kiện requiredIf (Điều kiện bắt buộc) */}
+                <Card
+                  size="small"
+                  title="Điều kiện Bắt buộc (requiredIf)"
+                  style={{ marginBottom: "16px", background: "#fcfaf9" }}
+                  styles={{ header: { background: "#fffbe6" } }}
+                >
+                  <Form.Item
+                    name={["options", "requiredIf", "logicalOperator"]}
+                    label="Kết hợp logic"
+                    initialValue="AND"
+                    style={{ marginBottom: "12px" }}
+                  >
+                    <Select
+                      options={[
+                        { value: "AND", label: "Tất cả điều kiện đúng (AND)" },
+                        { value: "OR", label: "Chỉ cần 1 điều kiện đúng (OR)" },
+                      ]}
+                    />
+                  </Form.Item>
+                  
+                  <Form.List name={["options", "requiredIf", "rules"]}>
+                    {(rules, { add, remove }) => (
+                      <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                        {rules.map(({ key, name, ...restField }) => (
+                          <Card key={key} size="small" style={{ background: "white", border: "1px solid #f0f0f0" }}>
+                            <Form.Item
+                              {...restField}
+                              name={[name, "fieldCode"]}
+                              label="Trường kiểm tra"
+                              rules={[{ required: true, message: "Chọn trường" }]}
+                              style={{ marginBottom: "8px" }}
+                            >
+                              <Select
+                                placeholder="Chọn trường..."
+                                options={fields
+                                  .filter((f) => f.code !== selectedField?.code)
+                                  .map((f) => ({ value: f.code, label: `${f.name} (${f.code})` }))}
+                              />
+                            </Form.Item>
+                            
+                            <Form.Item
+                              {...restField}
+                              name={[name, "operator"]}
+                              label="Phép so sánh"
+                              rules={[{ required: true }]}
+                              style={{ marginBottom: "8px" }}
+                            >
+                              <Select
+                                options={[
+                                  { value: "EQUALS", label: "Bằng (=)" },
+                                  { value: "NOT_EQUALS", label: "Khác (!=)" },
+                                  { value: "CONTAINS", label: "Chứa chuỗi" },
+                                  { value: "IS_EMPTY", label: "Bị trống" },
+                                  { value: "IS_NOT_EMPTY", label: "Không bị trống" },
+                                ]}
+                              />
+                            </Form.Item>
+
+                            <Form.Item
+                              noStyle
+                              shouldUpdate={(prevValues, currentValues) => {
+                                const prevOp = prevValues?.options?.requiredIf?.rules?.[name]?.operator;
+                                const currOp = currentValues?.options?.requiredIf?.rules?.[name]?.operator;
+                                return prevOp !== currOp;
+                              }}
+                            >
+                              {({ getFieldValue }) => {
+                                const op = getFieldValue(["options", "requiredIf", "rules", name, "operator"]);
+                                if (op === "IS_EMPTY" || op === "IS_NOT_EMPTY") return null;
+                                return (
+                                  <Form.Item
+                                    {...restField}
+                                    name={[name, "value"]}
+                                    label="Giá trị so sánh"
+                                    rules={[{ required: true, message: "Nhập giá trị" }]}
+                                    style={{ marginBottom: "8px" }}
+                                  >
+                                    <Input placeholder="Giá trị..." />
+                                  </Form.Item>
+                                );
+                              }}
+                            </Form.Item>
+
+                            <Button
+                              type="text"
+                              danger
+                              size="small"
+                              onClick={() => remove(name)}
+                              icon={<MinusCircleOutlined />}
+                            >
+                              Xóa quy tắc
+                            </Button>
+                          </Card>
+                        ))}
+                        <Button
+                          type="dashed"
+                          onClick={() => add({ fieldCode: "", operator: "EQUALS", value: "" })}
+                          block
+                          icon={<PlusOutlined />}
+                          size="small"
+                        >
+                          Thêm quy tắc bắt buộc
+                        </Button>
+                      </div>
+                    )}
+                  </Form.List>
+                </Card>
 
                 <Form.Item style={{ marginTop: "24px" }}>
                   <Button

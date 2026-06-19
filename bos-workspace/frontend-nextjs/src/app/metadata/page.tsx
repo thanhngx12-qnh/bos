@@ -1,7 +1,7 @@
 // File: src/app/metadata/page.tsx
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Layout,
   Menu,
@@ -20,7 +20,9 @@ import {
   Tag,
   theme,
   App,
+  Dropdown,
 } from "antd";
+
 import {
   DashboardOutlined,
   PartitionOutlined,
@@ -44,6 +46,8 @@ import {
   Entity,
 } from "@/hooks/useEntities";
 
+import { useTenantDetail } from "@/hooks/useTenant";
+
 const { Header, Sider, Content } = Layout;
 const { Title, Paragraph, Text } = Typography;
 
@@ -55,7 +59,55 @@ export default function EntitiesListPage() {
   const { message } = App.useApp();
 
   const [collapsed, setCollapsed] = useState(false);
-  const [activeTenant] = useState("Công ty Vận tải BOS (vantai_bos)");
+  
+  // State quản lý Tenant và User động
+  const [tenantId, setTenantId] = useState<number | null>(null);
+  const [userName, setUserName] = useState<string>("Thành viên BOS");
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const token = localStorage.getItem("bos_token");
+      if (!token) {
+        router.push("/auth/login");
+        return;
+      }
+      const storedTenantId = localStorage.getItem("bos_tenant_id");
+      const storedUserName = localStorage.getItem("bos_user_name");
+      if (storedTenantId) {
+        setTenantId(Number(storedTenantId));
+      }
+      if (storedUserName) {
+        setUserName(storedUserName);
+      }
+    }
+  }, [router]);
+
+  const tenantQuery = useTenantDetail(tenantId);
+  const activeTenantName = tenantQuery.data
+    ? `${tenantQuery.data.name} (${tenantQuery.data.code})`
+    : "Đang tải thông tin doanh nghiệp...";
+
+  const handleLogout = () => {
+    localStorage.removeItem("bos_token");
+    localStorage.removeItem("bos_tenant_id");
+    localStorage.removeItem("bos_user_name");
+    router.push("/auth/login");
+  };
+
+  const userMenu = {
+    items: [
+      { key: "profile", label: "Thông tin cá nhân" },
+      { key: "security", label: "Thiết lập bảo mật" },
+      { type: "divider" as const },
+      { key: "logout", label: "Đăng xuất hệ thống", danger: true },
+    ],
+    onClick: (info: any) => {
+      if (info.key === "logout") {
+        handleLogout();
+      }
+    },
+  };
+
 
   // Entities API Hooks
   const entitiesQuery = useEntities();
@@ -174,22 +226,24 @@ export default function EntitiesListPage() {
           }}
           className="flex justify-between w-full"
         >
-          <Button icon={<GlobalOutlined />}>
-            <Text strong>{activeTenant}</Text>
+          <Button icon={<GlobalOutlined />} loading={tenantQuery.isLoading}>
+            <Text strong>{activeTenantName}</Text>
           </Button>
           <Space size="large">
             <Badge count={3} dot>
               <Button type="text" shape="circle" icon={<BellOutlined />} />
             </Badge>
-            <Space style={{ cursor: "pointer" }}>
-              <Avatar
-                icon={<UserOutlined />}
-                style={{ backgroundColor: "#0050b3" }}
-              />
-              <Text strong className="hidden md:block">
-                Hệ thống Admin
-              </Text>
-            </Space>
+            <Dropdown menu={userMenu} placement="bottomRight">
+              <Space style={{ cursor: "pointer" }}>
+                <Avatar
+                  icon={<UserOutlined />}
+                  style={{ backgroundColor: "#0050b3" }}
+                />
+                <Text strong className="hidden md:block">
+                  {userName}
+                </Text>
+              </Space>
+            </Dropdown>
           </Space>
         </Header>
 

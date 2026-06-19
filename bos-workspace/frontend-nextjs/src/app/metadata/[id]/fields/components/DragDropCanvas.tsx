@@ -46,6 +46,9 @@ import {
   CalculatorOutlined,
   TableOutlined,
   PlusOutlined,
+  NumberOutlined,
+  UnorderedListOutlined,
+  OrderedListOutlined,
 } from "@ant-design/icons";
 import { Field } from "@/hooks/useFields";
 import { useUpdateStep, WorkflowStep } from "@/hooks/useWorkflows";
@@ -60,6 +63,7 @@ interface DragDropCanvasProps {
   activeStep: WorkflowStep | null;
   onEditClick: (field: Field) => void;
   onDeleteClick: (field: Field) => void;
+  onReorderFields?: (draggedId: number, targetId: number) => void;
 }
 
 export default function DragDropCanvas({
@@ -70,9 +74,39 @@ export default function DragDropCanvas({
   activeStep,
   onEditClick,
   onDeleteClick,
+  onReorderFields,
 }: DragDropCanvasProps) {
   const { message } = App.useApp();
   const updateStepMutation = useUpdateStep();
+
+  // --- QUẢN LÝ KÉO THẢ SẮP XẾP ---
+  const [draggedId, setDraggedId] = React.useState<number | null>(null);
+  const [dragOverId, setDragOverId] = React.useState<number | null>(null);
+
+  const handleDragStart = (e: React.DragEvent, id: number) => {
+    setDraggedId(id);
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleDragOver = (e: React.DragEvent, id: number) => {
+    e.preventDefault();
+    if (draggedId !== id) {
+      setDragOverId(id);
+    }
+  };
+
+  const handleDragLeave = () => {
+    setDragOverId(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, targetId: number) => {
+    e.preventDefault();
+    setDragOverId(null);
+    if (draggedId !== null && draggedId !== targetId && onReorderFields) {
+      onReorderFields(draggedId, targetId);
+    }
+    setDraggedId(null);
+  };
 
   // Đổi quyền trực tiếp lưu thẳng vào Database theo thời gian thực [1]
   const handlePermissionChange = (
@@ -111,7 +145,7 @@ export default function DragDropCanvas({
   const renderInputPreview = (field: Field) => {
     const placeholder = field.config?.options?.placeholder || "Nhập dữ liệu...";
     const choices = field.config?.options?.choices || [];
-    const selectOptions = choices.map((c) => ({ value: c, label: c }));
+    const selectOptions = choices.map((c: any) => ({ value: c, label: c }));
 
     switch (field.type) {
       // --- VĂN BẢN --- [1]
@@ -309,16 +343,93 @@ export default function DragDropCanvas({
       case "TABLE":
         const columns = field.config?.options?.columns || [];
         const tableColumns = columns.map((col: any) => ({
-          title: `${col.name} (${col.type})`,
+          title: (
+            <Space size={4}>
+              {col.type === "TEXT" && <FileTextOutlined style={{ color: "#1890ff", fontSize: "12px" }} />}
+              {col.type === "NUMBER" && <NumberOutlined style={{ color: "#52c41a", fontSize: "12px" }} />}
+              {col.type === "DATE" && <CalendarOutlined style={{ color: "#fa8c16", fontSize: "12px" }} />}
+              {col.type === "SELECT" && <UnorderedListOutlined style={{ color: "#722ed1", fontSize: "12px" }} />}
+              {col.type === "CHECKBOX" && <CheckCircleOutlined style={{ color: "#eb2f96", fontSize: "12px" }} />}
+              {col.type === "STT" && <OrderedListOutlined style={{ color: "#13c2c2", fontSize: "12px" }} />}
+              {col.type === "FORMULA" && <CalculatorOutlined style={{ color: "#fa541c", fontSize: "12px" }} />}
+              <span style={{ fontWeight: 600, fontSize: "13px" }}>{col.name}</span>
+              {col.isRequired && <span style={{ color: "#ff4d4f" }}>*</span>}
+            </Space>
+          ),
           dataIndex: col.code,
           key: col.code,
+          render: (value: any, record: any, index: number) => {
+            if (col.type === "STT") {
+              return <span style={{ fontWeight: "bold", color: "#595959" }}>{index + 1}</span>;
+            }
+            if (col.type === "FORMULA") {
+              return (
+                <div
+                  style={{
+                    padding: "4px 8px",
+                    background: "#fffbe6",
+                    border: "1px dashed #ffe58f",
+                    borderRadius: "4px",
+                    fontSize: "12px",
+                    color: "#d46b08",
+                    display: "inline-block",
+                  }}
+                >
+                  <CalculatorOutlined /> {col.formula || "fx"}
+                </div>
+              );
+            }
+            if (col.type === "CHECKBOX") {
+              return <Switch size="small" checked disabled />;
+            }
+            if (col.type === "SELECT") {
+              return (
+                <Select
+                  size="small"
+                  style={{ width: "100%", minWidth: "90px" }}
+                  placeholder="Chọn..."
+                  disabled
+                />
+              );
+            }
+            if (col.type === "DATE") {
+              return (
+                <DatePicker
+                  size="small"
+                  style={{ width: "100%", minWidth: "100px" }}
+                  placeholder="Chọn ngày..."
+                  disabled
+                />
+              );
+            }
+            if (col.type === "NUMBER") {
+              return (
+                <InputNumber
+                  size="small"
+                  style={{ width: "100%", minWidth: "80px" }}
+                  placeholder="Nhập số..."
+                  disabled
+                />
+              );
+            }
+            return (
+              <Input
+                size="small"
+                style={{ width: "100%", minWidth: "90px" }}
+                placeholder="Nhập chữ..."
+                disabled
+              />
+            );
+          },
         }));
         return (
           <div
             style={{
               border: "1px solid #f0f0f0",
-              borderRadius: "6px",
+              borderRadius: "8px",
               overflow: "hidden",
+              background: "#ffffff",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.04)"
             }}
           >
             <Table
@@ -327,13 +438,73 @@ export default function DragDropCanvas({
               columns={
                 tableColumns.length > 0
                   ? tableColumns
-                  : [{ title: "Cấu hình lưới bảng con", dataIndex: "empty" }]
+                  : [{ title: "Lưới bảng con (Hãy thêm cột...)", dataIndex: "empty", render: () => <span style={{ color: "#bfbfbf" }}>Chưa cấu hình cột</span> }]
               }
-              dataSource={[]}
-              locale={{ emptyText: "Lưới bảng nhập liệu con (TABLE GRID)" }}
+              dataSource={
+                tableColumns.length > 0
+                  ? [
+                      { key: "1" },
+                      { key: "2" },
+                    ]
+                  : []
+              }
+              locale={{ emptyText: "Chưa có cột nào được thiết lập. Hãy chỉnh sửa trường để thêm các cột." }}
+              summary={() => {
+                if (tableColumns.length === 0) return null;
+                const hasSummary = columns.some((col: any) => col.summaryType && col.summaryType !== "NONE");
+                if (!hasSummary) return null;
+
+                return (
+                  <Table.Summary fixed>
+                    <Table.Summary.Row style={{ background: "#fafafa" }}>
+                      {columns.map((col: any, idx: number) => {
+                        let summaryText = "";
+                        if (col.summaryType === "SUM") {
+                          summaryText = "Σ Tổng: 150";
+                        } else if (col.summaryType === "AVG") {
+                          summaryText = "μ TB: 75";
+                        } else if (col.summaryType === "MIN") {
+                          summaryText = "Min: 50";
+                        } else if (col.summaryType === "MAX") {
+                          summaryText = "Max: 100";
+                        }
+
+                        return (
+                          <Table.Summary.Cell index={idx} key={col.code}>
+                            <span style={{ color: "#1890ff", fontSize: "11px", fontWeight: "bold" }}>
+                              {summaryText}
+                            </span>
+                          </Table.Summary.Cell>
+                        );
+                      })}
+                    </Table.Summary.Row>
+                  </Table.Summary>
+                );
+              }}
             />
+            {tableColumns.length > 0 && (
+              <div
+                style={{
+                  padding: "8px",
+                  borderTop: "1px solid #f0f0f0",
+                  background: "#fafafa",
+                  textAlign: "left",
+                }}
+              >
+                <Button
+                  type="dashed"
+                  size="small"
+                  icon={<PlusOutlined />}
+                  disabled
+                  block
+                >
+                  Thêm dòng mới
+                </Button>
+              </div>
+            )}
           </div>
         );
+
 
       case "TEXT":
       default:
@@ -422,10 +593,22 @@ export default function DragDropCanvas({
                   size="small"
                   bordered={false}
                   className={`shadow-sm group bg-white border ${isSelected ? "border-blue-500" : "border-gray-100 hover:border-blue-300"}`}
+                  draggable={!activeStep}
+                  onDragStart={(e) => handleDragStart(e, field.id)}
+                  onDragOver={(e) => handleDragOver(e, field.id)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e, field.id)}
                   style={{
                     borderRadius: "8px",
                     transition: "all 0.2s",
-                    cursor: "pointer",
+                    cursor: activeStep ? "pointer" : "grab",
+                    opacity: draggedId === field.id ? 0.4 : 1,
+                    border: dragOverId === field.id
+                      ? "2px dashed #1890ff"
+                      : isSelected
+                      ? "1px solid #0050b3"
+                      : "1px solid #f0f0f0",
+                    backgroundColor: dragOverId === field.id ? "#e6f7ff" : "white",
                   }}
                   onClick={() => setSelectedField(field)}
                 >
@@ -440,7 +623,7 @@ export default function DragDropCanvas({
                             style={{ fontSize: "14px" }}
                           >
                             {field.name}{" "}
-                            {field.config?.isRequired && <Text danger>*</Text>}
+                            {field.config?.isRequired && <Text type="danger">*</Text>}
                           </Text>
                           <Tag color="blue" style={{ marginLeft: "12px" }}>
                             {field.code}
@@ -448,6 +631,36 @@ export default function DragDropCanvas({
                           <Tag color="purple">{field.type}</Tag>
                         </div>
                         {renderInputPreview(field)}
+
+                        {/* Biểu thị điều kiện hiển thị showIf & requiredIf */}
+                        {(field.config?.options?.showIf || field.config?.options?.requiredIf) && (
+                          <div style={{ marginTop: "6px", display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                            {field.config.options.showIf?.rules?.length > 0 && (
+                              <Tag color="cyan" icon={<EyeOutlined />} style={{ fontSize: "11px" }}>
+                                showIf: {field.config.options.showIf.logicalOperator || "AND"} (
+                                {field.config.options.showIf.rules.map((r: any, idx: number) => (
+                                  <span key={idx}>
+                                    {idx > 0 ? ` ${field.config.options.showIf.logicalOperator || "AND"} ` : ""}
+                                    [{r.fieldCode}] {r.operator} {r.operator !== "IS_EMPTY" && r.operator !== "IS_NOT_EMPTY" ? `'${r.value}'` : ""}
+                                  </span>
+                                ))}
+                                )
+                              </Tag>
+                            )}
+                            {field.config.options.requiredIf?.rules?.length > 0 && (
+                              <Tag color="warning" icon={<SafetyCertificateOutlined />} style={{ fontSize: "11px" }}>
+                                requiredIf: {field.config.options.requiredIf.logicalOperator || "AND"} (
+                                {field.config.options.requiredIf.rules.map((r: any, idx: number) => (
+                                  <span key={idx}>
+                                    {idx > 0 ? ` ${field.config.options.requiredIf.logicalOperator || "AND"} ` : ""}
+                                    [{r.fieldCode}] {r.operator} {r.operator !== "IS_EMPTY" && r.operator !== "IS_NOT_EMPTY" ? `'${r.value}'` : ""}
+                                  </span>
+                                ))}
+                                )
+                              </Tag>
+                            )}
+                          </div>
+                        )}
                       </Space>
                     </Col>
 

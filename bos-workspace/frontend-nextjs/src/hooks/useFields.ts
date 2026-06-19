@@ -7,19 +7,12 @@ export interface Field {
   tenantId: number;
   code: string;
   name: string;
-  type: "TEXT" | "NUMBER" | "SELECT" | "LOOKUP";
+  type: string;
   config: {
     entityId: number;
     isRequired: boolean;
     orderIndex: number;
-    options?: {
-      placeholder?: string;
-      min?: number;
-      max?: number;
-      choices?: string[];
-      lookupEntityId?: number;
-      displayField?: string;
-    };
+    options?: any;
   };
   createdAt: string;
 }

@@ -19,9 +19,9 @@ export class TasksScheduler {
   async handleOverdueTasks() {
     if (this.isProcessing) return;
     this.isProcessing = true;
-    this.logger.log(
-      `[SLA Alert Worker] Bắt đầu quét tác vụ quá hạn trên toàn hệ thống...`,
-    );
+    // this.logger.log(
+    //   `[SLA Alert Worker] Bắt đầu quét tác vụ quá hạn trên toàn hệ thống...`,
+    // );
 
     try {
       // 1. Quét tất cả các Tenant đang hoạt động
@@ -32,9 +32,9 @@ export class TasksScheduler {
       for (const tenant of tenants) {
         // 2. Chạy logic trong ngữ cảnh (Context) của từng Tenant
         await tenantContext.run({ tenantId: tenant.id }, async () => {
-          this.logger.log(
-            `>> Đang quét cho Tenant ID: ${tenant.id} - ${tenant.name}`,
-          );
+          // this.logger.log(
+          //   `>> Đang quét cho Tenant ID: ${tenant.id} - ${tenant.name}`,
+          // );
 
           const overdueTasks = await this.prisma.task.findMany({
             where: {
