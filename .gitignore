@@ -1,0 +1,20 @@
+node_modules
+# Keep environment variables out of version control
+.env
+
+/generated/prisma
+
+# dependencies
+node_modules/
+
+# nextjs
+.next/
+out/
+
+# logs
+*.log
+
+# env
+.env
+.env.local
+.env.production
