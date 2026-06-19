@@ -81,7 +81,16 @@ export function useUpdateStep() {
       );
       return data;
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (data, variables) => {
+      queryClient.setQueryData<WorkflowStep[]>(
+        ["workflowSteps", variables.versionId],
+        (oldSteps) => {
+          if (!oldSteps) return [];
+          return oldSteps.map((step) =>
+            step.id === variables.id ? { ...step, ...data } : step
+          );
+        }
+      );
       queryClient.invalidateQueries({
         queryKey: ["workflowSteps", variables.versionId],
       });

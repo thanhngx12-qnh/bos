@@ -47,7 +47,7 @@ import {
   useDeleteField,
   Field,
 } from "@/hooks/useFields";
-import { useWorkflows, WorkflowStep } from "@/hooks/useWorkflows";
+import { useWorkflows, useWorkflowSteps, WorkflowStep } from "@/hooks/useWorkflows";
 import { useTenantDetail } from "@/hooks/useTenant";
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/axios";
@@ -148,7 +148,7 @@ export default function WorkspaceContainerPage({
   };
 
   // Trạng thái liên kết đồng bộ 3 phân khu [1]
-  const [activeStep, setActiveStep] = useState<WorkflowStep | null>(null);
+  const [activeStepId, setActiveStepId] = useState<number | null>(null);
   const [selectedField, setSelectedField] = useState<Field | null>(null);
   const [selectedVersionId, setSelectedVersionId] = useState<number | null>(null);
 
@@ -170,6 +170,17 @@ export default function WorkspaceContainerPage({
   const workflowsQuery = useWorkflows(entityIdNum);
   const activeWorkflow = workflowsQuery.data?.data?.[0]; // Lấy quy trình đầu tiên của Thực thể
 
+  // Trích xuất activeVersionId trực tiếp từ Quy trình liên đới thực tế [1]
+  const activeVersionId = selectedVersionId || activeWorkflow?.versions?.[0]?.id || null;
+
+  // Gọi API lấy danh sách Steps tại page.tsx
+  const stepsQuery = useWorkflowSteps(activeVersionId);
+  const steps = stepsQuery.data || [];
+  const activeStep = steps.find((s) => s.id === activeStepId) || null;
+  const setActiveStep = (step: WorkflowStep | null) => {
+    setActiveStepId(step ? step.id : null);
+  };
+
   // Đồng bộ phiên bản quy trình đã chọn
   useEffect(() => {
     if (activeWorkflow?.versions?.length) {
@@ -184,7 +195,7 @@ export default function WorkspaceContainerPage({
 
   // Reset active step khi đổi version
   useEffect(() => {
-    setActiveStep(null);
+    setActiveStepId(null);
   }, [selectedVersionId]);
 
   // Trạng thái modal thêm nhanh
@@ -276,12 +287,21 @@ export default function WorkspaceContainerPage({
     if (e.key === "metadata") router.push("/metadata");
   };
 
-  const handleAddQuickField = (type: string) => {
+  const handleAddQuickField = (type: string, targetFieldId?: number) => {
     setQuickCreateType(type);
     quickForm.resetFields();
+
+    let targetOrder = (fieldsQuery.data?.length || 0) + 1;
+    if (targetFieldId !== undefined && fieldsQuery.data) {
+      const targetField = fieldsQuery.data.find((f) => f.id === targetFieldId);
+      if (targetField) {
+        targetOrder = targetField.config?.orderIndex || 1;
+      }
+    }
+
     quickForm.setFieldsValue({
       type,
-      orderIndex: (fieldsQuery.data?.length || 0) + 1,
+      orderIndex: targetOrder,
       isRequired: false,
       options: {
         columns: [],
@@ -450,8 +470,7 @@ export default function WorkspaceContainerPage({
     }
   };
 
-  // Trích xuất activeVersionId trực tiếp từ Quy trình liên đới thực tế [1]
-  const activeVersionId = selectedVersionId || activeWorkflow?.versions?.[0]?.id || null;
+  // Trích xuất activeVersionId đã được di chuyển lên trên để tránh lỗi compiler
 
   return (
     <Layout style={{ minHeight: "100vh" }}>
@@ -599,6 +618,8 @@ export default function WorkspaceContainerPage({
                   setSelectedVersionId={setSelectedVersionId}
                   versions={activeWorkflow?.versions || []}
                   fields={fieldsQuery.data || []}
+                  steps={steps}
+                  isLoading={stepsQuery.isLoading}
                   activeStep={activeStep}
                   setActiveStep={setActiveStep}
                 />
@@ -615,6 +636,7 @@ export default function WorkspaceContainerPage({
                   onEditClick={(field) => handleEditClick(field)}
                   onDeleteClick={(field) => handleDeleteFieldSubmit(field)}
                   onReorderFields={handleReorderFields}
+                  onDropBlock={(type, targetId) => handleAddQuickField(type, targetId)}
                 />
               </Col>
 

@@ -154,6 +154,31 @@ export default function ToolboxAndInspector({
     });
   };
 
+  // Hàm render các khối kéo thả cho Thư viện Khối [1]
+  const renderDraggableBlock = (type: string, label: string, icon: React.ReactNode) => {
+    const handleDragStart = (e: React.DragEvent) => {
+      e.dataTransfer.setData("text/plain", type);
+      e.dataTransfer.effectAllowed = "copy";
+    };
+
+    return (
+      <div
+        draggable
+        onDragStart={handleDragStart}
+        onClick={() => onAddQuickField(type)}
+        style={{ cursor: "grab", width: "100%" }}
+      >
+        <Button
+          block
+          icon={icon}
+          style={{ textAlign: "left", pointerEvents: "none" }}
+        >
+          {label} ({type})
+        </Button>
+      </div>
+    );
+  };
+
   // Thiết lập cấu trúc mảng items chuẩn hóa thay thế cho Collapse.Panel bị deprecated [1]
   const collapseItems = [
     {
@@ -165,38 +190,10 @@ export default function ToolboxAndInspector({
       ),
       children: (
         <Space direction="vertical" className="w-full" size="small">
-          <Button
-            block
-            icon={<FileTextOutlined style={{ color: "#1890ff" }} />}
-            onClick={() => onAddQuickField("TEXT")}
-            style={{ textAlign: "left" }}
-          >
-            Chuỗi chữ (TEXT)
-          </Button>
-          <Button
-            block
-            icon={<MailOutlined style={{ color: "#1890ff" }} />}
-            onClick={() => onAddQuickField("EMAIL")}
-            style={{ textAlign: "left" }}
-          >
-            Thư điện tử (EMAIL)
-          </Button>
-          <Button
-            block
-            icon={<PhoneOutlined style={{ color: "#1890ff" }} />}
-            onClick={() => onAddQuickField("PHONE")}
-            style={{ textAlign: "left" }}
-          >
-            Số điện thoại (PHONE)
-          </Button>
-          <Button
-            block
-            icon={<FileTextOutlined style={{ color: "#1890ff" }} />}
-            onClick={() => onAddQuickField("TEXTAREA")}
-            style={{ textAlign: "left" }}
-          >
-            Văn bản dài (TEXTAREA)
-          </Button>
+          {renderDraggableBlock("TEXT", "Chuỗi chữ", <FileTextOutlined style={{ color: "#1890ff" }} />)}
+          {renderDraggableBlock("EMAIL", "Thư điện tử", <MailOutlined style={{ color: "#1890ff" }} />)}
+          {renderDraggableBlock("PHONE", "Số điện thoại", <PhoneOutlined style={{ color: "#1890ff" }} />)}
+          {renderDraggableBlock("TEXTAREA", "Văn bản dài", <FileTextOutlined style={{ color: "#1890ff" }} />)}
         </Space>
       ),
     },
@@ -209,38 +206,10 @@ export default function ToolboxAndInspector({
       ),
       children: (
         <Space direction="vertical" className="w-full" size="small">
-          <Button
-            block
-            icon={<NumberOutlined style={{ color: "#52c41a" }} />}
-            onClick={() => onAddQuickField("NUMBER")}
-            style={{ textAlign: "left" }}
-          >
-            Số nguyên (NUMBER)
-          </Button>
-          <Button
-            block
-            icon={<NumberOutlined style={{ color: "#52c41a" }} />}
-            onClick={() => onAddQuickField("DECIMAL")}
-            style={{ textAlign: "left" }}
-          >
-            Số thập phân (DECIMAL)
-          </Button>
-          <Button
-            block
-            icon={<NumberOutlined style={{ color: "#52c41a" }} />}
-            onClick={() => onAddQuickField("CURRENCY")}
-            style={{ textAlign: "left" }}
-          >
-            Tiền tệ (CURRENCY)
-          </Button>
-          <Button
-            block
-            icon={<NumberOutlined style={{ color: "#52c41a" }} />}
-            onClick={() => onAddQuickField("PERCENTAGE")}
-            style={{ textAlign: "left" }}
-          >
-            Phần trăm (PERCENTAGE)
-          </Button>
+          {renderDraggableBlock("NUMBER", "Số nguyên", <NumberOutlined style={{ color: "#52c41a" }} />)}
+          {renderDraggableBlock("DECIMAL", "Số thập phân", <NumberOutlined style={{ color: "#52c41a" }} />)}
+          {renderDraggableBlock("CURRENCY", "Tiền tệ", <NumberOutlined style={{ color: "#52c41a" }} />)}
+          {renderDraggableBlock("PERCENTAGE", "Phần trăm", <NumberOutlined style={{ color: "#52c41a" }} />)}
         </Space>
       ),
     },
@@ -253,38 +222,10 @@ export default function ToolboxAndInspector({
       ),
       children: (
         <Space direction="vertical" className="w-full" size="small">
-          <Button
-            block
-            icon={<CalendarOutlined style={{ color: "#fa8c16" }} />}
-            onClick={() => onAddQuickField("DATE")}
-            style={{ textAlign: "left" }}
-          >
-            Ngày (DATE)
-          </Button>
-          <Button
-            block
-            icon={<ClockCircleOutlined style={{ color: "#fa8c16" }} />}
-            onClick={() => onAddQuickField("TIME")}
-            style={{ textAlign: "left" }}
-          >
-            Giờ (TIME)
-          </Button>
-          <Button
-            block
-            icon={<CalendarOutlined style={{ color: "#fa8c16" }} />}
-            onClick={() => onAddQuickField("DATETIME")}
-            style={{ textAlign: "left" }}
-          >
-            Ngày & Giờ (DATETIME)
-          </Button>
-          <Button
-            block
-            icon={<CalendarOutlined style={{ color: "#fa8c16" }} />}
-            onClick={() => onAddQuickField("MONTH_YEAR")}
-            style={{ textAlign: "left" }}
-          >
-            Tháng / Năm (MONTH_YEAR)
-          </Button>
+          {renderDraggableBlock("DATE", "Ngày", <CalendarOutlined style={{ color: "#fa8c16" }} />)}
+          {renderDraggableBlock("TIME", "Giờ", <ClockCircleOutlined style={{ color: "#fa8c16" }} />)}
+          {renderDraggableBlock("DATETIME", "Ngày & Giờ", <CalendarOutlined style={{ color: "#fa8c16" }} />)}
+          {renderDraggableBlock("MONTH_YEAR", "Tháng / Năm", <CalendarOutlined style={{ color: "#fa8c16" }} />)}
         </Space>
       ),
     },
@@ -297,55 +238,13 @@ export default function ToolboxAndInspector({
       ),
       children: (
         <Space direction="vertical" className="w-full" size="small">
-          <Button
-            block
-            icon={<UnorderedListOutlined style={{ color: "#722ed1" }} />}
-            onClick={() => onAddQuickField("SELECT")}
-            style={{ textAlign: "left" }}
-          >
-            Chọn một (SELECT)
-          </Button>
-          <Button
-            block
-            icon={<UnorderedListOutlined style={{ color: "#722ed1" }} />}
-            onClick={() => onAddQuickField("MULTI_SELECT")}
-            style={{ textAlign: "left" }}
-          >
-            Chọn nhiều (MULTI_SELECT)
-          </Button>
-          <Button
-            block
-            icon={<UnorderedListOutlined style={{ color: "#722ed1" }} />}
-            onClick={() => onAddQuickField("CHECKBOX")}
-            style={{ textAlign: "left" }}
-          >
-            Đóng mở (CHECKBOX/SWITCH)
-          </Button>
+          {renderDraggableBlock("SELECT", "Chọn một", <UnorderedListOutlined style={{ color: "#722ed1" }} />)}
+          {renderDraggableBlock("MULTI_SELECT", "Chọn nhiều", <UnorderedListOutlined style={{ color: "#722ed1" }} />)}
+          {renderDraggableBlock("CHECKBOX", "Đóng mở", <UnorderedListOutlined style={{ color: "#722ed1" }} />)}
           <Divider style={{ margin: "4px 0" }} />
-          <Button
-            block
-            icon={<UserOutlined style={{ color: "#eb2f96" }} />}
-            onClick={() => onAddQuickField("USER_REF")}
-            style={{ textAlign: "left" }}
-          >
-            Thành viên (USER_REF)
-          </Button>
-          <Button
-            block
-            icon={<PartitionOutlined style={{ color: "#eb2f96" }} />}
-            onClick={() => onAddQuickField("DEPT_REF")}
-            style={{ textAlign: "left" }}
-          >
-            Phòng ban (DEPT_REF)
-          </Button>
-          <Button
-            block
-            icon={<SafetyCertificateOutlined style={{ color: "#eb2f96" }} />}
-            onClick={() => onAddQuickField("ROLE_REF")}
-            style={{ textAlign: "left" }}
-          >
-            Vai trò (ROLE_REF)
-          </Button>
+          {renderDraggableBlock("USER_REF", "Thành viên", <UserOutlined style={{ color: "#eb2f96" }} />)}
+          {renderDraggableBlock("DEPT_REF", "Phòng ban", <PartitionOutlined style={{ color: "#eb2f96" }} />)}
+          {renderDraggableBlock("ROLE_REF", "Vai trò", <SafetyCertificateOutlined style={{ color: "#eb2f96" }} />)}
         </Space>
       ),
     },
@@ -358,47 +257,12 @@ export default function ToolboxAndInspector({
       ),
       children: (
         <Space direction="vertical" className="w-full" size="small">
-          <Button
-            block
-            icon={<UploadOutlined style={{ color: "#13c2c2" }} />}
-            onClick={() => onAddQuickField("FILE")}
-            style={{ textAlign: "left" }}
-          >
-            Tài liệu đính kèm (FILE)
-          </Button>
-          <Button
-            block
-            icon={<PictureOutlined style={{ color: "#13c2c2" }} />}
-            onClick={() => onAddQuickField("IMAGE")}
-            style={{ textAlign: "left" }}
-          >
-            Hình ảnh (IMAGE)
-          </Button>
+          {renderDraggableBlock("FILE", "Tài liệu đính kèm", <UploadOutlined style={{ color: "#13c2c2" }} />)}
+          {renderDraggableBlock("IMAGE", "Hình ảnh", <PictureOutlined style={{ color: "#13c2c2" }} />)}
           <Divider style={{ margin: "4px 0" }} />
-          <Button
-            block
-            icon={<LinkOutlined style={{ color: "#fa143c" }} />}
-            onClick={() => onAddQuickField("LOOKUP")}
-            style={{ textAlign: "left" }}
-          >
-            Liên kết chéo (LOOKUP)
-          </Button>
-          <Button
-            block
-            icon={<CalculatorOutlined style={{ color: "#fa541c" }} />}
-            onClick={() => onAddQuickField("FORMULA")}
-            style={{ textAlign: "left" }}
-          >
-            Công thức toán (FORMULA)
-          </Button>
-          <Button
-            block
-            icon={<TableOutlined style={{ color: "#2f54eb" }} />}
-            onClick={() => onAddQuickField("TABLE")}
-            style={{ textAlign: "left" }}
-          >
-            Lưới bảng con (TABLE)
-          </Button>
+          {renderDraggableBlock("LOOKUP", "Liên kết chéo", <LinkOutlined style={{ color: "#fa143c" }} />)}
+          {renderDraggableBlock("FORMULA", "Công thức toán", <CalculatorOutlined style={{ color: "#fa541c" }} />)}
+          {renderDraggableBlock("TABLE", "Lưới bảng con", <TableOutlined style={{ color: "#2f54eb" }} />)}
         </Space>
       ),
     },

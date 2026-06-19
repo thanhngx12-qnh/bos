@@ -54,6 +54,8 @@ interface WorkflowStepsControllerProps {
   setSelectedVersionId: (id: number | null) => void;
   versions: any[];
   fields: Field[];
+  steps: WorkflowStep[];
+  isLoading: boolean;
   activeStep: WorkflowStep | null;
   setActiveStep: (step: WorkflowStep | null) => void;
 }
@@ -67,11 +69,11 @@ export default function WorkflowStepsController({
   setSelectedVersionId,
   versions,
   fields,
+  steps = [],
+  isLoading,
   activeStep,
   setActiveStep,
 }: WorkflowStepsControllerProps) {
-  // Lấy dữ liệu các Bước duyệt từ database [1]
-  const { data: steps = [], isLoading } = useWorkflowSteps(versionId);
 
   // Gọi APIs lấy Roles & Users từ Database [1]
   const { data: rolesData } = useRoles(1, 100);

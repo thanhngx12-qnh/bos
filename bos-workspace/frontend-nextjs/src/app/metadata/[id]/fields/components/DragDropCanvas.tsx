@@ -64,6 +64,7 @@ interface DragDropCanvasProps {
   onEditClick: (field: Field) => void;
   onDeleteClick: (field: Field) => void;
   onReorderFields?: (draggedId: number, targetId: number) => void;
+  onDropBlock?: (type: string, targetFieldId?: number) => void;
 }
 
 export default function DragDropCanvas({
@@ -75,6 +76,7 @@ export default function DragDropCanvas({
   onEditClick,
   onDeleteClick,
   onReorderFields,
+  onDropBlock,
 }: DragDropCanvasProps) {
   const { message } = App.useApp();
   const updateStepMutation = useUpdateStep();
@@ -101,8 +103,17 @@ export default function DragDropCanvas({
 
   const handleDrop = (e: React.DragEvent, targetId: number) => {
     e.preventDefault();
+    e.stopPropagation();
     setDragOverId(null);
-    if (draggedId !== null && draggedId !== targetId && onReorderFields) {
+
+    const blockType = e.dataTransfer.getData("text/plain");
+    if (blockType && draggedId === null) {
+      // Thả khối từ Thư viện vào vị trí trường cụ thể
+      if (onDropBlock) {
+        onDropBlock(blockType, targetId);
+      }
+    } else if (draggedId !== null && draggedId !== targetId && onReorderFields) {
+      // Kéo thả sắp xếp lại
       onReorderFields(draggedId, targetId);
     }
     setDraggedId(null);
@@ -568,6 +579,19 @@ export default function DragDropCanvas({
           backgroundColor: "#fafafa",
           minHeight: "620px",
         },
+      }}
+      onDragOver={(e) => {
+        e.preventDefault();
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        const blockType = e.dataTransfer.getData("text/plain");
+        if (blockType && draggedId === null) {
+          // Thả vào khoảng trống của Canvas
+          if (onDropBlock) {
+            onDropBlock(blockType);
+          }
+        }
       }}
     >
       {isLoading ? (
