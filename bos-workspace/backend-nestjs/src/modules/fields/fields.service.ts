@@ -34,8 +34,6 @@ export class FieldsService {
     });
     if (!entity) throw new NotFoundException('Không tìm thấy Entity.');
 
-    // SỬA LỖI 500: Bảng FieldRegistry V8.1 không có cột vật lý entityId.
-    // Field code là unique trên toàn bộ Tenant.
     const existingField = await this.prisma.fieldRegistry.findFirst({
       where: {
         code: dto.code,
@@ -59,7 +57,7 @@ export class FieldsService {
           isRequired: dto.isRequired ?? false,
           options: dto.options ?? {},
           orderIndex: finalOrderIndex,
-          entityId: dto.entityId, // V8.1: Phải lưu entityId vào trong cục JSON config để móc nối
+          entityId: dto.entityId,
         },
       } as any,
     });
@@ -68,10 +66,23 @@ export class FieldsService {
     return newField;
   }
 
+  // --- BẢN VÁ TỐI ƯU HÓA: DÙNG PRISMA JSON FILTER ĐỂ TÌM KIẾM TRỰC TIẾP TRÊN DATABASE ---
   async findAllByEntity(entityId: number) {
-    // V8.1: Lấy tất cả field của Tenant, sau đó lọc theo entityId trong JSON config
-    const fields = await this.prisma.fieldRegistry.findMany();
-    return fields.filter((f) => (f.config as any)?.entityId === entityId);
+    const fields = await this.prisma.fieldRegistry.findMany({
+      where: {
+        config: {
+          path: ['entityId'],
+          equals: entityId,
+        },
+      } as any,
+    });
+
+    // Sắp xếp lại trên RAM (vì mảng này rất nhỏ, thường chỉ dưới 50 trường)
+    return fields.sort((a, b) => {
+      const aOrder = (a.config as any)?.orderIndex || 0;
+      const bOrder = (b.config as any)?.orderIndex || 0;
+      return aOrder - bOrder;
+    });
   }
 
   async findOne(id: number) {

@@ -6,6 +6,13 @@ import { tenantContext } from './tenant-context';
 @Injectable()
 export class TenantMiddleware implements NestMiddleware {
   use(req: Request, res: Response, next: NextFunction) {
+    // === BẢN VÁ AN TOÀN TUYỆT ĐỐI: DÙNG ORIGINAL URL & REGEX ĐỂ KHÔNG BỊ ẢNH HƯỞNG BỞI GLOBAL PREFIX ===
+    const publicPatterns = [/auth\/register-tenant/i, /auth\/login/i];
+
+    if (publicPatterns.some((pattern) => pattern.test(req.originalUrl))) {
+      return next();
+    }
+
     // 1. Trích xuất Tenant ID từ Header
     const tenantIdRaw = req.headers['x-tenant-id'];
     const tenantId = tenantIdRaw ? Number(tenantIdRaw) : undefined;

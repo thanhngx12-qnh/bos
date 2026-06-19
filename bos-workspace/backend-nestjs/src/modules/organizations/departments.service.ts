@@ -3,8 +3,10 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 import { CreateDepartmentDto } from './dto/create-department.dto';
 import { UpdateDepartmentDto } from './dto/update-department.dto';
 import { tenantContext } from '../../prisma/tenant-context';
@@ -109,31 +111,40 @@ export class DepartmentsService {
     });
   }
 
-  async remove(id: number, userId: number) {
-    await this.findOne(id);
-
-    const hasActiveChildren = await this.prisma.departmentClosure.findFirst({
-      where: {
-        ancestorId: id,
-        depth: 1,
-        descendant: {
-          deletedAt: null,
-        },
-      } as any, // SỬA LỖI: as any
+  // === BẢN VÁ SỬA CHỮ KÝ HÀM: HỖ TRỢ ĐỦ ĐỐI SỐ USERID ĐỂ SOFT DELETE === [1]
+  async remove(id: number, userId?: number) {
+    const dept = await this.prisma.department.findFirst({
+      where: { id } as any,
     });
-
-    if (hasActiveChildren) {
-      throw new BadRequestException(
-        'Không thể xóa vì đang có phòng ban con trực thuộc đang hoạt động.',
-      );
+    if (!dept) {
+      throw new NotFoundException('Không tìm thấy Phòng ban cần xóa.');
     }
 
-    return this.prisma.department.update({
-      where: { id } as any, // SỬA LỖI: as any
-      data: {
-        deletedAt: new Date(),
-        deletedById: userId,
-      } as any, // SỬA LỖI: as any
-    });
+    try {
+      // Nếu có truyền userId từ Controller, tiến hành XÓA MỀM (Soft Delete) [1]
+      if (userId) {
+        return await this.prisma.department.update({
+          where: { id } as any,
+          data: {
+            deletedAt: new Date(),
+            deletedById: userId,
+          } as any,
+        });
+      }
+
+      // Nếu không có, tiến hành XÓA CỨNG (Hard Delete)
+      return await this.prisma.department.delete({ where: { id } as any });
+    } catch (error) {
+      // Đánh chặn lỗi ràng buộc khóa ngoại nếu thực hiện Hard Delete [1]
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2003'
+      ) {
+        throw new ConflictException(
+          'Không thể xóa phòng ban này vì đang có dữ liệu nhân viên liên kết hoặc các phòng ban con trực thuộc hoạt động.',
+        );
+      }
+      throw error;
+    }
   }
 }
