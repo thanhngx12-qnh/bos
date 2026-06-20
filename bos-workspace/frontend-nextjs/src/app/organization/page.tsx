@@ -17,17 +17,17 @@ import {
   Form,
   Input,
   Popconfirm,
-  Tabs,
   Table,
-  Select,
   TreeSelect,
-  Checkbox,
   theme,
   App,
   Col,
   Row,
   Modal,
   Dropdown,
+  Tag,
+  Empty,
+  Result,
 } from "antd";
 
 import {
@@ -43,9 +43,10 @@ import {
   DeleteOutlined,
   FolderOpenOutlined,
   FolderOutlined,
-  SafetyCertificateOutlined,
-  UsergroupAddOutlined,
   FormOutlined,
+  SettingOutlined,
+  TeamOutlined,
+  HomeOutlined,
 } from "@ant-design/icons";
 import { useRouter } from "next/navigation";
 import {
@@ -55,40 +56,32 @@ import {
   useDeleteDepartment,
   DepartmentNode,
 } from "@/hooks/useDepartments";
-import {
-  useRoles,
-  useCreateRole,
-  useUpdateRole,
-  useDeleteRole,
-  Role,
-} from "@/hooks/useRoles";
-import {
-  useUsers,
-  useCreateUser,
-  useUpdateUser,
-  useDeleteUser,
-  User,
-} from "@/hooks/useUsers";
-
+import { useRoles } from "@/hooks/useRoles";
+import { useUsers, User } from "@/hooks/useUsers";
 import { useTenantDetail } from "@/hooks/useTenant";
+import { useMyTenants, useSwitchTenant } from "@/hooks/useAuth";
+import { BankOutlined } from "@ant-design/icons";
 
 const { Header, Sider, Content } = Layout;
 const { Title, Paragraph, Text } = Typography;
 
-export default function UnifiedOrganizationPage() {
+export default function DepartmentTreePage() {
   const router = useRouter();
   const {
     token: { colorBgContainer },
   } = theme.useToken();
 
-  // Khởi tạo và kích hoạt context-aware APIs an toàn chuẩn AntD v5 [1]
   const { modal, message } = App.useApp();
 
   const [collapsed, setCollapsed] = useState(false);
-  
-  // State quản lý Tenant và User động
   const [tenantId, setTenantId] = useState<number | null>(null);
   const [userName, setUserName] = useState<string>("Thành viên BOS");
+
+  // Selected Department Node from the Tree
+  const [selectedDeptNode, setSelectedDeptNode] = useState<DepartmentNode | null>(null);
+
+  const [userPermissions, setUserPermissions] = useState<Record<string, string[]>>({});
+  const [permissionsLoaded, setPermissionsLoaded] = useState(false);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -105,18 +98,67 @@ export default function UnifiedOrganizationPage() {
       if (storedUserName) {
         setUserName(storedUserName);
       }
+      const storedPermissions = localStorage.getItem("bos_user_permissions");
+      if (storedPermissions) {
+        try {
+          setUserPermissions(JSON.parse(storedPermissions));
+        } catch (e) {
+          console.error(e);
+        }
+      }
+      setPermissionsLoaded(true);
     }
   }, [router]);
 
   const tenantQuery = useTenantDetail(tenantId);
-  const activeTenantName = tenantQuery.data
+  const activeTenantName = tenantId === null
+    ? "Quản trị Hệ thống (Super Admin)"
+    : tenantQuery.data
     ? `${tenantQuery.data.name} (${tenantQuery.data.code})`
     : "Đang tải thông tin doanh nghiệp...";
+
+  const { data: myTenants = [] } = useMyTenants();
+  const switchTenantMutation = useSwitchTenant();
+
+  const handleSwitchTenant = (targetTenantId: number) => {
+    switchTenantMutation.mutate({ tenantId: targetTenantId }, {
+      onSuccess: (res) => {
+        message.success("Chuyển doanh nghiệp thành công!");
+        localStorage.setItem("bos_token", res.accessToken);
+        localStorage.setItem("bos_user_name", res.user.fullName);
+        localStorage.setItem("bos_user_permissions", JSON.stringify((res.user as any).role?.permissions || {}));
+        localStorage.setItem("bos_user_type", (res.user as any).userType);
+        if ((res.user as any).userType === "SUPER_ADMIN") {
+          localStorage.removeItem("bos_tenant_id");
+        } else {
+          localStorage.setItem("bos_tenant_id", String(res.user.tenantId));
+        }
+        window.location.reload();
+      },
+      onError: (err: any) => {
+        message.error("Không thể chuyển đổi doanh nghiệp.");
+      }
+    });
+  };
+
+  const tenantMenu = {
+    items: myTenants.map((t) => ({
+      key: String(t.id),
+      label: t.name,
+      icon: <BankOutlined />,
+      disabled: t.id === tenantId,
+    })),
+    onClick: (info: any) => {
+      handleSwitchTenant(Number(info.key));
+    }
+  };
 
   const handleLogout = () => {
     localStorage.removeItem("bos_token");
     localStorage.removeItem("bos_tenant_id");
     localStorage.removeItem("bos_user_name");
+    localStorage.removeItem("bos_user_permissions");
+    localStorage.removeItem("bos_user_type");
     router.push("/auth/login");
   };
 
@@ -134,77 +176,82 @@ export default function UnifiedOrganizationPage() {
     },
   };
 
-  const [activeTab, setActiveTab] = useState("org_tree");
-
-  // Khởi tạo các API Hooks
-  const deptQuery = useDepartmentTree();
-  const createDept = useCreateDepartment();
-  const updateDept = useUpdateDepartment();
-  const deleteDept = useDeleteDepartment();
-
-  const roleQuery = useRoles();
-  const createRole = useCreateRole();
-  const updateRole = useUpdateRole();
-  const deleteRole = useDeleteRole();
-
-  const userQuery = useUsers();
-  const createUser = useCreateUser();
-  const updateUser = useUpdateUser();
-  const deleteUser = useDeleteUser();
-
-  // Biến trạng thái Modals
-  const [isDeptModalOpen, setIsDeptModalOpen] = useState(false);
-  const [isDeptEditOpen, setIsDeptEditOpen] = useState(false);
-  const [selectedDept, setSelectedDept] = useState<DepartmentNode | null>(null);
-
-  const [isUserModalOpen, setIsUserModalOpen] = useState(false);
-  const [isUserEditOpen, setIsUserEditOpen] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<User | null>(null);
-
-  const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
-  const [isPermissionMatrixOpen, setIsPermissionMatrixOpen] = useState(false);
-  const [selectedRole, setSelectedRole] = useState<Role | null>(null);
-  const [permissionsMatrix, setPermissionsMatrix] = useState<
-    Record<string, string[]>
-  >({});
-
-  // Khai báo Forms
-  const [deptForm] = Form.useForm();
-  const [deptEditForm] = Form.useForm();
-  const [userForm] = Form.useForm();
-  const [userEditForm] = Form.useForm();
-  const [roleForm] = Form.useForm();
-
   const handleMenuClick = (e: { key: string }) => {
     if (e.key === "dashboard") router.push("/");
     if (e.key === "organization") router.push("/organization");
     if (e.key === "metadata") router.push("/metadata");
     if (e.key === "workflow") router.push("/metadata");
     if (e.key === "records") router.push("/records");
-    if (e.key === "tenants") router.push("/metadata");
+    if (e.key === "settings") router.push("/settings");
   };
 
-  // --- LOGIC PHÒNG BAN (CLOSURE TREE) ---
-  const handleAddDeptChild = (node: DepartmentNode) => {
-    setSelectedDept(node);
+  // Load Department, Users, and Roles
+  const deptQuery = useDepartmentTree();
+  const userQuery = useUsers(1, 200);
+  const roleQuery = useRoles();
+
+  const createDept = useCreateDepartment();
+  const updateDept = useUpdateDepartment();
+  const deleteDept = useDeleteDepartment();
+
+  // Modals for Department structure manipulation
+  const [isDeptModalOpen, setIsDeptModalOpen] = useState(false);
+  const [isDeptEditOpen, setIsDeptEditOpen] = useState(false);
+  const [actionDeptNode, setActionDeptNode] = useState<DepartmentNode | null>(null);
+
+  const [deptForm] = Form.useForm();
+  const [deptEditForm] = Form.useForm();
+
+  // Helper function to find a node in the tree recursively
+  const findDeptInTree = (nodes: DepartmentNode[], id: number): DepartmentNode | null => {
+    for (const node of nodes) {
+      if (node.id === id) return node;
+      if (node.children) {
+        const found = findDeptInTree(node.children, id);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+
+  // Helper to fetch parent department name
+  const getParentDeptName = (parentId: number | null): string => {
+    if (!parentId || !deptQuery.data) return "Là phòng ban gốc";
+    const parent = findDeptInTree(deptQuery.data, parentId);
+    return parent ? parent.name : "Phòng ban cấp trên";
+  };
+
+  // Count sub-departments recursively
+  const countSubDepts = (node: DepartmentNode): number => {
+    if (!node.children || node.children.length === 0) return 0;
+    let count = node.children.length;
+    node.children.forEach((c) => {
+      count += countSubDepts(c);
+    });
+    return count;
+  };
+
+  // Map roles for lookup table
+  const roleMap: Record<number, string> = {};
+  (roleQuery.data?.data || []).forEach((r) => {
+    roleMap[r.id] = r.name;
+  });
+
+  const handleAddDeptChild = (node: DepartmentNode, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setActionDeptNode(node);
     deptForm.resetFields();
     setIsDeptModalOpen(true);
   };
 
-  const handleEditDept = (node: DepartmentNode) => {
-    setSelectedDept(node);
+  const handleEditDept = (node: DepartmentNode, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setActionDeptNode(node);
     deptEditForm.setFieldsValue({ name: node.name });
     setIsDeptEditOpen(true);
   };
 
-  const mapDeptToTreeSelect = (nodes: DepartmentNode[]): any[] => {
-    return nodes.map((node) => ({
-      value: node.id,
-      title: node.name,
-      children: node.children ? mapDeptToTreeSelect(node.children) : [],
-    }));
-  };
-
+  // Map tree node to AntD tree data format
   const mapDeptTreeData = (nodes: DepartmentNode[]): any[] => {
     return nodes.map((node) => ({
       key: String(node.id),
@@ -215,52 +262,61 @@ export default function UnifiedOrganizationPage() {
             justifyContent: "space-between",
             alignItems: "center",
             width: "100%",
-            minWidth: "300px",
+            paddingRight: "8px",
           }}
           className="group"
         >
-          <Text strong={node.parentId === null}>{node.name}</Text>
+          <span style={{ fontSize: "14px", fontWeight: node.parentId === null ? "600" : "normal" }}>
+            {node.name}
+          </span>
           <span
-            className="opacity-0 group-hover:opacity-100 ml-4"
+            style={{ marginLeft: "12px" }}
             onClick={(e) => e.stopPropagation()}
           >
             <Space size="small">
               <Button
                 size="small"
                 type="text"
-                icon={<PlusOutlined />}
-                onClick={() => handleAddDeptChild(node)}
+                icon={<PlusOutlined style={{ color: "#1890ff" }} />}
+                onClick={(e) => handleAddDeptChild(node, e)}
               />
               <Button
                 size="small"
                 type="text"
                 icon={<EditOutlined style={{ color: "#fa8c16" }} />}
-                onClick={() => handleEditDept(node)}
+                onClick={(e) => handleEditDept(node, e)}
               />
               {node.parentId !== null && (
                 <Popconfirm
-                  title="Xóa phòng ban con?"
+                  title="Xóa phòng ban này?"
+                  description="Các phòng ban con và nhân viên trực thuộc sẽ mất liên kết hoặc bị chặn xóa."
                   onConfirm={() =>
                     deleteDept.mutate(node.id, {
                       onSuccess: () => {
                         message.success("Xóa phòng ban thành công!");
+                        if (selectedDeptNode?.id === node.id) {
+                          setSelectedDeptNode(null);
+                        }
                       },
                       onError: () => {
                         modal.error({
-                          title: "Không thể xóa Phòng ban",
+                          title: "Lỗi xóa phòng ban",
                           content:
-                            "Phòng ban này hiện tại đang có dữ liệu nhân viên liên kết hoặc các phòng ban con trực thuộc. Vui lòng chuyển đổi dữ liệu trước khi xóa.",
+                            "Phòng ban này hiện đang có dữ liệu nhân viên liên kết hoặc chứa các phòng ban con trực thuộc. Vui lòng dọn dẹp hoặc chuyển đổi nhân sự trước khi thực hiện xóa.",
                           okText: "Đã hiểu",
                         });
                       },
                     })
                   }
+                  okText="Xóa"
+                  cancelText="Hủy"
                 >
                   <Button
                     size="small"
                     type="text"
                     danger
                     icon={<DeleteOutlined />}
+                    onClick={(e) => e.stopPropagation()}
                   />
                 </Popconfirm>
               )}
@@ -278,67 +334,56 @@ export default function UnifiedOrganizationPage() {
     }));
   };
 
-  // --- LOGIC TÀI KHOẢN (USERS) ---
-  const handleEditUser = (user: User) => {
-    setSelectedUser(user);
-    userEditForm.setFieldsValue({
-      fullName: user.fullName,
-      email: user.email,
-      departmentId: user.departmentId,
-      roleId: user.roleId,
-      status: user.status,
-    });
-    setIsUserEditOpen(true);
-  };
-
-  // --- LOGIC PHÂN QUYỀN (ROLE-PERMISSION MATRIX) ---
-  const modulesList = [
-    "users",
-    "departments",
-    "roles",
-    "entities",
-    "workflows",
-  ];
-  const actionsList = ["CREATE", "READ", "UPDATE", "DELETE"];
-
-  const handleOpenPermissionMatrix = (role: Role) => {
-    setSelectedRole(role);
-    setPermissionsMatrix(role.permissions || {});
-    setIsPermissionMatrixOpen(true);
-  };
-
-  const togglePermissionCheckbox = (
-    module: string,
-    action: string,
-    checked: boolean,
-  ) => {
-    const updated = { ...permissionsMatrix };
-    const moduleActions = updated[module] || [];
-    if (checked) {
-      updated[module] = [...moduleActions, action];
+  // Antd Tree Selection callback
+  const handleSelectTreeNode = (selectedKeys: any[]) => {
+    if (selectedKeys.length > 0 && deptQuery.data) {
+      const id = Number(selectedKeys[0]);
+      const found = findDeptInTree(deptQuery.data, id);
+      setSelectedDeptNode(found);
     } else {
-      updated[module] = moduleActions.filter((a) => a !== action);
+      setSelectedDeptNode(null);
     }
-    setPermissionsMatrix(updated);
   };
 
-  const handleSavePermissions = () => {
-    if (!selectedRole) return;
-    updateRole.mutate(
-      {
-        id: selectedRole.id,
-        payload: { permissions: permissionsMatrix },
-      },
-      {
-        onSuccess: () => {
-          message.success(
-            `Cập nhật phân quyền Vai trò "${selectedRole.name}" thành công!`,
-          );
-          setIsPermissionMatrixOpen(false);
-        },
-      },
+  // Get users for the currently selected department
+  const selectedDeptUsers = selectedDeptNode
+    ? (userQuery.data?.data || []).filter((u) => u.departmentId === selectedDeptNode.id)
+    : [];
+
+  const isSuperAdmin = tenantId === null;
+
+  if (permissionsLoaded && !isSuperAdmin && !userPermissions.departments?.includes("READ")) {
+    return (
+      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100vh", background: "#f8fafc" }}>
+        <Result
+          status="403"
+          title="403"
+          subTitle="Bạn không có quyền truy cập Sơ đồ Cơ cấu Tổ chức."
+          extra={<Button type="primary" onClick={() => router.push("/")}>Quay lại Trang chủ</Button>}
+        />
+      </div>
     );
-  };
+  }
+
+  const sidebarItems = [
+    { key: "dashboard", icon: <DashboardOutlined />, label: "Bảng tổng quan" },
+  ];
+
+  if (isSuperAdmin || userPermissions.departments?.includes("READ")) {
+    sidebarItems.push({ key: "organization", icon: <PartitionOutlined />, label: "Cơ cấu Tổ chức" });
+  }
+  if (isSuperAdmin || userPermissions.entities?.includes("READ")) {
+    sidebarItems.push({ key: "metadata", icon: <BuildOutlined />, label: "Biểu mẫu Động" });
+  }
+  if (isSuperAdmin || userPermissions.workflows?.includes("READ")) {
+    sidebarItems.push({ key: "workflow", icon: <DeploymentUnitOutlined />, label: "Luồng Quy trình" });
+  }
+  if (isSuperAdmin || userPermissions.records?.includes("READ")) {
+    sidebarItems.push({ key: "records", icon: <FormOutlined />, label: "Hồ sơ & Biểu mẫu" });
+  }
+  if (isSuperAdmin || userPermissions.users?.includes("READ") || userPermissions.roles?.includes("READ")) {
+    sidebarItems.push({ key: "settings", icon: <SettingOutlined />, label: "Cài đặt Hệ thống" });
+  }
 
   return (
     <Layout style={{ minHeight: "100vh" }}>
@@ -362,14 +407,7 @@ export default function UnifiedOrganizationPage() {
           selectedKeys={["organization"]}
           mode="inline"
           onClick={handleMenuClick}
-          items={[
-            { key: "dashboard", icon: <DashboardOutlined />, label: "Bảng tổng quan" },
-            { key: "organization", icon: <PartitionOutlined />, label: "Cơ cấu Tổ chức" },
-            { key: "metadata", icon: <BuildOutlined />, label: "Biểu mẫu Động" },
-            { key: "workflow", icon: <DeploymentUnitOutlined />, label: "Luồng Quy trình" },
-            { key: "records", icon: <FormOutlined />, label: "Hồ sơ & Biểu mẫu" },
-            ...(tenantId === null ? [{ key: "tenants", icon: <GlobalOutlined />, label: "Quản trị SaaS Tenant" }] : []),
-          ]}
+          items={sidebarItems}
         />
       </Sider>
 
@@ -383,21 +421,19 @@ export default function UnifiedOrganizationPage() {
             justifyContent: "space-between",
             borderBottom: "1px solid #f0f0f0",
           }}
-          className="flex justify-between w-full"
         >
-          <Button icon={<GlobalOutlined />} loading={tenantQuery.isLoading}>
-            <Text strong>{activeTenantName}</Text>
-          </Button>
+          <Dropdown menu={tenantMenu} trigger={['click']} placement="bottomLeft">
+            <Button icon={<GlobalOutlined />} loading={tenantQuery.isLoading || switchTenantMutation.isPending}>
+              <Text strong>{activeTenantName}</Text>
+            </Button>
+          </Dropdown>
           <Space size="large">
             <Badge count={3} dot>
               <Button type="text" shape="circle" icon={<BellOutlined />} />
             </Badge>
             <Dropdown menu={userMenu} placement="bottomRight">
               <Space style={{ cursor: "pointer" }}>
-                <Avatar
-                  icon={<UserOutlined />}
-                  style={{ backgroundColor: "#0050b3" }}
-                />
+                <Avatar icon={<UserOutlined />} style={{ backgroundColor: "#0050b3" }} />
                 <Text strong className="hidden md:block">
                   {userName}
                 </Text>
@@ -409,252 +445,161 @@ export default function UnifiedOrganizationPage() {
         <Content style={{ margin: "24px" }}>
           <Space direction="vertical" size="large" className="w-full">
             <div className="bg-white p-6 rounded-lg border border-gray-100 shadow-sm">
-              <Breadcrumb
-                items={[{ title: "Trang chủ" }, { title: "Cơ cấu Tổ chức" }]}
-              />
+              <Breadcrumb items={[{ title: "Trang chủ" }, { title: "Cơ cấu Tổ chức" }]} />
               <Title level={2} style={{ margin: "8px 0 0 0" }}>
-                Quản lý Nhân sự & Phân quyền
+                Quản lý Sơ đồ Phòng ban
               </Title>
               <Paragraph type="secondary" style={{ margin: "4px 0 0 0" }}>
-                Cách ly đa doanh nghiệp, đồng bộ sâu sắc vai trò, phòng ban và
-                tài khoản.
+                Xây dựng sơ đồ phân cấp phòng ban doanh nghiệp, định vị nhanh danh sách nhân sự trực thuộc từng đơn vị.
               </Paragraph>
             </div>
 
-            <Tabs
-              activeKey={activeTab}
-              onChange={setActiveTab}
-              type="card"
-              items={[
-                // TAB 1: SƠ ĐỒ PHÒNG BAN
-                {
-                  key: "org_tree",
-                  label: "Sơ đồ Phòng ban",
-                  icon: <PartitionOutlined />,
-                  children: (
-                    <Card
-                      title="Phân cấp cơ cấu tổ chức"
-                      extra={
-                        <Button
-                          type="primary"
-                          icon={<PlusOutlined />}
-                          onClick={() => {
-                            setSelectedDept(null);
-                            deptForm.resetFields();
-                            setIsDeptModalOpen(true);
-                          }}
-                        >
-                          Thêm Phòng ban gốc
-                        </Button>
-                      }
+            <Row gutter={24}>
+              {/* CỘT TRÁI: CÂY PHÒNG BAN */}
+              <Col xs={24} md={10}>
+                <Card
+                  title="Sơ đồ Cơ cấu Tổ chức"
+                  bodyStyle={{ padding: "16px" }}
+                  extra={
+                    <Button
+                      type="primary"
+                      icon={<PlusOutlined />}
+                      onClick={() => {
+                        setActionDeptNode(null);
+                        deptForm.resetFields();
+                        setIsDeptModalOpen(true);
+                      }}
                     >
-                      {deptQuery.isLoading ? (
-                        <Spin
-                          style={{ display: "block", margin: "40px auto" }}
-                        />
-                      ) : (
+                      Thêm Phòng ban Gốc
+                    </Button>
+                  }
+                >
+                  {deptQuery.isLoading ? (
+                    <div style={{ padding: "40px 0", textAlign: "center" }}>
+                      <Spin size="large" />
+                    </div>
+                  ) : (
+                    <div style={{ maxHeight: "600px", overflowY: "auto", padding: "4px" }}>
+                      {deptQuery.data && deptQuery.data.length > 0 ? (
                         <Tree
                           showIcon
                           defaultExpandAll
                           blockNode
-                          selectable={false}
-                          treeData={mapDeptTreeData(deptQuery.data || [])}
+                          showLine={{ showLeafIcon: false }}
+                          treeData={mapDeptTreeData(deptQuery.data)}
+                          onSelect={handleSelectTreeNode}
                         />
+                      ) : (
+                        <Empty description="Chưa có dữ liệu phòng ban gốc nào" />
                       )}
-                    </Card>
-                  ),
-                },
-                // TAB 2: QUẢN TRỊ TÀI KHOẢN (USERS)
-                {
-                  key: "users_list",
-                  label: "Tài khoản Thành viên",
-                  icon: <UsergroupAddOutlined />,
-                  children: (
+                    </div>
+                  )}
+                </Card>
+              </Col>
+
+              {/* CỘT PHẢI: CHI TIẾT PHÒNG BAN & NHÂN SỰ */}
+              <Col xs={24} md={14}>
+                {selectedDeptNode ? (
+                  <Space direction="vertical" size="large" style={{ width: "100%" }}>
                     <Card
-                      title="Danh sách nhân viên"
-                      extra={
-                        <Button
-                          type="primary"
-                          icon={<PlusOutlined />}
-                          onClick={() => {
-                            userForm.resetFields();
-                            setIsUserModalOpen(true);
-                          }}
-                        >
-                          Tạo Thành viên mới
-                        </Button>
+                      title={
+                        <Space>
+                          <HomeOutlined style={{ color: "#1890ff" }} />
+                          <Text strong style={{ fontSize: "16px" }}>
+                            Chi tiết đơn vị: {selectedDeptNode.name}
+                          </Text>
+                        </Space>
+                      }
+                      bodyStyle={{ padding: "20px" }}
+                    >
+                      <Row gutter={[16, 16]}>
+                        <Col span={12}>
+                          <Text type="secondary">Phòng ban cấp trên: </Text>
+                          <br />
+                          <Text strong>{getParentDeptName(selectedDeptNode.parentId)}</Text>
+                        </Col>
+                        <Col span={12}>
+                          <Text type="secondary">Mã định danh phòng ban: </Text>
+                          <br />
+                          <Tag color="cyan">DEPT-{selectedDeptNode.id}</Tag>
+                        </Col>
+                        <Col span={12}>
+                          <Text type="secondary">Số lượng phòng ban trực thuộc: </Text>
+                          <br />
+                          <Badge count={countSubDepts(selectedDeptNode)} showZero color="#1890ff" />
+                        </Col>
+                        <Col span={12}>
+                          <Text type="secondary">Tổng số nhân sự trực thuộc: </Text>
+                          <br />
+                          <Badge count={selectedDeptUsers.length} showZero color="#52c41a" />
+                        </Col>
+                      </Row>
+                    </Card>
+
+                    <Card
+                      title={
+                        <Space>
+                          <TeamOutlined style={{ color: "#52c41a" }} />
+                          <Text strong>Danh sách Nhân sự trực thuộc ({selectedDeptUsers.length})</Text>
+                        </Space>
                       }
                     >
                       <Table
-                        dataSource={userQuery.data?.data || []}
+                        dataSource={selectedDeptUsers}
                         rowKey="id"
-                        loading={userQuery.isLoading}
-                        pagination={{ pageSize: 10 }}
+                        pagination={{ pageSize: 5 }}
+                        size="small"
                         columns={[
                           {
-                            title: "Họ tên",
+                            title: "Họ và Tên",
                             dataIndex: "fullName",
                             key: "fullName",
                             render: (text) => <Text strong>{text}</Text>,
                           },
-                          { title: "Email", dataIndex: "email", key: "email" },
+                          {
+                            title: "Email",
+                            dataIndex: "email",
+                            key: "email",
+                          },
+                          {
+                            title: "Vai trò gán",
+                            dataIndex: "roleId",
+                            key: "roleId",
+                            render: (roleId) =>
+                              roleId ? (
+                                <Tag color="purple">{roleMap[roleId] || `Vai trò #${roleId}`}</Tag>
+                              ) : (
+                                <Tag color="default">Chưa gán</Tag>
+                              ),
+                          },
                           {
                             title: "Trạng thái",
                             dataIndex: "status",
                             key: "status",
                             render: (status) => (
-                              <Badge
-                                status={
-                                  status === "ACTIVE" ? "success" : "error"
-                                }
-                                text={status}
-                              />
-                            ),
-                          },
-                          {
-                            title: "Hành động",
-                            key: "actions",
-                            render: (_, user) => (
-                              <Space size="middle">
-                                <Button
-                                  type="link"
-                                  icon={<EditOutlined />}
-                                  onClick={() => handleEditUser(user)}
-                                >
-                                  Cập nhật
-                                </Button>
-                                <Popconfirm
-                                  title="Xóa tài khoản này?"
-                                  onConfirm={() =>
-                                    deleteUser.mutate(user.id, {
-                                      onSuccess: () =>
-                                        message.success(
-                                          "Xóa tài khoản thành công!",
-                                        ),
-                                    })
-                                  }
-                                >
-                                  <Button
-                                    type="link"
-                                    danger
-                                    icon={<DeleteOutlined />}
-                                  >
-                                    Xóa
-                                  </Button>
-                                </Popconfirm>
-                              </Space>
+                              <Tag color={status === "ACTIVE" ? "success" : "error"}>
+                                {status === "ACTIVE" ? "ĐANG HOẠT ĐỘNG" : "ĐANG KHÓA"}
+                              </Tag>
                             ),
                           },
                         ]}
                       />
                     </Card>
-                  ),
-                },
-                // TAB 3: PHÂN QUYỀN (ROLES)
-                {
-                  key: "roles_permissions",
-                  label: "Vai trò & Phân quyền",
-                  icon: <SafetyCertificateOutlined />,
-                  children: (
-                    <Card
-                      title="Nhóm Vai trò RBAC"
-                      extra={
-                        <Button
-                          type="primary"
-                          icon={<PlusOutlined />}
-                          onClick={() => {
-                            roleForm.resetFields();
-                            setIsRoleModalOpen(true);
-                          }}
-                        >
-                          Tạo Vai trò mới
-                        </Button>
+                  </Space>
+                ) : (
+                  <Card style={{ textAlign: "center", padding: "80px 0" }}>
+                    <Empty
+                      image={Empty.PRESENTED_IMAGE_SIMPLE}
+                      description={
+                        <span style={{ color: "#8c8c8c" }}>
+                          Chọn một phòng ban từ Sơ đồ bên trái để xem thông tin chi tiết và danh sách nhân sự
+                        </span>
                       }
-                    >
-                      <Table
-                        dataSource={roleQuery.data?.data || []}
-                        rowKey="id"
-                        loading={roleQuery.isLoading}
-                        columns={[
-                          {
-                            title: "Mã ID",
-                            dataIndex: "id",
-                            key: "id",
-                            width: 100,
-                          },
-                          {
-                            title: "Tên Vai Trò",
-                            dataIndex: "name",
-                            key: "name",
-                            render: (name) => (
-                              <Text strong style={{ color: "#0050b3" }}>
-                                {name}
-                              </Text>
-                            ),
-                          },
-                          {
-                            title: "Quyền đã gán",
-                            dataIndex: "permissions",
-                            key: "permissions",
-                            render: (perm) => (
-                              <Text type="secondary">
-                                {Object.keys(perm || {}).length} Phân hệ
-                              </Text>
-                            ),
-                          },
-                          {
-                            title: "Hành động",
-                            key: "actions",
-                            render: (_, role) => (
-                              <Space size="middle">
-                                <Button
-                                  type="primary"
-                                  ghost
-                                  icon={<SafetyCertificateOutlined />}
-                                  onClick={() =>
-                                    handleOpenPermissionMatrix(role)
-                                  }
-                                >
-                                  Phân Quyền Ma Trận
-                                </Button>
-                                <Popconfirm
-                                  title="Xóa vai trò phân quyền?"
-                                  onConfirm={() =>
-                                    deleteRole.mutate(role.id, {
-                                      onSuccess: () => {
-                                        message.success(
-                                          "Xóa vai trò thành công!",
-                                        );
-                                      },
-                                      onError: () => {
-                                        // SỬ DỤNG MẪU HOÀN TOÀN TẬP TRUNG TỪ APP HOOKS KHÔNG LỖI CONTEXT [1]
-                                        modal.error({
-                                          title: "Không thể xóa Vai trò",
-                                          content: `Không thể xóa Vai trò "${role.name}" vì hiện tại đang có dữ liệu tài khoản nhân viên liên kết sử dụng vai trò này. Vui lòng chuyển toàn bộ nhân viên liên quan sang vai trò khác trước khi tiến hành xóa cứng khỏi hệ thống.`,
-                                          okText: "Đã hiểu",
-                                        });
-                                      },
-                                    })
-                                  }
-                                >
-                                  <Button
-                                    type="link"
-                                    danger
-                                    icon={<DeleteOutlined />}
-                                  >
-                                    Xóa
-                                  </Button>
-                                </Popconfirm>
-                              </Space>
-                            ),
-                          },
-                        ]}
-                      />
-                    </Card>
-                  ),
-                },
-              ]}
-            />
+                    />
+                  </Card>
+                )}
+              </Col>
+            </Row>
           </Space>
         </Content>
       </Layout>
@@ -662,8 +607,8 @@ export default function UnifiedOrganizationPage() {
       {/* --- CÁC MODAL HÀNH ĐỘNG PHÒNG BAN --- */}
       <Modal
         title={
-          selectedDept
-            ? `Thêm nhánh phòng ban dưới "${selectedDept.name}"`
+          actionDeptNode
+            ? `Thêm nhánh phòng ban dưới "${actionDeptNode.name}"`
             : "Thêm Phòng ban Gốc"
         }
         open={isDeptModalOpen}
@@ -676,28 +621,28 @@ export default function UnifiedOrganizationPage() {
           layout="vertical"
           onFinish={(vals) =>
             createDept.mutate(
-              { name: vals.name, parentId: selectedDept?.id },
+              { name: vals.name, parentId: actionDeptNode?.id },
               {
                 onSuccess: () => {
-                  message.success("Thêm thành công!");
+                  message.success("Thêm phòng ban thành công!");
                   setIsDeptModalOpen(false);
                 },
-              },
+              }
             )
           }
         >
           <Form.Item
             name="name"
             label="Tên phòng ban"
-            rules={[{ required: true, message: "Yêu cầu nhập tên phòng ban" }]}
+            rules={[{ required: true, message: "Vui lòng nhập tên phòng ban" }]}
           >
-            <Input placeholder="Ví dụ: Phòng Kinh Doanh..." />
+            <Input placeholder="Ví dụ: Phòng Kỹ Thuật, Ban Nhân Sự..." />
           </Form.Item>
         </Form>
       </Modal>
 
       <Modal
-        title="Sửa tên phòng ban"
+        title="Đổi tên phòng ban"
         open={isDeptEditOpen}
         onCancel={() => setIsDeptEditOpen(false)}
         onOk={() => deptEditForm.submit()}
@@ -707,334 +652,30 @@ export default function UnifiedOrganizationPage() {
           form={deptEditForm}
           layout="vertical"
           onFinish={(vals) => {
-            if (selectedDept)
+            if (actionDeptNode)
               updateDept.mutate(
-                { id: selectedDept.id, payload: { name: vals.name } },
+                { id: actionDeptNode.id, payload: { name: vals.name } },
                 {
                   onSuccess: () => {
-                    message.success("Cập nhật thành công!");
+                    message.success("Đổi tên phòng ban thành công!");
                     setIsDeptEditOpen(false);
+                    // Refresh details panel if it's the currently selected node
+                    if (selectedDeptNode?.id === actionDeptNode.id) {
+                      setSelectedDeptNode((prev) => (prev ? { ...prev, name: vals.name } : null));
+                    }
                   },
-                },
+                }
               );
           }}
         >
           <Form.Item
             name="name"
             label="Tên phòng ban mới"
-            rules={[{ required: true, message: "Yêu cầu nhập tên mới" }]}
+            rules={[{ required: true, message: "Tên phòng ban không được trống" }]}
           >
             <Input />
           </Form.Item>
         </Form>
-      </Modal>
-
-      {/* --- CÁC MODAL HÀNH ĐỘNG TÀI KHOẢN --- */}
-      <Modal
-        title="Tạo Thành viên mới"
-        open={isUserModalOpen}
-        onCancel={() => setIsUserModalOpen(false)}
-        onOk={() => userForm.submit()}
-        confirmLoading={createUser.isPending}
-        width={600}
-      >
-        <Form
-          form={userForm}
-          layout="vertical"
-          onFinish={(vals) =>
-            createUser.mutate(vals, {
-              onSuccess: () => {
-                message.success("Tạo thành công!");
-                setIsUserModalOpen(false);
-              },
-            })
-          }
-        >
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item
-                name="fullName"
-                label="Họ tên thành viên"
-                rules={[{ required: true, message: "Vui lòng nhập họ tên" }]}
-              >
-                <Input placeholder="Nguyễn Văn A" />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item
-                name="email"
-                label="Email làm việc"
-                rules={[
-                  {
-                    required: true,
-                    type: "email",
-                    message: "Vui lòng nhập Email hợp lệ",
-                  },
-                ]}
-              >
-                <Input placeholder="username@bos.com" />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item
-                name="password"
-                label="Mật khẩu"
-                rules={[
-                  {
-                    required: true,
-                    message: "Vui lòng nhập mật khẩu tối thiểu 6 ký tự",
-                    min: 6,
-                  },
-                ]}
-              >
-                <Input.Password placeholder="••••••••" />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item name="departmentId" label="Thuộc phòng ban">
-                <TreeSelect
-                  placeholder="Chọn phòng ban từ sơ đồ"
-                  treeData={mapDeptToTreeSelect(deptQuery.data || [])}
-                  allowClear
-                  treeDefaultExpandAll
-                />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item name="roleId" label="Vai trò gán">
-                <Select
-                  placeholder="Chọn vai trò"
-                  options={(roleQuery.data?.data || []).map((r) => ({
-                    value: r.id,
-                    label: r.name,
-                  }))}
-                />
-              </Form.Item>
-            </Col>
-          </Row>
-        </Form>
-      </Modal>
-
-      <Modal
-        title="Cập nhật thông tin thành viên"
-        open={isUserEditOpen}
-        onCancel={() => setIsUserEditOpen(false)}
-        onOk={() => userEditForm.submit()}
-        confirmLoading={updateUser.isPending}
-        width={600}
-      >
-        <Form
-          form={userEditForm}
-          layout="vertical"
-          onFinish={(vals) => {
-            if (selectedUser)
-              updateUser.mutate(
-                { id: selectedUser.id, payload: vals },
-                {
-                  onSuccess: () => {
-                    message.success("Cập nhật thành công!");
-                    setIsUserEditOpen(false);
-                  },
-                },
-              );
-          }}
-        >
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item
-                name="fullName"
-                label="Họ tên thành viên"
-                rules={[{ required: true }]}
-              >
-                <Input />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item
-                name="email"
-                label="Email làm việc"
-                rules={[{ required: true, type: "email" }]}
-              >
-                <Input />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item name="departmentId" label="Thuộc phòng ban">
-                <TreeSelect
-                  treeData={mapDeptToTreeSelect(deptQuery.data || [])}
-                  allowClear
-                  treeDefaultExpandAll
-                />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item name="roleId" label="Vai trò gán">
-                <Select
-                  options={(roleQuery.data?.data || []).map((r) => ({
-                    value: r.id,
-                    label: r.name,
-                  }))}
-                />
-              </Form.Item>
-            </Col>
-            <Col span={24}>
-              <Form.Item name="status" label="Trạng thái tài khoản">
-                <Select
-                  options={[
-                    { value: "ACTIVE", label: "Hoạt động (ACTIVE)" },
-                    { value: "INACTIVE", label: "Tạm khóa (INACTIVE)" },
-                  ]}
-                />
-              </Form.Item>
-            </Col>
-          </Row>
-        </Form>
-      </Modal>
-
-      {/* --- CÁC MODAL VAI TRÒ --- */}
-      <Modal
-        title="Tạo Vai trò mới"
-        open={isRoleModalOpen}
-        onCancel={() => setIsRoleModalOpen(false)}
-        onOk={() => roleForm.submit()}
-        confirmLoading={createRole.isPending}
-      >
-        <Form
-          form={roleForm}
-          layout="vertical"
-          onFinish={(vals) =>
-            createRole.mutate(
-              { name: vals.name, permissions: {} },
-              {
-                onSuccess: () => {
-                  message.success("Tạo thành công!");
-                  setIsRoleModalOpen(false);
-                },
-              },
-            )
-          }
-        >
-          <Form.Item
-            name="name"
-            label="Tên Vai Trò Mới"
-            rules={[
-              {
-                required: true,
-                message: "Nhập tên vai trò ví dụ: Quản lý biểu mẫu...",
-              },
-            ]}
-          >
-            <Input />
-          </Form.Item>
-        </Form>
-      </Modal>
-
-      {/* MODAL PHÂN QUYỀN MA TRẬN PHỨC TẠP CHUẨN VIP PRO */}
-      <Modal
-        title={
-          <Space>
-            <SafetyCertificateOutlined style={{ color: "#0050b3" }} />{" "}
-            <Text strong>
-              Thiết lập Ma trận Phân quyền cho: {selectedRole?.name}
-            </Text>
-          </Space>
-        }
-        open={isPermissionMatrixOpen}
-        onCancel={() => setIsPermissionMatrixOpen(false)}
-        onOk={handleSavePermissions}
-        confirmLoading={updateRole.isPending}
-        width={1000}
-      >
-        <div style={{ marginTop: "20px" }}>
-          <Row gutter={24}>
-            <Col span={15}>
-              <table
-                style={{
-                  width: "100%",
-                  borderCollapse: "collapse",
-                  border: "1px solid #f0f0f0",
-                }}
-              >
-                <thead>
-                  <tr
-                    style={{
-                      background: "#fafafa",
-                      borderBottom: "1px solid #f0f0f0",
-                    }}
-                  >
-                    <th style={{ padding: "12px", textAlign: "left" }}>
-                      Phân Hệ (Module)
-                    </th>
-                    {actionsList.map((act) => (
-                      <th
-                        key={act}
-                        style={{ padding: "12px", textAlign: "center" }}
-                      >
-                        {act}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {modulesList.map((mod) => (
-                    <tr key={mod} style={{ borderBottom: "1px solid #f0f0f0" }}>
-                      <td
-                        style={{ padding: "12px", textTransform: "capitalize" }}
-                      >
-                        <Text strong>{mod}</Text>
-                      </td>
-                      {actionsList.map((act) => {
-                        const isChecked =
-                          permissionsMatrix[mod]?.includes(act) || false;
-                        return (
-                          <td
-                            key={act}
-                            style={{ padding: "12px", textAlign: "center" }}
-                          >
-                            <Checkbox
-                              checked={isChecked}
-                              onChange={(e) =>
-                                togglePermissionCheckbox(
-                                  mod,
-                                  act,
-                                  e.target.checked,
-                                )
-                              }
-                            />
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </Col>
-
-            <Col span={9}>
-              <Card
-                title={<Text type="secondary">Real-time JSON Compile</Text>}
-                size="small"
-                bodyStyle={{ padding: 0 }}
-              >
-                <pre
-                  style={{
-                    margin: 0,
-                    padding: "16px",
-                    maxHeight: "260px",
-                    overflowY: "auto",
-                    background: "#001529",
-                    color: "#00ffcc",
-                    fontFamily: "monospace",
-                    fontSize: "11px",
-                    borderRadius: "0 0 8px 8px",
-                  }}
-                >
-                  {JSON.stringify(permissionsMatrix, null, 2)}
-                </pre>
-              </Card>
-            </Col>
-          </Row>
-        </div>
       </Modal>
     </Layout>
   );

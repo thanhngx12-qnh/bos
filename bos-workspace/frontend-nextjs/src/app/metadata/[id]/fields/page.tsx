@@ -29,6 +29,7 @@ import {
   TreeSelect,
   Segmented,
   Tabs,
+  Result,
 } from "antd";
 import {
   DashboardOutlined,
@@ -46,8 +47,8 @@ import {
   DeleteOutlined,
   CodeOutlined,
   QuestionCircleOutlined,
-  SafetyOutlined,
   ClockCircleOutlined,
+  SettingOutlined,
 } from "@ant-design/icons";
 import { useRouter, useParams } from "next/navigation";
 import dayjs from "dayjs";
@@ -61,6 +62,8 @@ import {
 } from "@/hooks/useFields";
 import { useWorkflows, useWorkflowSteps, WorkflowStep } from "@/hooks/useWorkflows";
 import { useTenantDetail } from "@/hooks/useTenant";
+import { useMyTenants, useSwitchTenant } from "@/hooks/useAuth";
+import { BankOutlined } from "@ant-design/icons";
 import { useDepartmentTree } from "@/hooks/useDepartments";
 import { useUsers } from "@/hooks/useUsers";
 import { useRoles } from "@/hooks/useRoles";
@@ -217,6 +220,9 @@ export default function WorkspaceContainerPage({
   const [userName, setUserName] = useState<string>("Thành viên BOS");
   const [collapsed, setCollapsed] = useState(false);
 
+  const [userPermissions, setUserPermissions] = useState<Record<string, string[]>>({});
+  const [permissionsLoaded, setPermissionsLoaded] = useState(false);
+
   useEffect(() => {
     if (typeof window !== "undefined") {
       const token = localStorage.getItem("bos_token");
@@ -232,6 +238,15 @@ export default function WorkspaceContainerPage({
       if (storedUserName) {
         setUserName(storedUserName);
       }
+      const storedPermissions = localStorage.getItem("bos_user_permissions");
+      if (storedPermissions) {
+        try {
+          setUserPermissions(JSON.parse(storedPermissions));
+        } catch (e) {
+          console.error(e);
+        }
+      }
+      setPermissionsLoaded(true);
     }
   }, [router]);
 
@@ -239,6 +254,8 @@ export default function WorkspaceContainerPage({
     localStorage.removeItem("bos_token");
     localStorage.removeItem("bos_tenant_id");
     localStorage.removeItem("bos_user_name");
+    localStorage.removeItem("bos_user_permissions");
+    localStorage.removeItem("bos_user_type");
     router.push("/auth/login");
   };
 
@@ -275,6 +292,48 @@ export default function WorkspaceContainerPage({
 
   // Gọi API Hook truy vấn thông tin Doanh nghiệp ĐỘNG từ database [1]
   const tenantQuery = useTenantDetail(tenantId);
+
+  const activeTenantName = tenantId === null
+    ? "Quản trị Hệ thống (Super Admin)"
+    : tenantQuery.data
+    ? `${tenantQuery.data.name} (${tenantQuery.data.code})`
+    : "Đang tải thông tin doanh nghiệp...";
+
+  const { data: myTenants = [] } = useMyTenants();
+  const switchTenantMutation = useSwitchTenant();
+
+  const handleSwitchTenant = (targetTenantId: number) => {
+    switchTenantMutation.mutate({ tenantId: targetTenantId }, {
+      onSuccess: (res) => {
+        message.success("Chuyển doanh nghiệp thành công!");
+        localStorage.setItem("bos_token", res.accessToken);
+        localStorage.setItem("bos_user_name", res.user.fullName);
+        localStorage.setItem("bos_user_permissions", JSON.stringify((res.user as any).role?.permissions || {}));
+        localStorage.setItem("bos_user_type", (res.user as any).userType);
+        if ((res.user as any).userType === "SUPER_ADMIN") {
+          localStorage.removeItem("bos_tenant_id");
+        } else {
+          localStorage.setItem("bos_tenant_id", String(res.user.tenantId));
+        }
+        window.location.reload();
+      },
+      onError: (err: any) => {
+        message.error("Không thể chuyển đổi doanh nghiệp.");
+      }
+    });
+  };
+
+  const tenantMenu = {
+    items: myTenants.map((t) => ({
+      key: String(t.id),
+      label: t.name,
+      icon: <BankOutlined />,
+      disabled: t.id === tenantId,
+    })),
+    onClick: (info: any) => {
+      handleSwitchTenant(Number(info.key));
+    }
+  };
 
   // Gọi API Hooks liên kết luồng quy trình của Entity [1]
   const workflowsQuery = useWorkflows(entityIdNum);
@@ -442,7 +501,7 @@ export default function WorkspaceContainerPage({
     if (e.key === "metadata") router.push("/metadata");
     if (e.key === "workflow") router.push("/metadata");
     if (e.key === "records") router.push("/records");
-    if (e.key === "tenants") router.push("/metadata");
+    if (e.key === "settings") router.push("/settings");
   };
 
   const handleAddQuickField = (type: string, targetFieldId?: number) => {
@@ -656,6 +715,41 @@ export default function WorkspaceContainerPage({
 
   // Trích xuất activeVersionId đã được di chuyển lên trên để tránh lỗi compiler
 
+  const isSuperAdmin = tenantId === null;
+
+  if (permissionsLoaded && !isSuperAdmin && !userPermissions.entities?.includes("READ")) {
+    return (
+      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100vh", background: "#f8fafc" }}>
+        <Result
+          status="403"
+          title="403"
+          subTitle="Bạn không có quyền truy cập trang Thiết kế Biểu mẫu."
+          extra={<Button type="primary" onClick={() => router.push("/")}>Quay lại Trang chủ</Button>}
+        />
+      </div>
+    );
+  }
+
+  const sidebarItems = [
+    { key: "dashboard", icon: <DashboardOutlined />, label: "Bảng tổng quan" },
+  ];
+
+  if (isSuperAdmin || userPermissions.departments?.includes("READ")) {
+    sidebarItems.push({ key: "organization", icon: <PartitionOutlined />, label: "Cơ cấu Tổ chức" });
+  }
+  if (isSuperAdmin || userPermissions.entities?.includes("READ")) {
+    sidebarItems.push({ key: "metadata", icon: <BuildOutlined />, label: "Biểu mẫu Động" });
+  }
+  if (isSuperAdmin || userPermissions.workflows?.includes("READ")) {
+    sidebarItems.push({ key: "workflow", icon: <DeploymentUnitOutlined />, label: "Luồng Quy trình" });
+  }
+  if (isSuperAdmin || userPermissions.records?.includes("READ")) {
+    sidebarItems.push({ key: "records", icon: <FormOutlined />, label: "Hồ sơ & Biểu mẫu" });
+  }
+  if (isSuperAdmin || userPermissions.users?.includes("READ") || userPermissions.roles?.includes("READ")) {
+    sidebarItems.push({ key: "settings", icon: <SettingOutlined />, label: "Cài đặt Hệ thống" });
+  }
+
   return (
     <Layout style={{ minHeight: "100vh" }}>
       <Sider
@@ -678,14 +772,7 @@ export default function WorkspaceContainerPage({
           selectedKeys={["metadata"]}
           mode="inline"
           onClick={handleMenuClick}
-          items={[
-            { key: "dashboard", icon: <DashboardOutlined />, label: "Bảng tổng quan" },
-            { key: "organization", icon: <PartitionOutlined />, label: "Cơ cấu Tổ chức" },
-            { key: "metadata", icon: <BuildOutlined />, label: "Biểu mẫu Động" },
-            { key: "workflow", icon: <DeploymentUnitOutlined />, label: "Luồng Quy trình" },
-            { key: "records", icon: <FormOutlined />, label: "Hồ sơ & Biểu mẫu" },
-            ...(tenantId === null ? [{ key: "tenants", icon: <GlobalOutlined />, label: "Quản trị SaaS Tenant" }] : []),
-          ]}
+          items={sidebarItems}
         />
       </Sider>
 
@@ -702,13 +789,11 @@ export default function WorkspaceContainerPage({
           className="flex justify-between w-full"
         >
           {/* TRUY VẤN TÊN DOANH NGHIỆP THỜI GIAN THỰC TỪ DATABASE [1] */}
-          <Button icon={<GlobalOutlined />} loading={tenantQuery.isLoading}>
-            <Text strong>
-              {tenantQuery.data
-                ? `${tenantQuery.data.name} (${tenantQuery.data.code})`
-                : "Đang tải thông tin doanh nghiệp..."}
-            </Text>
-          </Button>
+          <Dropdown menu={tenantMenu} trigger={['click']} placement="bottomLeft">
+            <Button icon={<GlobalOutlined />} loading={tenantQuery.isLoading || switchTenantMutation.isPending}>
+              <Text strong>{activeTenantName}</Text>
+            </Button>
+          </Dropdown>
           <Space size="large">
             <Badge count={3} dot>
               <Button type="text" shape="circle" icon={<BellOutlined />} />

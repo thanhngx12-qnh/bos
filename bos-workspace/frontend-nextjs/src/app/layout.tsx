@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import AntdRegistry from "@/lib/antd-registry";
 import QueryProvider from "@/providers/query-provider";
 import { ConfigProvider, App } from "antd"; // Tích hợp thành phần App làm cầu nối Context
+import AuthGuard from "@/components/AuthGuard";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -32,8 +33,10 @@ export default function RootLayout({
             }}
           >
             <QueryProvider>
-              {/* Thành phần App bọc ngoài cùng giải quyết triệt để vấn đề consume context tĩnh của React 19 */}
-              <App>{children}</App>
+              <AuthGuard>
+                {/* Thành phần App bọc ngoài cùng giải quyết triệt để vấn đề consume context tĩnh của React 19 */}
+                <App>{children}</App>
+              </AuthGuard>
             </QueryProvider>
           </ConfigProvider>
         </AntdRegistry>

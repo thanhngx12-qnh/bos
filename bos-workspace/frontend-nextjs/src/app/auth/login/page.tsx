@@ -14,9 +14,9 @@ import {
   Col,
   Alert,
 } from "antd";
-import { MailOutlined, LockOutlined, GlobalOutlined } from "@ant-design/icons";
+import { MailOutlined, LockOutlined, GlobalOutlined, ArrowLeftOutlined, BankOutlined } from "@ant-design/icons";
 import { useRouter } from "next/navigation";
-import { useLogin } from "@/hooks/useAuth";
+import { useLogin, useLoginSelectTenant } from "@/hooks/useAuth";
 import { z } from "zod";
 import Link from "next/link";
 
@@ -34,10 +34,16 @@ const loginSchema = z.object({
 export default function LoginPage() {
   const router = useRouter();
   const loginMutation = useLogin();
+  const loginSelectTenantMutation = useLoginSelectTenant();
+
   const [form] = Form.useForm();
   const [apiError, setApiError] = useState<string | null>(null);
 
-  // Hàm bóc tách lỗi đa tầng từ Backend NestJS
+  const [requireTenantSelect, setRequireTenantSelect] = useState(false);
+  const [tenantsList, setTenantsList] = useState<any[]>([]);
+  const [pendingEmail, setPendingEmail] = useState("");
+  const [pendingPassword, setPendingPassword] = useState("");
+
   const extractErrorMessage = (err: any): string => {
     const data = err?.response?.data;
     if (!data)
@@ -50,7 +56,6 @@ export default function LoginPage() {
   const onFinish = async (values: any) => {
     setApiError(null);
 
-    // Validate tầng 2 với Zod
     const validation = loginSchema.safeParse(values);
     if (!validation.success) {
       const firstError =
@@ -61,10 +66,24 @@ export default function LoginPage() {
 
     loginMutation.mutate(values, {
       onSuccess: (res) => {
+        if (res.requireTenantSelect) {
+          setTenantsList(res.tenants);
+          setPendingEmail(res.email);
+          setPendingPassword(values.password);
+          setRequireTenantSelect(true);
+          return;
+        }
+
         message.success("Đăng nhập thành công!");
         localStorage.setItem("bos_token", res.accessToken);
-        localStorage.setItem("bos_tenant_id", String(res.user.tenantId));
         localStorage.setItem("bos_user_name", res.user.fullName);
+        localStorage.setItem("bos_user_permissions", JSON.stringify((res.user as any).role?.permissions || {}));
+        localStorage.setItem("bos_user_type", (res.user as any).userType);
+        if ((res.user as any).userType === "SUPER_ADMIN") {
+          localStorage.removeItem("bos_tenant_id");
+        } else {
+          localStorage.setItem("bos_tenant_id", String(res.user.tenantId));
+        }
         router.push("/");
       },
       onError: (err: any) => {
@@ -72,6 +91,41 @@ export default function LoginPage() {
         setApiError(parsedError);
       },
     });
+  };
+
+  const handleSelectTenant = (tenantId: number) => {
+    setApiError(null);
+    loginSelectTenantMutation.mutate({
+      email: pendingEmail,
+      password: pendingPassword,
+      tenantId,
+    }, {
+      onSuccess: (res) => {
+        message.success("Đăng nhập thành công!");
+        localStorage.setItem("bos_token", res.accessToken);
+        localStorage.setItem("bos_user_name", res.user.fullName);
+        localStorage.setItem("bos_user_permissions", JSON.stringify((res.user as any).role?.permissions || {}));
+        localStorage.setItem("bos_user_type", (res.user as any).userType);
+        if ((res.user as any).userType === "SUPER_ADMIN") {
+          localStorage.removeItem("bos_tenant_id");
+        } else {
+          localStorage.setItem("bos_tenant_id", String(res.user.tenantId));
+        }
+        router.push("/");
+      },
+      onError: (err: any) => {
+        const parsedError = extractErrorMessage(err);
+        setApiError(parsedError);
+      }
+    });
+  };
+
+  const handleBackToLogin = () => {
+    setRequireTenantSelect(false);
+    setTenantsList([]);
+    setPendingEmail("");
+    setPendingPassword("");
+    setApiError(null);
   };
 
   return (
@@ -140,92 +194,117 @@ export default function LoginPage() {
             }}
             className="shadow-sm"
           >
-            <div style={{ textAlign: "center", marginBottom: "32px" }}>
-              <Title level={3} style={{ margin: 0, color: "#0050b3" }}>
-                Đăng Nhập Hệ Thống
-              </Title>
-              <Text type="secondary">
-                Cổng làm việc bảo mật cao doanh nghiệp
-              </Text>
-            </div>
+            {requireTenantSelect ? (
+              <div>
+                <div style={{ textAlign: "center", marginBottom: "24px" }}>
+                  <Title level={3} style={{ margin: 0, color: "#0050b3" }}>
+                    Chọn Doanh Nghiệp
+                  </Title>
+                  <Paragraph type="secondary" style={{ marginTop: 8 }}>
+                    Tài khoản của bạn liên kết với nhiều doanh nghiệp. Vui lòng chọn một doanh nghiệp để làm việc:
+                  </Paragraph>
+                </div>
+                <Space direction="vertical" style={{ width: "100%" }} size="middle">
+                  {tenantsList.map((t) => (
+                    <Button
+                      key={t.id}
+                      icon={<BankOutlined />}
+                      size="large"
+                      block
+                      onClick={() => handleSelectTenant(t.id)}
+                      loading={loginSelectTenantMutation.isPending}
+                      style={{
+                        height: "56px",
+                        textAlign: "left",
+                        paddingLeft: "20px",
+                        display: "flex",
+                        alignItems: "center",
+                        fontSize: "15px",
+                        borderRadius: "8px",
+                      }}
+                    >
+                      <span style={{ fontWeight: 600 }}>{t.name}</span>
+                      <span style={{ marginLeft: "auto", fontSize: "12px", opacity: 0.6 }}>({t.code})</span>
+                    </Button>
+                  ))}
+                  <Button
+                    type="text"
+                    icon={<ArrowLeftOutlined />}
+                    onClick={handleBackToLogin}
+                    style={{ marginTop: "12px" }}
+                  >
+                    Quay lại đăng nhập
+                  </Button>
+                </Space>
+              </div>
+            ) : (
+              <div>
+                <div style={{ textAlign: "center", marginBottom: "32px" }}>
+                  <Title level={3} style={{ margin: 0, color: "#0050b3" }}>
+                    Đăng Nhập Hệ Thống
+                  </Title>
+                  <Text type="secondary">
+                    Cổng làm việc bảo mật cao doanh nghiệp
+                  </Text>
+                </div>
 
-            {/* Hộp thông báo Alert hiển thị lỗi từ API (vd: Lỗi 401 Unauthorized) */}
-            {apiError && (
-              <Alert
-                message="Không thể đăng nhập"
-                description={apiError}
-                type="error"
-                showIcon
-                closable
-                onClose={() => setApiError(null)}
-                style={{ marginBottom: "24px", borderRadius: "8px" }}
-              />
-            )}
-
-            <Form
-              form={form}
-              layout="vertical"
-              onFinish={onFinish}
-              requiredMark={true}
-              validateTrigger={["onChange", "onBlur"]}
-            >
-              <Form.Item
-                name="email"
-                label="Email công việc"
-                rules={[
-                  {
-                    required: true,
-                    message: "Vui lòng nhập email công việc của bạn!",
-                  },
-                  { type: "email", message: "Địa chỉ Email không hợp lệ!" },
-                ]}
-              >
-                <Input
-                  prefix={<MailOutlined style={{ color: "#bfbfbf" }} />}
-                  placeholder="admin@vantaibos.com"
-                  size="large"
-                />
-              </Form.Item>
-
-              <Form.Item
-                name="password"
-                label="Mật khẩu"
-                rules={[
-                  {
-                    required: true,
-                    message: "Vui lòng nhập mật khẩu đăng nhập!",
-                  },
-                  { min: 6, message: "Mật khẩu phải chứa ít nhất 6 ký tự!" },
-                ]}
-              >
-                <Input.Password
-                  prefix={<LockOutlined style={{ color: "#bfbfbf" }} />}
-                  placeholder="••••••••"
-                  size="large"
-                />
-              </Form.Item>
-
-              <Form.Item style={{ marginTop: "32px" }}>
-                <Button
-                  type="primary"
-                  htmlType="submit"
-                  size="large"
-                  block
-                  loading={loginMutation.isPending}
+                <Form
+                  form={form}
+                  layout="vertical"
+                  onFinish={onFinish}
+                  requiredMark={true}
+                  validateTrigger={["onChange", "onBlur"]}
                 >
-                  Đăng Nhập
-                </Button>
-              </Form.Item>
-            </Form>
+                  <Form.Item
+                    name="email"
+                    label="Email công việc"
+                    rules={[
+                      {
+                        required: true,
+                        message: "Vui lòng nhập email công việc của bạn!",
+                      },
+                      { type: "email", message: "Địa chỉ Email không hợp lệ!" },
+                    ]}
+                  >
+                    <Input
+                      prefix={<MailOutlined style={{ color: "#bfbfbf" }} />}
+                      placeholder="admin@vantaibos.com"
+                      size="large"
+                    />
+                  </Form.Item>
 
-            <div style={{ textAlign: "center", marginTop: "24px" }}>
-              <Text type="secondary">Chưa có tài khoản doanh nghiệp? </Text>
-              <Link href="/auth/register" passHref legacyBehavior>
-                <Button type="link" style={{ padding: 0 }}>
-                  Đăng ký Tenant mới
-                </Button>
-              </Link>
-            </div>
+                  <Form.Item
+                    name="password"
+                    label="Mật khẩu"
+                    rules={[
+                      {
+                        required: true,
+                        message: "Vui lòng nhập mật khẩu đăng nhập!",
+                      },
+                      { min: 6, message: "Mật khẩu phải chứa ít nhất 6 ký tự!" },
+                    ]}
+                  >
+                    <Input.Password
+                      prefix={<LockOutlined style={{ color: "#bfbfbf" }} />}
+                      placeholder="••••••••"
+                      size="large"
+                    />
+                  </Form.Item>
+
+                  <Form.Item style={{ marginTop: "32px" }}>
+                    <Button
+                      type="primary"
+                      htmlType="submit"
+                      size="large"
+                      block
+                      loading={loginMutation.isPending}
+                    >
+                      Đăng Nhập
+                    </Button>
+                  </Form.Item>
+                </Form>
+              </div>
+            )}
           </Card>
         </Col>
       </Row>
