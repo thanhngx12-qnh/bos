@@ -9,6 +9,8 @@ import {
   Param,
   ParseIntPipe,
   UseGuards,
+  Request,
+  ForbiddenException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { TenantsService } from './tenants.service';
@@ -21,18 +23,20 @@ import { ApiQuery } from '@nestjs/swagger';
 
 @ApiTags('Tenants (Quản lý Doanh nghiệp SaaS - Chỉ Super Admin)')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, SuperAdminGuard) // <-- ÁP DỤNG ĐỒNG THỜI 2 Ổ KHÓA
+@UseGuards(JwtAuthGuard) // <-- CHỈ YÊU CẦU ĐĂNG NHẬP Ở CẤP CONTROLLER
 @Controller('tenants')
 export class TenantsController {
   constructor(private readonly tenantsService: TenantsService) {}
 
   @Post()
+  @UseGuards(SuperAdminGuard)
   @ApiOperation({ summary: 'Tạo một doanh nghiệp mới' })
   create(@Body() dto: CreateTenantDto) {
     return this.tenantsService.create(dto);
   }
 
   @Get()
+  @UseGuards(SuperAdminGuard)
   @ApiOperation({
     summary: 'Lấy toàn bộ danh sách doanh nghiệp (Có phân trang & Sắp xếp)',
   })
@@ -59,17 +63,26 @@ export class TenantsController {
     summary:
       'Lấy thông tin chi tiết doanh nghiệp kèm số lượng tài khoản/dữ liệu',
   })
-  findOne(@Param('id', ParseIntPipe) id: number) {
+  findOne(@Request() req, @Param('id', ParseIntPipe) id: number) {
+    const user = req.user;
+    // Super Admin (tenantId === null) can access anything. Tenant user can only access their own.
+    if (user.tenantId !== null && user.tenantId !== id) {
+      throw new ForbiddenException(
+        'Bạn không có quyền truy cập thông tin của doanh nghiệp khác.',
+      );
+    }
     return this.tenantsService.findOne(id);
   }
 
   @Patch(':id')
+  @UseGuards(SuperAdminGuard)
   @ApiOperation({ summary: 'Cập nhật thông tin doanh nghiệp' })
   update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateTenantDto) {
     return this.tenantsService.update(id, dto);
   }
 
   @Delete(':id')
+  @UseGuards(SuperAdminGuard)
   @ApiOperation({
     summary:
       'Xóa vĩnh viễn doanh nghiệp & toàn bộ dữ liệu liên đới (Cascade Delete)',

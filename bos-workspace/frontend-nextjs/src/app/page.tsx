@@ -45,7 +45,8 @@ import {
   ClockCircleOutlined,
   FileTextOutlined,
   MessageOutlined,
-  RightOutlined
+  RightOutlined,
+  FormOutlined,
 } from "@ant-design/icons";
 import { useRouter } from "next/navigation";
 import { useTenantDetail } from "@/hooks/useTenant";
@@ -104,6 +105,8 @@ export default function DashboardPortal() {
     if (e.key === "organization") router.push("/organization");
     if (e.key === "metadata") router.push("/metadata");
     if (e.key === "workflow") router.push("/metadata");
+    if (e.key === "records") router.push("/records");
+    if (e.key === "tenants") router.push("/metadata");
   };
 
   const userMenu = {
@@ -249,6 +252,8 @@ export default function DashboardPortal() {
               { key: "organization", icon: <PartitionOutlined />, label: "Cơ cấu Tổ chức" },
               { key: "metadata", icon: <BuildOutlined />, label: "Biểu mẫu Động" },
               { key: "workflow", icon: <DeploymentUnitOutlined />, label: "Luồng Quy trình" },
+              { key: "records", icon: <FormOutlined />, label: "Hồ sơ & Biểu mẫu" },
+              ...(tenantId === null ? [{ key: "tenants", icon: <GlobalOutlined />, label: "Quản trị SaaS Tenant" }] : []),
             ]}
           />
         </Sider>
@@ -378,7 +383,7 @@ export default function DashboardPortal() {
                     },
                     {
                       key: "COMPLETED",
-                      label: "Lịch sử đã duyệt",
+                      label: "Lịch sử xử lý",
                     },
                   ]}
                 />
@@ -404,34 +409,48 @@ export default function DashboardPortal() {
                     }}
                     renderItem={(task) => {
                       const record = task.instance?.record;
+                      const instanceStatus = task.instance?.status;
+                      const isRejected = instanceStatus === "REJECTED" || record?.status === "REJECTED";
+                      const isApproved = instanceStatus === "COMPLETED" || record?.status === "COMPLETED" || record?.status === "APPROVED";
+                      const isPending = task.status === "PENDING" && !isRejected && !isApproved;
+
+                      // Avatar background/color theo trạng thái
+                      const avatarBg = isPending ? "#e6f7ff" : isRejected ? "#fff1f0" : "#f6ffed";
+                      const avatarColor = isPending ? "#1890ff" : isRejected ? "#ff4d4f" : "#52c41a";
+                      const avatarIcon = isPending ? <ClockCircleOutlined /> : isRejected ? <CloseCircleOutlined /> : <CheckCircleOutlined />;
+
                       return (
                         <List.Item
                           actions={[
+                            isRejected && (
+                              <Tag color="error" icon={<CloseCircleOutlined />} key="rejected-tag">
+                                Đã từ chối
+                              </Tag>
+                            ),
                             <Button
                               type="primary"
                               ghost
                               icon={<RightOutlined />}
                               onClick={() => setSelectedTask(task)}
                               key="action"
+                              danger={isRejected}
                             >
-                              {task.status === "PENDING" ? "Xử lý hồ sơ" : "Chi tiết"}
+                              {isPending ? "Xử lý hồ sơ" : "Xem chi tiết"}
                             </Button>,
-                          ]}
+                          ].filter(Boolean)}
                           style={{
                             borderBottom: "1px solid #f0f0f0",
                             padding: "16px 24px",
                             transition: "background-color 0.2s",
+                            background: isRejected ? "#fff9f9" : undefined,
                           }}
                           className="hover:bg-slate-50"
                         >
                           <List.Item.Meta
                             avatar={
                               <Avatar
-                                icon={<FileTextOutlined />}
-                                style={{
-                                  backgroundColor: task.status === "PENDING" ? "#e6f7ff" : "#f6ffed",
-                                  color: task.status === "PENDING" ? "#1890ff" : "#52c41a",
-                                }}
+                                icon={avatarIcon}
+                                style={{ backgroundColor: avatarBg, color: avatarColor }}
                               />
                             }
                             title={
@@ -440,14 +459,21 @@ export default function DashboardPortal() {
                                   {record?.title || record?.businessCode || "Hồ sơ không tên"}
                                 </Text>
                                 <Tag color="blue">{record?.businessCode}</Tag>
+                                {isRejected && (
+                                  <Tag color="red" style={{ marginLeft: 4 }}>Từ chối</Tag>
+                                )}
+                                {isApproved && (
+                                  <Tag color="green" style={{ marginLeft: 4 }}>Đã duyệt</Tag>
+                                )}
                               </Space>
                             }
                             description={
                               <Space direction="vertical" size={2}>
                                 <div>
-                                  <Text type="secondary">Nhiệm vụ: </Text>
-                                  <Text strong>{task.status === "PENDING" ? "Cần phê duyệt tại bước " : "Đã hoàn thành bước "}</Text>
-                                  <Tag color="purple">{currentStep?.name || `Trạm #${task.stepId}`}</Tag>
+                                  <Text type="secondary">Trạng thái: </Text>
+                                  <Text strong style={{ color: isPending ? "#1890ff" : isRejected ? "#ff4d4f" : "#52c41a" }}>
+                                    {isPending ? "Chờ xử lý" : isRejected ? "Hồ sơ bị từ chối" : "Đã phê duyệt"}
+                                  </Text>
                                 </div>
                                 <Text type="secondary" style={{ fontSize: "12px" }}>
                                   Thời gian nhận: {new Date(task.createdAt).toLocaleString("vi-VN")}
@@ -482,11 +508,15 @@ export default function DashboardPortal() {
             setComment("");
           }}
           open={!!selectedTask}
-          extra={
-            selectedTask?.status === "COMPLETED" && (
-              <Tag color="success" icon={<CheckCircleOutlined />}>Nhiệm vụ đã hoàn tất</Tag>
-            )
-          }
+          extra={(() => {
+            const ist = selectedTask?.instance?.status;
+            const recStatus = selectedTask?.instance?.record?.status;
+            const selIsRejected = ist === "REJECTED" || recStatus === "REJECTED";
+            const selIsApproved = ist === "COMPLETED" || recStatus === "COMPLETED" || recStatus === "APPROVED";
+            if (selIsRejected) return <Tag color="error" icon={<CloseCircleOutlined />}>Hồ sơ bị Từ chối</Tag>;
+            if (selIsApproved) return <Tag color="success" icon={<CheckCircleOutlined />}>Đã phê duyệt thành công</Tag>;
+            return null;
+          })()}
         >
           {selectedTask && (
             <Space direction="vertical" size="large" className="w-full">
@@ -528,15 +558,25 @@ export default function DashboardPortal() {
                     items={auditLogs.map((log) => {
                       let color = "blue";
                       let icon = <ClockCircleOutlined />;
+                      const normalizedAction = log.action.toLowerCase();
                       if (log.action === "START") {
                         color = "gray";
                         icon = <FileTextOutlined />;
-                      } else if (log.action.includes("duyệt") || log.action.includes("Đồng ý") || log.action === "Phê duyệt") {
-                        color = "green";
-                        icon = <CheckCircleOutlined />;
-                      } else if (log.action.includes("từ chối") || log.action.includes("Bác bỏ")) {
+                      } else if (
+                        normalizedAction.includes("từ chối") ||
+                        normalizedAction.includes("bác bỏ") ||
+                        normalizedAction.includes("không phê duyệt") ||
+                        normalizedAction.includes("reject")
+                      ) {
                         color = "red";
                         icon = <CloseCircleOutlined />;
+                      } else if (
+                        normalizedAction.includes("duyệt") ||
+                        normalizedAction.includes("đồng ý") ||
+                        normalizedAction.includes("approve")
+                      ) {
+                        color = "green";
+                        icon = <CheckCircleOutlined />;
                       }
                       return {
                         color,

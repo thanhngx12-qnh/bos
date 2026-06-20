@@ -1,8 +1,12 @@
 // File: src/modules/records/dto/update-record.dto.ts
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsObject, IsOptional } from 'class-validator';
+import { IsObject, IsOptional, IsString } from 'class-validator';
 
 export class UpdateRecordDto {
+  @ApiPropertyOptional({ description: 'Tiêu đề hồ sơ mới' })
+  @IsString()
+  @IsOptional()
+  title?: string;
   @ApiPropertyOptional({
     description: 'Dữ liệu cập nhật dạng JSON',
     example: {

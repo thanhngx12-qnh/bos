@@ -50,7 +50,7 @@ export function useRecords(
 export function useCreateRecord() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (payload: { entityId: number; data: any }) => {
+    mutationFn: async (payload: { entityId: number; title?: string; data: any }) => {
       const { data } = await api.post("/api/v1/records", payload);
       return data;
     },
@@ -72,7 +72,7 @@ export function useUpdateRecord() {
     }: {
       id: number;
       entityId: number;
-      payload: { data: any };
+      payload: { title?: string; data: any };
     }) => {
       const { data } = await api.patch(`/api/v1/records/${id}`, payload);
       return data;

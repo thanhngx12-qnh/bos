@@ -133,4 +133,10 @@ export class WorkflowsController {
   getInstanceLogs(@Param('id', ParseIntPipe) instanceId: number) {
     return this.workflowsService.getInstanceLogs(instanceId);
   }
+
+  @Get('instances/record/:recordId/logs')
+  @ApiOperation({ summary: 'Lấy lịch sử Audit Log của lượt chạy mới nhất theo recordId' })
+  getRecordInstanceLogs(@Param('recordId', ParseIntPipe) recordId: number) {
+    return this.workflowsService.getLatestInstanceLogs(recordId);
+  }
 }

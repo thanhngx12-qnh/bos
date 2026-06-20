@@ -26,6 +26,7 @@ export interface Task {
       id: number;
       businessCode: string;
       title: string;
+      status?: string;
       entityId: number;
       data: Record<string, any>;
     };
@@ -123,5 +124,17 @@ export function useWorkflowLogs(instanceId: number | null) {
       return data;
     },
     enabled: !!instanceId,
+  });
+}
+
+export function useRecordWorkflowLogs(recordId: number | null) {
+  return useQuery<WorkflowLog[]>({
+    queryKey: ["recordWorkflowLogs", recordId],
+    queryFn: async () => {
+      if (!recordId) return [];
+      const { data } = await api.get(`/api/v1/workflows/instances/record/${recordId}/logs`);
+      return data;
+    },
+    enabled: !!recordId,
   });
 }

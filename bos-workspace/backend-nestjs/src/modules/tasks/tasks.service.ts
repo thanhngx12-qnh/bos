@@ -62,17 +62,55 @@ export class TasksService {
     }
   }
 
-  // Hàm này dọn dẹp các Task rác khi quy trình đi tiếp (Duyệt đại diện OR-Gate)
-  async cancelPendingTasks(tx: any, instanceId: number, stepId: number) {
+  // Hàm này dọn dẹp các Task khi quy trình đi tiếp:
+  // - Task của người thực hiện action => COMPLETED
+  // - Task của các ứng viên còn lại => CANCELLED
+  async cancelPendingTasks(
+    tx: any,
+    instanceId: number,
+    stepId: number,
+    actorUserId?: number,
+  ) {
+    const completionTime = new Date();
+
+    // Nếu có actorUserId, mark task của họ là COMPLETED trước
+    if (actorUserId) {
+      const actorTask = await tx.task.findFirst({
+        where: {
+          instanceId,
+          stepId,
+          assigneeId: actorUserId,
+          status: 'PENDING',
+        } as any,
+      });
+
+      if (actorTask) {
+        const completionSeconds = Math.round(
+          (completionTime.getTime() - actorTask.createdAt.getTime()) / 1000,
+        );
+        await tx.task.update({
+          where: { id: actorTask.id } as any,
+          data: {
+            status: 'COMPLETED',
+            actualCompletionTime: completionTime,
+            completionTimeSeconds: completionSeconds,
+          } as any,
+        });
+        console.log(
+          `[Task Engine] Task #${actorTask.id} của User ${actorUserId} đã COMPLETED tại Trạm ID ${stepId}.`,
+        );
+      }
+    }
+
+    // Cancel toàn bộ PENDING tasks còn lại của bước này (từ các ứng viên khác)
     const result = await tx.task.updateMany({
       where: {
-        instanceId: instanceId,
-        stepId: stepId,
+        instanceId,
+        stepId,
         status: 'PENDING',
+        ...(actorUserId ? { NOT: { assigneeId: actorUserId } } : {}),
       } as any,
-      data: {
-        status: 'CANCELLED',
-      } as any,
+      data: { status: 'CANCELLED' } as any,
     });
     if (result.count > 0) {
       console.log(
@@ -92,11 +130,27 @@ export class TasksService {
 
   async findMyTasks(userId: number, options: PaginateOptions, status?: string) {
     const where: any = { assigneeId: userId };
-    if (status) where.status = status;
+
+    // Tab "COMPLETED" => hiển thị cả task COMPLETED và CANCELLED (từ chối)
+    if (status === 'COMPLETED') {
+      where.status = { in: ['COMPLETED', 'CANCELLED'] };
+    } else if (status) {
+      where.status = status;
+    }
 
     return paginate(this.prisma.task, where, options, {
       instance: {
-        include: { record: { select: { businessCode: true, title: true } } },
+        include: {
+          record: {
+            select: {
+              businessCode: true,
+              title: true,
+              entityId: true,
+              data: true,
+              status: true,
+            },
+          },
+        },
       },
     });
   }

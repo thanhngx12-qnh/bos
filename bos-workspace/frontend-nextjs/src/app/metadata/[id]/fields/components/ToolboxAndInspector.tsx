@@ -23,6 +23,8 @@ import {
   Divider,
   Collapse,
   Empty,
+  DatePicker,
+  TreeSelect,
 } from "antd";
 import {
   SettingOutlined,
@@ -46,8 +48,12 @@ import {
   PlusOutlined,
   MinusCircleOutlined,
 } from "@ant-design/icons";
+import dayjs from "dayjs";
 import { Field } from "@/hooks/useFields";
 import { Entity } from "@/hooks/useEntities";
+import { useDepartmentTree } from "@/hooks/useDepartments";
+import { useUsers } from "@/hooks/useUsers";
+import { useRoles } from "@/hooks/useRoles";
 import FormulaBuilder from "./FormulaBuilder";
 
 const { Text, Paragraph } = Typography;
@@ -90,6 +96,99 @@ interface ToolboxAndInspectorProps {
   isSaving: boolean;
 }
 
+interface InitValueInputProps {
+  type: string;
+  form: any;
+  choicesPath?: (string | number)[];
+  userOptions: any[];
+  deptTreeData: any[];
+  roleOptions: any[];
+}
+
+const InitValueInput: React.FC<InitValueInputProps> = ({
+  type,
+  form,
+  choicesPath = ["options", "choices"],
+  userOptions,
+  deptTreeData,
+  roleOptions,
+}) => {
+  const currentChoices = Form.useWatch(choicesPath, form) || [];
+  const choicesOptions = Array.isArray(currentChoices)
+    ? currentChoices.map((c: any) => ({ value: c, label: c }))
+    : [];
+
+  switch (type) {
+    case "TEXT":
+    case "EMAIL":
+    case "PHONE":
+      return <Input placeholder="Giá trị mặc định..." />;
+    case "TEXTAREA":
+      return <Input.TextArea rows={2} placeholder="Văn bản mặc định..." />;
+    case "NUMBER":
+    case "DECIMAL":
+    case "CURRENCY":
+    case "PERCENTAGE":
+      return <InputNumber placeholder="Số mặc định..." style={{ width: "100%" }} />;
+    case "DATE":
+      return <DatePicker placeholder="Chọn ngày..." style={{ width: "100%" }} format="DD/MM/YYYY" />;
+    case "TIME":
+      return <Input placeholder="Ví dụ: 08:30" />;
+    case "DATETIME":
+      return <DatePicker showTime placeholder="Chọn ngày & giờ..." style={{ width: "100%" }} format="DD/MM/YYYY HH:mm" />;
+    case "MONTH_YEAR":
+      return <DatePicker picker="month" placeholder="Chọn tháng/năm..." style={{ width: "100%" }} format="MM/YYYY" />;
+    case "SELECT":
+      return (
+        <Select
+          placeholder="Chọn giá trị mặc định..."
+          options={choicesOptions}
+          allowClear
+        />
+      );
+    case "MULTI_SELECT":
+      return (
+        <Select
+          mode="multiple"
+          placeholder="Chọn các giá trị mặc định..."
+          options={choicesOptions}
+          allowClear
+        />
+      );
+    case "CHECKBOX":
+      return <Checkbox>Mặc định checked (BẬT)</Checkbox>;
+    case "USER_REF":
+      return (
+        <Select
+          placeholder="Chọn nhân viên mặc định..."
+          options={userOptions}
+          allowClear
+          showSearch
+          filterOption={(input, opt) => String(opt?.label ?? "").toLowerCase().includes(input.toLowerCase())}
+        />
+      );
+    case "DEPT_REF":
+      return (
+        <TreeSelect
+          placeholder="Chọn phòng ban mặc định..."
+          treeData={deptTreeData}
+          allowClear
+          treeDefaultExpandAll
+        />
+      );
+    case "ROLE_REF":
+      return (
+        <Select
+          placeholder="Chọn vai trò mặc định..."
+          options={roleOptions}
+          allowClear
+        />
+      );
+    default:
+      return null;
+  }
+};
+
 export default function ToolboxAndInspector({
   fields,
   entities,
@@ -101,6 +200,34 @@ export default function ToolboxAndInspector({
   const [form] = Form.useForm();
   const watchedType = Form.useWatch("type", form);
   const [activeTab, setActiveTab] = React.useState("toolbox");
+
+  // Gọi các API hooks phục vụ cho việc nhập và hiển thị dropdown tham chiếu/cơ cấu tổ chức
+  const deptsQuery = useDepartmentTree();
+  const usersQuery = useUsers(1, 1000);
+  const rolesQuery = useRoles(1, 1000);
+
+  const deptTreeData = React.useMemo(() => {
+    const mapNode = (node: any): any => ({
+      value: node.id,
+      title: node.name,
+      children: node.children ? node.children.map(mapNode) : undefined,
+    });
+    return (deptsQuery.data || []).map(mapNode);
+  }, [deptsQuery.data]);
+
+  const userOptions = React.useMemo(() => {
+    return (usersQuery.data?.data || []).map((u) => ({
+      value: u.id,
+      label: `${u.fullName} (${u.email})`,
+    }));
+  }, [usersQuery.data]);
+
+  const roleOptions = React.useMemo(() => {
+    return (rolesQuery.data?.data || []).map((r) => ({
+      value: r.id,
+      label: r.name,
+    }));
+  }, [rolesQuery.data]);
 
   // Đồng bộ hóa dữ liệu từ Canvas trường được chọn lên Inspector để sửa [1]
   useEffect(() => {
@@ -116,9 +243,11 @@ export default function ToolboxAndInspector({
           placeholder: selectedField.config?.options?.placeholder || "",
           min: selectedField.config?.options?.min,
           max: selectedField.config?.options?.max,
-          choices: selectedField.config?.options?.choices
-            ? selectedField.config.options.choices.join(", ")
-            : "",
+          choices: Array.isArray(selectedField.config?.options?.choices)
+            ? selectedField.config.options.choices
+            : typeof selectedField.config?.options?.choices === "string"
+            ? selectedField.config.options.choices.split(",").map((s: string) => s.trim()).filter(Boolean)
+            : [],
           lookupEntityId: selectedField.config?.options?.lookupEntityId,
           displayField: selectedField.config?.options?.displayField || "",
           formula: selectedField.config?.options?.formula || "",
@@ -127,16 +256,31 @@ export default function ToolboxAndInspector({
           regexPattern: selectedField.config?.options?.regexPattern || "",
           errorMessage: selectedField.config?.options?.errorMessage || "",
           columns: (selectedField.config?.options?.columns || []).map((col: any) => {
-            if (col.type === "SELECT" && Array.isArray(col.choices)) {
+            if (col.type === "SELECT") {
               return {
                 ...col,
-                choices: col.choices.join(", "),
+                choices: Array.isArray(col.choices)
+                  ? col.choices
+                  : typeof col.choices === "string"
+                  ? col.choices.split(",").map((s: string) => s.trim()).filter(Boolean)
+                  : [],
               };
             }
             return col;
           }),
           showIf: selectedField.config?.options?.showIf || { logicalOperator: "AND", rules: [] },
           requiredIf: selectedField.config?.options?.requiredIf || { logicalOperator: "AND", rules: [] },
+          initValue: (() => {
+            const val = selectedField.config?.options?.initValue !== undefined ? selectedField.config.options.initValue : selectedField.config?.options?.defaultValue;
+            if (val === undefined || val === null || val === "") return undefined;
+            if (["DATE", "DATETIME", "MONTH_YEAR"].includes(selectedField.type)) {
+              return dayjs(val);
+            }
+            if (selectedField.type === "CHECKBOX") {
+              return val === true || val === "true";
+            }
+            return val;
+          })(),
         },
       });
     } else {
@@ -462,16 +606,52 @@ export default function ToolboxAndInspector({
                 {/* 3. options cho kiểu SELECT & MULTI_SELECT */}
                 {(watchedType === "SELECT" ||
                   watchedType === "MULTI_SELECT") && (
-                  <Form.Item
-                    name={["options", "choices"]}
-                    label="Danh sách lựa chọn (Phân cách dấu phẩy)"
-                    extra="Ví dụ: HARDWARE, SOFTWARE, CLOUD"
-                    rules={[
-                      { required: true, message: "Vui lòng nhập choices" },
-                    ]}
-                  >
-                    <Input placeholder="Ví dụ: Lựa chọn 1, Lựa chọn 2, Lựa chọn 3..." />
-                  </Form.Item>
+                  <Card size="small" title="Danh sách các lựa chọn (Choices)" style={{ marginBottom: 16, background: "#fafafa" }}>
+                    <Form.List
+                      name={["options", "choices"]}
+                      rules={[
+                        {
+                          validator: async (_, names) => {
+                            if (!names || names.length < 1) {
+                              return Promise.reject(new Error("Vui lòng cấu hình tối thiểu 1 lựa chọn."));
+                            }
+                          },
+                        },
+                      ]}
+                    >
+                      {(fields, { add, remove }, { errors }) => (
+                        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                          {fields.map((field) => (
+                            <Space key={field.key} align="baseline">
+                              <Form.Item
+                                {...field}
+                                rules={[{ required: true, whitespace: true, message: "Nhập giá trị lựa chọn" }]}
+                                style={{ marginBottom: 0 }}
+                              >
+                                <Input placeholder="Nhập tên lựa chọn..." style={{ width: 280 }} />
+                              </Form.Item>
+                              <Button
+                                type="text"
+                                danger
+                                icon={<MinusCircleOutlined />}
+                                onClick={() => remove(field.name)}
+                              />
+                            </Space>
+                          ))}
+                          <Button
+                            type="dashed"
+                            onClick={() => add()}
+                            icon={<PlusOutlined />}
+                            style={{ width: "100%" }}
+                            size="small"
+                          >
+                            Thêm lựa chọn mới
+                          </Button>
+                          <Form.ErrorList errors={errors} />
+                        </div>
+                      )}
+                    </Form.List>
+                  </Card>
                 )}
 
 
@@ -625,16 +805,42 @@ export default function ToolboxAndInspector({
                                            </Form.Item>
                                          )}
                                          {colType === "SELECT" && (
-                                           <Form.Item
-                                             {...restField}
-                                             name={[name, "choices"]}
-                                             label="Lựa chọn (choices) - Cách nhau bằng dấu phẩy"
-                                             rules={[{ required: true, message: "Nhập các lựa chọn" }]}
-                                             style={{ marginBottom: 4 }}
-                                           >
-                                             <Input size="small" placeholder="Ví dụ: Lựa chọn 1, Lựa chọn 2" />
-                                           </Form.Item>
-                                         )}
+                                            <Card size="small" title="Lựa chọn cho cột SELECT" style={{ marginBottom: 8, background: "#fafafa" }}>
+                                              <Form.List {...restField} name={[name, "choices"]}>
+                                                {(choicesFields, { add: addChoice, remove: removeChoice }) => (
+                                                  <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                                                    {choicesFields.map((choiceField) => (
+                                                      <Space key={choiceField.key} align="baseline">
+                                                        <Form.Item
+                                                          {...choiceField}
+                                                          rules={[{ required: true, whitespace: true, message: "Nhập giá trị" }]}
+                                                          style={{ marginBottom: 0 }}
+                                                        >
+                                                          <Input size="small" placeholder="Tên lựa chọn..." style={{ width: 160 }} />
+                                                        </Form.Item>
+                                                        <Button
+                                                          type="text"
+                                                          danger
+                                                          size="small"
+                                                          icon={<MinusCircleOutlined />}
+                                                          onClick={() => removeChoice(choiceField.name)}
+                                                        />
+                                                      </Space>
+                                                    ))}
+                                                    <Button
+                                                      type="dashed"
+                                                      size="small"
+                                                      onClick={() => addChoice()}
+                                                      icon={<PlusOutlined />}
+                                                      style={{ width: "100%" }}
+                                                    >
+                                                      Thêm lựa chọn
+                                                    </Button>
+                                                  </div>
+                                                )}
+                                              </Form.List>
+                                            </Card>
+                                          )}
                                          {isNumeric && (
                                            <Form.Item
                                              {...restField}
@@ -920,6 +1126,23 @@ export default function ToolboxAndInspector({
                     )}
                   </Form.List>
                 </Card>
+
+                {watchedType && watchedType !== "TABLE" && watchedType !== "FORMULA" && (
+                  <Form.Item
+                    name={["options", "initValue"]}
+                    label="Giá trị khởi tạo (Mặc định)"
+                    valuePropName={watchedType === "CHECKBOX" ? "checked" : "value"}
+                    style={{ marginBottom: "16px" }}
+                  >
+                    <InitValueInput
+                      type={watchedType}
+                      form={form}
+                      userOptions={userOptions}
+                      deptTreeData={deptTreeData}
+                      roleOptions={roleOptions}
+                    />
+                  </Form.Item>
+                )}
 
                 <Form.Item style={{ marginTop: "24px" }}>
                   <Button

@@ -45,4 +45,12 @@ export class CreateEntityDto {
   @IsString()
   @IsOptional()
   autoCodePattern?: string;
+
+  @ApiPropertyOptional({
+    description: 'Mẫu tiêu đề hồ sơ động',
+    example: 'Đề xuất Thanh toán - {supplier_name} - {RECORD_CODE}',
+  })
+  @IsString()
+  @IsOptional()
+  titlePattern?: string;
 }

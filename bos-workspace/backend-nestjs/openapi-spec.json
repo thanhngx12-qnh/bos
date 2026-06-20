@@ -1554,6 +1554,35 @@
         ]
       }
     },
+    "/api/v1/workflows/instances/record/{recordId}/logs": {
+      "get": {
+        "operationId": "WorkflowsController_getRecordInstanceLogs",
+        "parameters": [
+          {
+            "name": "recordId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lấy lịch sử Audit Log của lượt chạy mới nhất theo recordId",
+        "tags": [
+          "Workflow Engine (Cỗ máy Quy trình)"
+        ]
+      }
+    },
     "/api/v1/workflow-pipeline/steps": {
       "post": {
         "operationId": "WorkflowStepsController_createStep",
@@ -2855,6 +2884,11 @@
             "type": "string",
             "description": "Mẫu tự sinh mã nghiệp vụ (Hỗ trợ cấu hình dạng SEQ)",
             "example": "QTMS-{SEQ:4}"
+          },
+          "titlePattern": {
+            "type": "string",
+            "description": "Mẫu tiêu đề hồ sơ động",
+            "example": "Đề xuất Thanh toán - {supplier_name} - {RECORD_CODE}"
           }
         },
         "required": [
@@ -2883,6 +2917,11 @@
             "type": "string",
             "description": "Mẫu tự sinh mã nghiệp vụ (Hỗ trợ cấu hình dạng SEQ)",
             "example": "QTMS-{SEQ:4}"
+          },
+          "titlePattern": {
+            "type": "string",
+            "description": "Mẫu tiêu đề hồ sơ động",
+            "example": "Đề xuất Thanh toán - {supplier_name} - {RECORD_CODE}"
           }
         }
       },
@@ -2986,6 +3025,11 @@
             "description": "ID của Entity (Biểu mẫu)",
             "example": 1
           },
+          "title": {
+            "type": "string",
+            "description": "Tiêu đề hồ sơ tự nhập (nếu không dùng titlePattern)",
+            "example": "Đơn xin mua máy tính"
+          },
           "data": {
             "type": "object",
             "description": "Dữ liệu thực tế người dùng nhập (JSON)",
@@ -3004,6 +3048,10 @@
       "UpdateRecordDto": {
         "type": "object",
         "properties": {
+          "title": {
+            "type": "string",
+            "description": "Tiêu đề hồ sơ mới"
+          },
           "data": {
             "type": "object",
             "description": "Dữ liệu cập nhật dạng JSON",

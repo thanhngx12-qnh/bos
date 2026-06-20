@@ -30,6 +30,15 @@ export class WorkflowsService {
     @InjectQueue('webhook-queue') private readonly webhookQueue: Queue,
   ) {}
 
+  private stripAccents(str: string): string {
+    return str
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/đ/g, 'd')
+      .replace(/Đ/g, 'd')
+      .toLowerCase();
+  }
+
   private evaluateTransitionCondition(logic: any, recordData: any): boolean {
     const rules = logic?.rules;
     if (!rules || !rules.field) return true;
@@ -313,6 +322,12 @@ export class WorkflowsService {
         record,
       );
 
+      // ĐỒNG BỘ: Cập nhật record status → IN_PROGRESS khi bắt đầu quy trình
+      await tx.record.update({
+        where: { id: dto.recordId } as any,
+        data: { status: 'IN_PROGRESS' } as any,
+      });
+
       return newInstance;
     });
 
@@ -479,13 +494,20 @@ export class WorkflowsService {
           tx,
           instanceId,
           (instance as any).currentStepId,
+          userId,  // actor => task của họ sẽ COMPLETED, còn lại CANCELLED
         );
 
         let evaluatingStepObj = nextStepObj;
 
         while (evaluatingStepObj) {
           if (evaluatingStepObj.stepType === 'SYSTEM_TASK') {
-            finalStatus = 'COMPLETED';
+            const cleanName = this.stripAccents(evaluatingStepObj.name);
+            const isRejectStep =
+              cleanName.includes('tu choi') ||
+              cleanName.includes('reject') ||
+              cleanName.includes('khong duyet') ||
+              cleanName.includes('khong phe duyet');
+            finalStatus = isRejectStep ? 'REJECTED' : 'COMPLETED';
             break;
           }
 
@@ -697,6 +719,15 @@ export class WorkflowsService {
       },
       orderBy: { createdAt: 'asc' },
     });
+  }
+
+  async getLatestInstanceLogs(recordId: number) {
+    const latestInstance = await this.prisma.workflowInstance.findFirst({
+      where: { recordId } as any,
+      orderBy: { id: 'desc' },
+    });
+    if (!latestInstance) return [];
+    return this.getInstanceLogs(latestInstance.id);
   }
 
   // ==========================================

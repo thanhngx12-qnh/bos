@@ -21,6 +21,7 @@ import {
   theme,
   App,
   Dropdown,
+  Select,
 } from "antd";
 
 import {
@@ -36,6 +37,7 @@ import {
   DeleteOutlined,
   ArrowRightOutlined,
   DatabaseOutlined,
+  FormOutlined,
 } from "@ant-design/icons";
 import { useRouter } from "next/navigation";
 import {
@@ -45,7 +47,7 @@ import {
   useDeleteEntity,
   Entity,
 } from "@/hooks/useEntities";
-
+import { useFields } from "@/hooks/useFields";
 import { useTenantDetail } from "@/hooks/useTenant";
 
 const { Header, Sider, Content } = Layout;
@@ -123,10 +125,25 @@ export default function EntitiesListPage() {
   const [entityForm] = Form.useForm();
   const [entityEditForm] = Form.useForm();
 
+  // Lấy danh sách trường của thực thể đang sửa đổi để hỗ trợ chèn mẫu tiêu đề
+  const entityFieldsQuery = useFields(editingEntity?.id || null);
+  const fields = entityFieldsQuery.data || [];
+
+  const handleInsertFieldPattern = (formInstance: any, pattern?: string) => {
+    if (!pattern) return;
+    const currentVal = formInstance.getFieldValue("titlePattern") || "";
+    formInstance.setFieldsValue({
+      titlePattern: currentVal + pattern,
+    });
+  };
+
   const handleMenuClick = (e: { key: string }) => {
     if (e.key === "dashboard") router.push("/");
     if (e.key === "organization") router.push("/organization");
     if (e.key === "metadata") router.push("/metadata");
+    if (e.key === "workflow") router.push("/metadata");
+    if (e.key === "records") router.push("/records");
+    if (e.key === "tenants") router.push("/metadata");
   };
 
   const onEntityCreate = (values: any) => {
@@ -185,31 +202,12 @@ export default function EntitiesListPage() {
           mode="inline"
           onClick={handleMenuClick}
           items={[
-            {
-              key: "dashboard",
-              icon: <DashboardOutlined />,
-              label: "Bảng tổng quan",
-            },
-            {
-              key: "tenants",
-              icon: <GlobalOutlined />,
-              label: "Quản trị SaaS Tenant",
-            },
-            {
-              key: "organization",
-              icon: <PartitionOutlined />,
-              label: "Cơ cấu Tổ chức",
-            },
-            {
-              key: "metadata",
-              icon: <BuildOutlined />,
-              label: "Biểu mẫu Động",
-            },
-            {
-              key: "workflow",
-              icon: <DeploymentUnitOutlined />,
-              label: "Luồng Quy trình",
-            },
+            { key: "dashboard", icon: <DashboardOutlined />, label: "Bảng tổng quan" },
+            { key: "organization", icon: <PartitionOutlined />, label: "Cơ cấu Tổ chức" },
+            { key: "metadata", icon: <BuildOutlined />, label: "Biểu mẫu Động" },
+            { key: "workflow", icon: <DeploymentUnitOutlined />, label: "Luồng Quy trình" },
+            { key: "records", icon: <FormOutlined />, label: "Hồ sơ & Biểu mẫu" },
+            ...(tenantId === null ? [{ key: "tenants", icon: <GlobalOutlined />, label: "Quản trị SaaS Tenant" }] : []),
           ]}
         />
       </Sider>
@@ -434,6 +432,13 @@ export default function EntitiesListPage() {
           >
             <Input placeholder="QTMS-{SEQ:4}" />
           </Form.Item>
+          <Form.Item
+            name="titlePattern"
+            label="Mẫu định dạng tiêu đề hồ sơ (titlePattern)"
+            extra="Mẫu sinh tiêu đề động. Hỗ trợ các trường mẫu dạng {ma_truong} và {RECORD_CODE} (Ví dụ: Đề xuất thanh toán {supplier_name} - {RECORD_CODE})"
+          >
+            <Input placeholder="Ví dụ: Đề xuất thanh toán {supplier_name} - {RECORD_CODE}" />
+          </Form.Item>
         </Form>
       </Modal>
 
@@ -467,6 +472,29 @@ export default function EntitiesListPage() {
           >
             <Input />
           </Form.Item>
+          <Form.Item
+            name="titlePattern"
+            label="Mẫu định dạng tiêu đề hồ sơ (titlePattern)"
+            extra="Mẫu sinh tiêu đề động. Hỗ trợ các trường mẫu dạng {ma_truong} và {RECORD_CODE} (Ví dụ: Đề xuất thanh toán {supplier_name} - {RECORD_CODE})"
+          >
+            <Input placeholder="Ví dụ: Đề xuất thanh toán {supplier_name} - {RECORD_CODE}" />
+          </Form.Item>
+          {editingEntity && (
+            <Form.Item label="Chèn nhanh trường dữ liệu vào mẫu">
+              <Select
+                placeholder="Chọn trường để chèn..."
+                value={undefined}
+                onChange={(val) => handleInsertFieldPattern(entityEditForm, val)}
+                options={[
+                  { value: "{RECORD_CODE}", label: "Mã hồ sơ tự sinh ({RECORD_CODE})" },
+                  ...fields.map((f) => ({
+                    value: `{${f.code}}`,
+                    label: `${f.name} ({${f.code}})`,
+                  })),
+                ]}
+              />
+            </Form.Item>
+          )}
         </Form>
       </Modal>
     </Layout>

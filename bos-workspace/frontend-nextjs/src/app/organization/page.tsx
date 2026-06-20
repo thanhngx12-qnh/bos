@@ -45,6 +45,7 @@ import {
   FolderOutlined,
   SafetyCertificateOutlined,
   UsergroupAddOutlined,
+  FormOutlined,
 } from "@ant-design/icons";
 import { useRouter } from "next/navigation";
 import {
@@ -178,6 +179,9 @@ export default function UnifiedOrganizationPage() {
     if (e.key === "dashboard") router.push("/");
     if (e.key === "organization") router.push("/organization");
     if (e.key === "metadata") router.push("/metadata");
+    if (e.key === "workflow") router.push("/metadata");
+    if (e.key === "records") router.push("/records");
+    if (e.key === "tenants") router.push("/metadata");
   };
 
   // --- LOGIC PHÒNG BAN (CLOSURE TREE) ---
@@ -359,31 +363,12 @@ export default function UnifiedOrganizationPage() {
           mode="inline"
           onClick={handleMenuClick}
           items={[
-            {
-              key: "dashboard",
-              icon: <DashboardOutlined />,
-              label: "Bảng tổng quan",
-            },
-            {
-              key: "tenants",
-              icon: <GlobalOutlined />,
-              label: "Quản trị SaaS Tenant",
-            },
-            {
-              key: "organization",
-              icon: <PartitionOutlined />,
-              label: "Cơ cấu Tổ chức",
-            },
-            {
-              key: "metadata",
-              icon: <BuildOutlined />,
-              label: "Biểu mẫu Động",
-            },
-            {
-              key: "workflow",
-              icon: <DeploymentUnitOutlined />,
-              label: "Luồng Quy trình",
-            },
+            { key: "dashboard", icon: <DashboardOutlined />, label: "Bảng tổng quan" },
+            { key: "organization", icon: <PartitionOutlined />, label: "Cơ cấu Tổ chức" },
+            { key: "metadata", icon: <BuildOutlined />, label: "Biểu mẫu Động" },
+            { key: "workflow", icon: <DeploymentUnitOutlined />, label: "Luồng Quy trình" },
+            { key: "records", icon: <FormOutlined />, label: "Hồ sơ & Biểu mẫu" },
+            ...(tenantId === null ? [{ key: "tenants", icon: <GlobalOutlined />, label: "Quản trị SaaS Tenant" }] : []),
           ]}
         />
       </Sider>

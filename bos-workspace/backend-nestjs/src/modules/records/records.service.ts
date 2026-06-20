@@ -189,6 +189,9 @@ export class RecordsService {
     const fields = await this.prisma.fieldRegistry.findMany({
       where: { tenantId } as any,
     });
+    const entityFields = fields.filter(
+      (f) => (f.config as any)?.entityId === entity.id,
+    );
 
     const activeInstance = await this.prisma.entityVersion.findFirst({
       where: { entityId: entity.id, tenantId } as any,
@@ -196,11 +199,11 @@ export class RecordsService {
 
     // 1. Validate và tính toán công thức dữ liệu động
     const cleanData = this.dynamicValidator.validateAndSanitize(
-      fields as any,
+      entityFields as any,
       dto.data,
     );
 
-    const finalData = this.formulaEngine.calculate(fields as any, cleanData);
+    const finalData = this.formulaEngine.calculate(entityFields as any, cleanData);
 
     // 2. Chạy transaction nguyên tử
     return this.prisma.$transaction(async (tx) => {
@@ -236,7 +239,7 @@ export class RecordsService {
         (entity as any).titlePattern,
         finalData,
         businessCode,
-      );
+      ) || dto.title || businessCode;
 
       const validVersionId = await this.ensureEntityVersionExists(
         tx,
@@ -260,7 +263,7 @@ export class RecordsService {
         tenantId,
         newRecord.id,
         entity.id,
-        fields,
+        entityFields as any,
         finalData,
       );
 
@@ -419,8 +422,25 @@ export class RecordsService {
 
     const total = countResult[0]?.count || 0;
 
+    // BẢN VÁ: ĐỒNG BỘ ĐỊNH DẠNG SNAKE_CASE TỪ RAW SQL SANG CAMELCASE CỦA PRISMA (ĐỂ TRÁNH LỖI FRONTEND DRAWERS)
+    const mappedRecords = records.map((r) => ({
+      ...r,
+      entityId: r.entity_id,
+      tenantId: r.tenant_id,
+      metadataVersionId: r.metadata_version_id,
+      businessCode: r.business_code,
+      createdById: r.created_by_id,
+      departmentId: r.department_id,
+      deletedAt: r.deleted_at,
+      deletedById: r.deleted_by_id,
+      schemaHash: r.schema_hash,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at,
+      currentStepId: r.current_step_id,
+    }));
+
     return {
-      data: records,
+      data: mappedRecords,
       meta: {
         total,
         page,
@@ -477,20 +497,35 @@ export class RecordsService {
 
       patchData = this.calculateDiff(currentRecord.data, dataToSave);
       isDataChanged = Object.keys(patchData).length > 0;
+    }
 
-      if (isDataChanged) {
-        newTitle = this.generateRecordTitle(
-          (entity as any).titlePattern,
-          dataToSave,
-          (currentRecord as any).businessCode,
-        );
+    let isTitleChanged = false;
+    if (entity) {
+      const titlePatternVal = (entity as any).titlePattern;
+      const calcTitle = this.generateRecordTitle(
+        titlePatternVal,
+        dataToSave as any,
+        (currentRecord as any).businessCode,
+      );
+      if (titlePatternVal && calcTitle) {
+        newTitle = calcTitle;
+      } else if (dto.title !== undefined) {
+        newTitle = dto.title;
+      }
+      if (!newTitle) {
+        newTitle = (currentRecord as any).businessCode;
+      }
+      if (newTitle !== (currentRecord as any).title) {
+        isTitleChanged = true;
       }
     }
+
+    const shouldUpdate = isDataChanged || isTitleChanged;
 
     return this.prisma.$transaction(async (tx) => {
       let updatedRecord: any = currentRecord;
 
-      if (isDataChanged) {
+      if (shouldUpdate) {
         updatedRecord = await tx.record.update({
           where: { id } as any,
           data: {

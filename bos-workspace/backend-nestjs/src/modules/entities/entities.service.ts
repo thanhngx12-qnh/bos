@@ -75,6 +75,7 @@ export class EntitiesService {
         name: dto.name,
         description: dto.description,
         autoCodePattern: dto.autoCodePattern, // Đã bổ sung lại
+        titlePattern: dto.titlePattern,
       } as any,
     });
 

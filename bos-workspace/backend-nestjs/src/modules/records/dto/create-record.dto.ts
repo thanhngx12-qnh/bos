@@ -1,12 +1,17 @@
 // File: src/modules/records/dto/create-record.dto.ts
-import { ApiProperty } from '@nestjs/swagger';
-import { IsInt, IsNotEmpty, IsObject } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsInt, IsNotEmpty, IsObject, IsOptional, IsString } from 'class-validator';
 
 export class CreateRecordDto {
   @ApiProperty({ description: 'ID của Entity (Biểu mẫu)', example: 1 })
   @IsInt()
   @IsNotEmpty()
   entityId: number;
+
+  @ApiPropertyOptional({ description: 'Tiêu đề hồ sơ tự nhập (nếu không dùng titlePattern)', example: 'Đơn xin mua máy tính' })
+  @IsString()
+  @IsOptional()
+  title?: string;
 
   @ApiProperty({
     description: 'Dữ liệu thực tế người dùng nhập (JSON)',
