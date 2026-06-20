@@ -15,22 +15,37 @@ export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(dto: CreateUserDto) {
-    // SỬA LỖI: findFirst
-    const existingUser = await this.prisma.user.findFirst({
+    // 1. Kiểm tra xem email đã tồn tại trong Tenant hiện tại chưa
+    const existingInTenant = await this.prisma.user.findFirst({
       where: { email: dto.email },
     });
-    if (existingUser) {
-      throw new ConflictException('Email này đã được sử dụng.');
+    if (existingInTenant) {
+      throw new ConflictException('Thành viên với email này đã tồn tại trong doanh nghiệp.');
     }
 
-    const saltRounds = 10;
-    const hashedPassword = await bcrypt.hash(dto.password, saltRounds);
+    // 2. Tìm kiếm email trên toàn hệ thống (bất kỳ tenant nào) để đồng bộ mật khẩu
+    const globalUser = await this.prisma.user.findFirst({
+      where: {
+        email: dto.email,
+        tenantId: { gte: 0 }, // bypass prisma auto-inject
+      },
+    });
+
+    let hashedPassword = '';
+    if (globalUser) {
+      // Đồng bộ/sử dụng lại mật khẩu đã có của tài khoản này
+      hashedPassword = globalUser.password;
+    } else {
+      const saltRounds = 10;
+      hashedPassword = await bcrypt.hash(dto.password, saltRounds);
+    }
 
     const user = await this.prisma.user.create({
       data: {
         ...dto,
         password: hashedPassword,
-      } as any, // SỬA LỖI: as any
+        userType: 'INTERNAL', // Mặc định là INTERNAL cho thành viên mới
+      } as any,
     });
 
     const { password, ...result } = user;
@@ -97,6 +112,17 @@ export class UsersService {
   }
 
   async findByEmailForAuth(email: string) {
-    return this.prisma.user.findFirst({ where: { email } });
+    return this.prisma.user.findFirst({
+      where: { email },
+      include: {
+        role: {
+          select: {
+            id: true,
+            name: true,
+            permissions: true,
+          },
+        },
+      },
+    });
   }
 }

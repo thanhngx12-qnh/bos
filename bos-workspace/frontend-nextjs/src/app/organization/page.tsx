@@ -76,6 +76,7 @@ export default function DepartmentTreePage() {
   const [collapsed, setCollapsed] = useState(false);
   const [tenantId, setTenantId] = useState<number | null>(null);
   const [userName, setUserName] = useState<string>("Thành viên BOS");
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
   // Selected Department Node from the Tree
   const [selectedDeptNode, setSelectedDeptNode] = useState<DepartmentNode | null>(null);
@@ -92,6 +93,9 @@ export default function DepartmentTreePage() {
       }
       const storedTenantId = localStorage.getItem("bos_tenant_id");
       const storedUserName = localStorage.getItem("bos_user_name");
+      const storedUserType = localStorage.getItem("bos_user_type");
+      setIsSuperAdmin(storedUserType === "SUPER_ADMIN");
+
       if (storedTenantId) {
         setTenantId(Number(storedTenantId));
       }
@@ -120,15 +124,15 @@ export default function DepartmentTreePage() {
   const { data: myTenants = [] } = useMyTenants();
   const switchTenantMutation = useSwitchTenant();
 
-  const handleSwitchTenant = (targetTenantId: number) => {
-    switchTenantMutation.mutate({ tenantId: targetTenantId }, {
+  const handleSwitchTenant = (targetTenantId: number | null) => {
+    switchTenantMutation.mutate({ tenantId: targetTenantId as any }, {
       onSuccess: (res) => {
         message.success("Chuyển doanh nghiệp thành công!");
         localStorage.setItem("bos_token", res.accessToken);
         localStorage.setItem("bos_user_name", res.user.fullName);
         localStorage.setItem("bos_user_permissions", JSON.stringify((res.user as any).role?.permissions || {}));
         localStorage.setItem("bos_user_type", (res.user as any).userType);
-        if ((res.user as any).userType === "SUPER_ADMIN") {
+        if (res.user.tenantId === null || res.user.tenantId === undefined) {
           localStorage.removeItem("bos_tenant_id");
         } else {
           localStorage.setItem("bos_tenant_id", String(res.user.tenantId));
@@ -142,14 +146,26 @@ export default function DepartmentTreePage() {
   };
 
   const tenantMenu = {
-    items: myTenants.map((t) => ({
-      key: String(t.id),
-      label: t.name,
-      icon: <BankOutlined />,
-      disabled: t.id === tenantId,
-    })),
+    items: [
+      ...(isSuperAdmin ? [{
+        key: "root",
+        label: "Quản trị Hệ thống (Super Admin)",
+        icon: <SettingOutlined />,
+        disabled: tenantId === null,
+      }] : []),
+      ...myTenants.map((t) => ({
+        key: String(t.id),
+        label: t.name,
+        icon: <BankOutlined />,
+        disabled: t.id === tenantId,
+      }))
+    ],
     onClick: (info: any) => {
-      handleSwitchTenant(Number(info.key));
+      if (info.key === "root") {
+        handleSwitchTenant(null);
+      } else {
+        handleSwitchTenant(Number(info.key));
+      }
     }
   };
 
@@ -350,7 +366,6 @@ export default function DepartmentTreePage() {
     ? (userQuery.data?.data || []).filter((u) => u.departmentId === selectedDeptNode.id)
     : [];
 
-  const isSuperAdmin = tenantId === null;
 
   if (permissionsLoaded && !isSuperAdmin && !userPermissions.departments?.includes("READ")) {
     return (

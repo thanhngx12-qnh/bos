@@ -12,8 +12,8 @@ export class SuperAdminGuard implements CanActivate {
     const request = context.switchToHttp().getRequest();
     const user = request.user; // Được nạp tự động từ JwtAuthGuard
 
-    // CHỐT CHẶN BẢO MẬT: Chỉ cho phép tài khoản Super Admin (không bị gán cứng vào Tenant nào) truy cập
-    if (!user || user.tenantId !== null) {
+    // CHỐT CHẶN BẢO MẬT: Chỉ cho phép tài khoản Super Admin truy cập
+    if (!user || user.userType !== 'SUPER_ADMIN') {
       throw new ForbiddenException(
         'Bạn không có quyền Quản trị tối cao (Super Admin) để truy cập chức năng này.',
       );

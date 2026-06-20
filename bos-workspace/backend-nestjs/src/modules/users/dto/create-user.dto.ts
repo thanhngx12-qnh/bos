@@ -27,4 +27,9 @@ export class CreateUserDto {
   @IsInt()
   @IsOptional()
   roleId?: number;
+
+  @ApiPropertyOptional({ example: 1, description: 'ID Doanh nghiệp (Chỉ Super Admin dùng)' })
+  @IsInt()
+  @IsOptional()
+  tenantId?: number;
 }

@@ -10,6 +10,7 @@ export interface User {
   roleId: number | null;
   status: string;
   createdAt: string;
+  tenantId?: number;
 }
 
 export function useUsers(page = 1, limit = 50) {

@@ -577,6 +577,81 @@
         ]
       }
     },
+    "/api/v1/auth/login/select-tenant": {
+      "post": {
+        "operationId": "AuthController_loginSelectTenant",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SelectTenantDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Đăng nhập với doanh nghiệp đã chọn",
+        "tags": [
+          "Auth (Xác thực)"
+        ]
+      }
+    },
+    "/api/v1/auth/my-tenants": {
+      "get": {
+        "operationId": "AuthController_getMyTenants",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lấy tất cả các doanh nghiệp liên kết với email hiện tại",
+        "tags": [
+          "Auth (Xác thực)"
+        ]
+      }
+    },
+    "/api/v1/auth/switch-tenant": {
+      "post": {
+        "operationId": "AuthController_switchTenant",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SwitchTenantDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Chuyển đổi ngữ cảnh doanh nghiệp đang làm việc",
+        "tags": [
+          "Auth (Xác thực)"
+        ]
+      }
+    },
     "/api/v1/auth/register-tenant": {
       "post": {
         "operationId": "AuthController_registerTenant",
@@ -599,7 +674,12 @@
             "description": "Trùng Email hoặc trùng Mã doanh nghiệp"
           }
         },
-        "summary": "Đăng ký doanh nghiệp mới (Onboarding SaaS)",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Đăng ký doanh nghiệp mới (Chỉ Super Admin)",
         "tags": [
           "Auth (Xác thực)"
         ]
@@ -2811,6 +2891,11 @@
             "type": "number",
             "example": 1,
             "description": "ID Vai trò"
+          },
+          "tenantId": {
+            "type": "number",
+            "example": 1,
+            "description": "ID Doanh nghiệp (Chỉ Super Admin dùng)"
           }
         },
         "required": [
@@ -2841,6 +2926,11 @@
             "type": "number",
             "example": 1,
             "description": "ID Vai trò"
+          },
+          "tenantId": {
+            "type": "number",
+            "example": 1,
+            "description": "ID Doanh nghiệp (Chỉ Super Admin dùng)"
           }
         }
       },
@@ -2861,6 +2951,44 @@
         "required": [
           "email",
           "password"
+        ]
+      },
+      "SelectTenantDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "admin@bos.com",
+            "description": "Email đăng nhập"
+          },
+          "password": {
+            "type": "string",
+            "example": "Admin@123",
+            "description": "Mật khẩu"
+          },
+          "tenantId": {
+            "type": "number",
+            "example": 1,
+            "description": "ID Doanh nghiệp đã chọn"
+          }
+        },
+        "required": [
+          "email",
+          "password",
+          "tenantId"
+        ]
+      },
+      "SwitchTenantDto": {
+        "type": "object",
+        "properties": {
+          "tenantId": {
+            "type": "number",
+            "example": 1,
+            "description": "ID Doanh nghiệp muốn chuyển sang (Bỏ trống để về platform root)"
+          }
+        },
+        "required": [
+          "tenantId"
         ]
       },
       "RegisterTenantDto": {

@@ -26,7 +26,16 @@ export class TenantsService {
   }
 
   async findAll(options: PaginateOptions) {
-    return paginate(this.prisma.tenant, {}, options);
+    return paginate(this.prisma.tenant, {}, options, {
+      _count: {
+        select: {
+          users: true,
+          entities: true,
+          records: true,
+          workflows: true,
+        },
+      },
+    });
   }
 
   async findOne(id: number) {
