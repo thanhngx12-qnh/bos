@@ -199,4 +199,77 @@ export function useUpdateWorkflowVersionStatus() {
   });
 }
 
+// Tạo Transition nối giữa 2 bước
+export function useCreateTransition() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: {
+      versionId: number;
+      fromStepId: number;
+      toStepId: number;
+      conditionLogic?: any;
+      autoSkip?: boolean;
+    }) => {
+      const { data } = await api.post("/api/v1/workflow-pipeline/transitions", {
+        fromStepId: payload.fromStepId,
+        toStepId: payload.toStepId,
+        conditionLogic: payload.conditionLogic || {},
+        autoSkip: payload.autoSkip || false,
+      });
+      return data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ["workflowSteps", variables.versionId],
+      });
+    },
+  });
+}
+
+// Cập nhật Transition
+export function useUpdateTransition() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      versionId,
+      payload,
+    }: {
+      id: number;
+      versionId: number;
+      payload: { conditionLogic?: any; autoSkip?: boolean };
+    }) => {
+      const { data } = await api.patch(
+        `/api/v1/workflow-pipeline/transitions/${id}`,
+        payload
+      );
+      return data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ["workflowSteps", variables.versionId],
+      });
+    },
+  });
+}
+
+// Xóa Transition
+export function useDeleteTransition() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, versionId }: { id: number; versionId: number }) => {
+      const { data } = await api.delete(
+        `/api/v1/workflow-pipeline/transitions/${id}`
+      );
+      return data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ["workflowSteps", variables.versionId],
+      });
+    },
+  });
+}
+
+
 

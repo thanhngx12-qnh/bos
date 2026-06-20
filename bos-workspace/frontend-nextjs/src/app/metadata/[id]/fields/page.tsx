@@ -27,6 +27,8 @@ import {
   Tag,
   DatePicker,
   TreeSelect,
+  Segmented,
+  Tabs,
 } from "antd";
 import {
   DashboardOutlined,
@@ -40,8 +42,14 @@ import {
   MinusCircleOutlined,
   PlusOutlined,
   FormOutlined,
+  EditOutlined,
+  DeleteOutlined,
+  CodeOutlined,
+  QuestionCircleOutlined,
+  SafetyOutlined,
+  ClockCircleOutlined,
 } from "@ant-design/icons";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import dayjs from "dayjs";
 import { useEntities } from "@/hooks/useEntities";
 import {
@@ -63,6 +71,7 @@ import WorkflowStepsController from "./components/WorkflowStepsController";
 import DragDropCanvas from "./components/DragDropCanvas";
 import ToolboxAndInspector from "./components/ToolboxAndInspector";
 import FormulaBuilder from "./components/FormulaBuilder";
+import VisualWorkflowCanvas from "./components/VisualWorkflowCanvas";
 
 const { Header, Sider, Content } = Layout;
 const { Title, Paragraph, Text } = Typography;
@@ -249,6 +258,7 @@ export default function WorkspaceContainerPage({
 
   // Trạng thái liên kết đồng bộ 3 phân khu [1]
   const [activeStepId, setActiveStepId] = useState<number | null>(null);
+  const [activeTab, setActiveTab] = useState<"form" | "workflow">("form");
   const [selectedField, setSelectedField] = useState<Field | null>(null);
   const [selectedVersionId, setSelectedVersionId] = useState<number | null>(null);
 
@@ -760,53 +770,81 @@ export default function WorkspaceContainerPage({
               </Button>
             </div>
 
-            {/* SIÊU LAYOUT BA PHÂN KHU (3-PANEL SYNC WORKSPACE) */}
-            <Row gutter={[20, 20]}>
-              {/* PHÂN KHU 1: TRÁI - WORKFLOW STEPS CONTROLLER TRUY VẤN LIVE STEPS (5 COLS) */}
-              <Col xs={24} xl={5}>
-                <WorkflowStepsController
-                  entityId={entityIdNum}
-                  entityName={activeEntity?.name || ""}
-                  workflowId={activeWorkflow?.id || null}
-                  versionId={activeVersionId}
-                  selectedVersionId={activeVersionId}
-                  setSelectedVersionId={setSelectedVersionId}
-                  versions={activeWorkflow?.versions || []}
-                  fields={fieldsQuery.data || []}
-                  steps={steps}
-                  isLoading={stepsQuery.isLoading}
-                  activeStep={activeStep}
-                  setActiveStep={setActiveStep}
-                />
-              </Col>
+            {/* Bộ chuyển đổi phân khu Thiết kế */}
+            <div className="flex justify-start">
+              <Segmented
+                value={activeTab}
+                onChange={(value) => setActiveTab(value as any)}
+                options={[
+                  { label: "Thiết kế Biểu mẫu (Form Schema)", value: "form", icon: <BuildOutlined /> },
+                  { label: "Sơ đồ Quy trình (Workflow Canvas)", value: "workflow", icon: <PartitionOutlined /> },
+                ]}
+                size="large"
+                style={{ borderRadius: "8px", padding: "4px" }}
+              />
+            </div>
 
-              {/* PHÂN KHU 2: GIỮA - FORM CANVAS PREVIEW ĐỒNG BỘ ĐỘNG (13 COLS) */}
-              <Col xs={24} md={14} xl={13}>
-                <DragDropCanvas
-                  fields={fieldsQuery.data || []}
-                  isLoading={fieldsQuery.isLoading}
-                  selectedField={selectedField}
-                  setSelectedField={setSelectedField}
-                  activeStep={activeStep}
-                  onEditClick={(field) => handleEditClick(field)}
-                  onDeleteClick={(field) => handleDeleteFieldSubmit(field)}
-                  onReorderFields={handleReorderFields}
-                  onDropBlock={(type, targetId) => handleAddQuickField(type, targetId)}
-                />
-              </Col>
+            {/* SIÊU LAYOUT BA PHÂN KHU (3-PANEL SYNC WORKSPACE) HOẶC CANVAS QUY TRÌNH */}
+            {activeTab === "form" ? (
+              <Row gutter={[20, 20]}>
+                {/* PHÂN KHU 1: TRÁI - WORKFLOW STEPS CONTROLLER TRUY VẤN LIVE STEPS (5 COLS) */}
+                <Col xs={24} xl={5}>
+                  <WorkflowStepsController
+                    entityId={entityIdNum}
+                    entityName={activeEntity?.name || ""}
+                    workflowId={activeWorkflow?.id || null}
+                    versionId={activeVersionId}
+                    selectedVersionId={activeVersionId}
+                    setSelectedVersionId={setSelectedVersionId}
+                    versions={activeWorkflow?.versions || []}
+                    fields={fieldsQuery.data || []}
+                    steps={steps}
+                    isLoading={stepsQuery.isLoading}
+                    activeStep={activeStep}
+                    setActiveStep={setActiveStep}
+                  />
+                </Col>
 
-              {/* PHÂN KHU 3: PHẢI - TOOLBOX & FIELD INSPECTOR (6 COLS) */}
-              <Col xs={24} md={10} xl={6}>
-                <ToolboxAndInspector
-                  fields={fieldsQuery.data || []}
-                  entities={entitiesQuery.data?.data || []}
-                  selectedField={selectedField}
-                  onAddQuickField={handleAddQuickField}
-                  onSaveInspector={onSaveInspectorSubmit}
-                  isSaving={updateField.isPending}
-                />
-              </Col>
-            </Row>
+                {/* PHÂN KHU 2: GIỮA - FORM CANVAS PREVIEW ĐỒNG BỘ ĐỘNG (13 COLS) */}
+                <Col xs={24} md={14} xl={13}>
+                  <DragDropCanvas
+                    fields={fieldsQuery.data || []}
+                    isLoading={fieldsQuery.isLoading}
+                    selectedField={selectedField}
+                    setSelectedField={setSelectedField}
+                    activeStep={activeStep}
+                    onEditClick={(field) => handleEditClick(field)}
+                    onDeleteClick={(field) => handleDeleteFieldSubmit(field)}
+                    onReorderFields={handleReorderFields}
+                    onDropBlock={(type, targetId) => handleAddQuickField(type, targetId)}
+                  />
+                </Col>
+
+                {/* PHÂN KHU 3: PHẢI - TOOLBOX & FIELD INSPECTOR (6 COLS) */}
+                <Col xs={24} md={10} xl={6}>
+                  <ToolboxAndInspector
+                    fields={fieldsQuery.data || []}
+                    entities={entitiesQuery.data?.data || []}
+                    selectedField={selectedField}
+                    onAddQuickField={handleAddQuickField}
+                    onSaveInspector={onSaveInspectorSubmit}
+                    isSaving={updateField.isPending}
+                  />
+                </Col>
+              </Row>
+            ) : (
+              <VisualWorkflowCanvas
+                entityId={entityIdNum}
+                entityName={activeEntity?.name || ""}
+                workflowId={activeWorkflow?.id || null}
+                versionId={activeVersionId}
+                steps={steps}
+                fields={fieldsQuery.data || []}
+                activeStep={activeStep}
+                setActiveStep={setActiveStep}
+              />
+            )}
+
           </Space>
         </Content>
       </Layout>
