@@ -141,4 +141,37 @@ export class AttachmentsService {
     const attachment = await this.findOne(id);
     return this.prisma.attachment.delete({ where: { id } });
   }
+
+  // --- HÀM 5: SINH ĐƯỜNG DẪN CÓ CHỮ KÝ SỐ THEO TÊN FILE VÀ RECORD ID ---
+  async getPresignedUrlByName(recordId: number, fileName: string) {
+    const attachment = await this.prisma.attachment.findFirst({
+      where: { recordId, fileName } as any,
+    });
+    if (!attachment)
+      throw new NotFoundException('Không tìm thấy tệp tin đính kèm phù hợp.');
+
+    try {
+      const command = new GetObjectCommand({
+        Bucket: this.bucketName,
+        Key: attachment.s3Key,
+      });
+
+      const url = await getSignedUrl(this.s3Client, command, {
+        expiresIn: 900,
+      });
+
+      return {
+        id: attachment.id,
+        fileName: attachment.fileName,
+        mimeType: attachment.mimeType,
+        fileSize: attachment.fileSize,
+        presignedUrl: url,
+        expiresInSeconds: 900,
+      };
+    } catch (error) {
+      throw new BadRequestException(
+        `Lỗi sinh chữ ký bảo mật S3: ${error.message}`,
+      );
+    }
+  }
 }

@@ -11,6 +11,7 @@ import {
   UseGuards,
   Request,
   ParseIntPipe,
+  Query,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -54,6 +55,17 @@ export class AttachmentsController {
   ) {
     const userId = req.user.userId;
     return this.attachmentsService.uploadFile(userId, file, dto.recordId);
+  }
+
+  @Get('view-by-name')
+  @ApiOperation({
+    summary: 'Lấy đường dẫn có chữ ký số theo recordId và fileName',
+  })
+  getPresignedUrlByName(
+    @Query('recordId', ParseIntPipe) recordId: number,
+    @Query('fileName') fileName: string,
+  ) {
+    return this.attachmentsService.getPresignedUrlByName(recordId, fileName);
   }
 
   @Get(':id/view')

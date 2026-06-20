@@ -2064,6 +2064,43 @@
         ]
       }
     },
+    "/api/v1/attachments/view-by-name": {
+      "get": {
+        "operationId": "AttachmentsController_getPresignedUrlByName",
+        "parameters": [
+          {
+            "name": "recordId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "fileName",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lấy đường dẫn có chữ ký số theo recordId và fileName",
+        "tags": [
+          "Metadata - Attachments (Quản lý tệp tin S3/MinIO)"
+        ]
+      }
+    },
     "/api/v1/attachments/{id}/view": {
       "get": {
         "operationId": "AttachmentsController_getPresignedUrl",

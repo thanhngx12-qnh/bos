@@ -129,6 +129,53 @@ export class DynamicValidationService {
             }
             break;
 
+          case 'EMAIL':
+            const emailVal = String(value);
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(emailVal)) {
+              throw new BadRequestException(
+                `Trường '${field.name}' không đúng định dạng email (VD: user@example.com).`,
+              );
+            }
+            if (options.regexPattern) {
+              try {
+                const regex = new RegExp(options.regexPattern);
+                if (!regex.test(emailVal)) {
+                  throw new BadRequestException(
+                    options.errorMessage || `Trường '${field.name}' không đúng định dạng.`,
+                  );
+                }
+              } catch (e) {
+                // ignore
+              }
+            }
+            sanitizedData[field.code] = emailVal;
+            break;
+
+          case 'PHONE':
+            const phoneVal = String(value);
+            if (!options.regexPattern) {
+              const phoneRegex = /^(0[3|5|7|8|9])+([0-9]{8})$/;
+              if (!phoneRegex.test(phoneVal)) {
+                throw new BadRequestException(
+                  options.errorMessage || `Trường '${field.name}' không đúng định dạng số điện thoại Việt Nam (VD: 0901234567).`,
+                );
+              }
+            } else {
+              try {
+                const regex = new RegExp(options.regexPattern);
+                if (!regex.test(phoneVal)) {
+                  throw new BadRequestException(
+                    options.errorMessage || `Trường '${field.name}' không đúng định dạng.`,
+                  );
+                }
+              } catch (e) {
+                // ignore
+              }
+            }
+            sanitizedData[field.code] = phoneVal;
+            break;
+
           case 'DATE':
             const dateVal = new Date(value);
             if (isNaN(dateVal.getTime()))
@@ -145,6 +192,41 @@ export class DynamicValidationService {
               );
             }
             sanitizedData[field.code] = dateVal.toISOString();
+            break;
+
+          case 'DATETIME':
+            const dtVal = new Date(value);
+            if (isNaN(dtVal.getTime()))
+              throw new BadRequestException(
+                `'${field.name}' không phải là ngày giờ hợp lệ.`,
+              );
+            sanitizedData[field.code] = dtVal.toISOString();
+            break;
+
+          case 'TIME':
+            if (typeof value === 'string') {
+              const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$/;
+              const isIso = !isNaN(new Date(value).getTime());
+              if (!timeRegex.test(value) && !isIso) {
+                throw new BadRequestException(
+                  `'${field.name}' không phải là giờ hợp lệ (định dạng HH:mm hoặc ISO).`,
+                );
+              }
+            }
+            sanitizedData[field.code] = value;
+            break;
+
+          case 'MONTH_YEAR':
+            if (typeof value === 'string') {
+              const myRegex = /^\d{4}-\d{2}$/;
+              const isIso = !isNaN(new Date(value).getTime());
+              if (!myRegex.test(value) && !isIso) {
+                throw new BadRequestException(
+                  `'${field.name}' không phải là tháng năm hợp lệ (định dạng YYYY-MM hoặc ISO).`,
+                );
+              }
+            }
+            sanitizedData[field.code] = value;
             break;
 
           // --- FIX LỖI TẠI ĐÂY: KHAI BÁO TYPE LOOKUP ---

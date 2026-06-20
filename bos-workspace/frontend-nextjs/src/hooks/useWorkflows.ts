@@ -164,9 +164,9 @@ export function useCloneWorkflowVersion() {
       const { data } = await api.post(`/api/v1/workflows/${workflowId}/versions/${versionId}/clone`);
       return data;
     },
-    onSuccess: (_, variables) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: ["workflows", variables.workflowId],
+        queryKey: ["workflows"],
       });
     },
   });
@@ -191,9 +191,9 @@ export function useUpdateWorkflowVersionStatus() {
       );
       return data;
     },
-    onSuccess: (_, variables) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: ["workflows", variables.workflowId],
+        queryKey: ["workflows"],
       });
     },
   });
