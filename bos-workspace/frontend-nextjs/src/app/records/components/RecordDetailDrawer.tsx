@@ -1,7 +1,7 @@
 // File: src/app/records/components/RecordDetailDrawer.tsx
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import {
   Drawer,
   Descriptions,
@@ -15,7 +15,11 @@ import {
   Divider,
   Timeline,
   Button,
+  Image,
+  message,
+  Tooltip,
 } from "antd";
+import { api } from "@/lib/axios";
 import {
   CheckCircleOutlined,
   CloseCircleOutlined,
@@ -24,6 +28,8 @@ import {
   FileTextOutlined,
   MessageOutlined,
   ExportOutlined,
+  ExpandAltOutlined,
+  ShrinkOutlined,
 } from "@ant-design/icons";
 import { RecordData } from "@/hooks/useRecords";
 import { useFields, Field } from "@/hooks/useFields";
@@ -44,7 +50,10 @@ const STATUS_MAP: Record<string, { label: string; color: string }> = {
 };
 
 // =================== GLOBAL FORMULA ENGINE ===================
-function evaluateFormulaString(formula: string, context: Record<string, any>): number {
+function evaluateFormulaString(
+  formula: string,
+  context: Record<string, any>,
+): number {
   try {
     let expression = formula;
     // Replace {field_code} with actual values
@@ -59,8 +68,9 @@ function evaluateFormulaString(formula: string, context: Record<string, any>): n
       if (["SUM", "AVG", "COUNT"].includes(word.toUpperCase())) continue;
       if (context[word] !== undefined && context[word] !== null) {
         const val = context[word];
-        const numVal = typeof val === "boolean" ? (val ? 1 : 0) : (Number(val) || 0);
-        const regex = new RegExp(`\\b${word}\\b`, 'g');
+        const numVal =
+          typeof val === "boolean" ? (val ? 1 : 0) : Number(val) || 0;
+        const regex = new RegExp(`\\b${word}\\b`, "g");
         expression = expression.replace(regex, String(numVal));
       }
     }
@@ -68,14 +78,20 @@ function evaluateFormulaString(formula: string, context: Record<string, any>): n
     expression = expression.replace(/[^0-9+\-*/().\s]/g, "");
     if (!expression || expression.trim() === "") return 0;
     const result = new Function(`"use strict"; return (${expression});`)();
-    return typeof result === "number" && isFinite(result) ? parseFloat(result.toFixed(4)) : 0;
+    return typeof result === "number" && isFinite(result)
+      ? parseFloat(result.toFixed(4))
+      : 0;
   } catch {
     return 0;
   }
 }
 
-function preprocessRollups(expression: string, context: Record<string, any>): string {
-  const rollupRegex = /(SUM|COUNT|AVG)\(([a-zA-Z0-9_]+)(?:\.([a-zA-Z0-9_]+))?\)/gi;
+function preprocessRollups(
+  expression: string,
+  context: Record<string, any>,
+): string {
+  const rollupRegex =
+    /(SUM|COUNT|AVG)\(([a-zA-Z0-9_]+)(?:\.([a-zA-Z0-9_]+))?\)/gi;
   return expression.replace(
     rollupRegex,
     (match, func, tableCode, columnCode) => {
@@ -84,17 +100,22 @@ function preprocessRollups(expression: string, context: Record<string, any>): st
       if (func.toUpperCase() === "COUNT") return String(tableData.length);
       if (columnCode) {
         const values = tableData.map((row) => Number(row[columnCode]) || 0);
-        if (func.toUpperCase() === "SUM") return String(values.reduce((a, b) => a + b, 0));
-        if (func.toUpperCase() === "AVG") return String(values.reduce((a, b) => a + b, 0) / values.length);
+        if (func.toUpperCase() === "SUM")
+          return String(values.reduce((a, b) => a + b, 0));
+        if (func.toUpperCase() === "AVG")
+          return String(values.reduce((a, b) => a + b, 0) / values.length);
       }
       return "0";
-    }
+    },
   );
 }
 
-function calculateFormFormulas(fields: any[], currentValues: Record<string, any>): Record<string, any> {
+function calculateFormFormulas(
+  fields: any[],
+  currentValues: Record<string, any>,
+): Record<string, any> {
   const result = { ...currentValues };
-  
+
   // 1. Calculate TABLE cell formulas first
   fields.forEach((field) => {
     if (field.type === "TABLE") {
@@ -109,7 +130,10 @@ function calculateFormFormulas(fields: any[], currentValues: Record<string, any>
           for (let pass = 0; pass < 3; pass++) {
             columns.forEach((col: any) => {
               if (col.type === "FORMULA" && col.formula) {
-                computedRow[col.code] = evaluateTableFormula(col.formula, computedRow);
+                computedRow[col.code] = evaluateTableFormula(
+                  col.formula,
+                  computedRow,
+                );
               }
             });
           }
@@ -135,7 +159,10 @@ function calculateFormFormulas(fields: any[], currentValues: Record<string, any>
 }
 
 // =================== TABLE FORMULA EVALUATOR ===================
-function evaluateTableFormula(formula: string, rowData: Record<string, any>): number {
+function evaluateTableFormula(
+  formula: string,
+  rowData: Record<string, any>,
+): number {
   try {
     let expression = formula.replace(/\{([^}]+)\}/g, (_, code) => {
       const val = rowData[code];
@@ -144,21 +171,35 @@ function evaluateTableFormula(formula: string, rowData: Record<string, any>): nu
     expression = expression.replace(/[^0-9+\-*/().]/g, "");
     if (!expression || expression.trim() === "") return 0;
     const result = new Function(`"use strict"; return (${expression});`)();
-    return typeof result === "number" && isFinite(result) ? parseFloat(result.toFixed(4)) : 0;
+    return typeof result === "number" && isFinite(result)
+      ? parseFloat(result.toFixed(4))
+      : 0;
   } catch {
     return 0;
   }
 }
 
-function computeSummary(rows: any[], colCode: string, summaryType: string): string {
+function computeSummary(
+  rows: any[],
+  colCode: string,
+  summaryType: string,
+): string {
   if (!summaryType || summaryType === "NONE" || rows.length === 0) return "";
   const values = rows.map((r) => Number(r[colCode]) || 0);
   switch (summaryType) {
-    case "SUM": return values.reduce((a, b) => a + b, 0).toLocaleString("vi-VN");
-    case "AVG": return (values.reduce((a, b) => a + b, 0) / values.length).toLocaleString("vi-VN", { maximumFractionDigits: 2 });
-    case "MIN": return Math.min(...values).toLocaleString("vi-VN");
-    case "MAX": return Math.max(...values).toLocaleString("vi-VN");
-    default: return "";
+    case "SUM":
+      return values.reduce((a, b) => a + b, 0).toLocaleString("vi-VN");
+    case "AVG":
+      return (values.reduce((a, b) => a + b, 0) / values.length).toLocaleString(
+        "vi-VN",
+        { maximumFractionDigits: 2 },
+      );
+    case "MIN":
+      return Math.min(...values).toLocaleString("vi-VN");
+    case "MAX":
+      return Math.max(...values).toLocaleString("vi-VN");
+    default:
+      return "";
   }
 }
 
@@ -169,15 +210,140 @@ const SUMMARY_LABELS: Record<string, string> = {
   MAX: "Max",
 };
 
+function FilePreviewLink({ file, recordId }: { file: any; recordId?: number }) {
+  const [loading, setLoading] = useState(false);
+
+  const handleDownload = async () => {
+    if (file.id && !isNaN(Number(file.id))) {
+      setLoading(true);
+      try {
+        const { data } = await api.get(`/api/v1/attachments/${file.id}/view`);
+        if (data?.presignedUrl) {
+          window.open(data.presignedUrl, "_blank");
+        } else {
+          message.error("Không tìm thấy đường dẫn tải tệp.");
+        }
+      } catch (err: any) {
+        message.error(
+          err?.response?.data?.message || "Lỗi khi lấy link tải tệp.",
+        );
+      } finally {
+        setLoading(false);
+      }
+    } else if (recordId && file.name) {
+      setLoading(true);
+      try {
+        const { data } = await api.get(
+          `/api/v1/attachments/view-by-name?recordId=${recordId}&fileName=${encodeURIComponent(file.name)}`,
+        );
+        if (data?.presignedUrl) {
+          window.open(data.presignedUrl, "_blank");
+        } else {
+          message.error("Không tìm thấy đường dẫn tải tệp.");
+        }
+      } catch (err: any) {
+        message.error(
+          err?.response?.data?.message || "Lỗi khi lấy link tải tệp.",
+        );
+      } finally {
+        setLoading(false);
+      }
+    } else if (file.url) {
+      window.open(file.url, "_blank");
+    } else {
+      message.warning("Tệp không có thông tin tải xuống.");
+    }
+  };
+
+  return (
+    <Button
+      type="link"
+      size="small"
+      loading={loading}
+      onClick={handleDownload}
+      style={{
+        padding: 0,
+        height: "auto",
+        display: "inline-flex",
+        alignItems: "center",
+      }}
+    >
+      {file.name || "Tải xuống"}
+    </Button>
+  );
+}
+
+function ImagePreview({ file, recordId }: { file: any; recordId?: number }) {
+  const [url, setUrl] = useState<string>("");
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const fetchUrl = async () => {
+      if (file.id && !isNaN(Number(file.id))) {
+        setLoading(true);
+        try {
+          const { data } = await api.get(`/api/v1/attachments/${file.id}/view`);
+          if (data?.presignedUrl) {
+            setUrl(data.presignedUrl);
+          }
+        } catch {
+          // fallback
+        } finally {
+          setLoading(false);
+        }
+      } else if (recordId && file.name) {
+        setLoading(true);
+        try {
+          const { data } = await api.get(
+            `/api/v1/attachments/view-by-name?recordId=${recordId}&fileName=${encodeURIComponent(file.name)}`,
+          );
+          if (data?.presignedUrl) {
+            setUrl(data.presignedUrl);
+          }
+        } catch {
+          // fallback
+        } finally {
+          setLoading(false);
+        }
+      } else if (file.url) {
+        setUrl(file.url);
+      }
+    };
+    fetchUrl();
+  }, [file, recordId]);
+
+  if (loading) return <Spin size="small" style={{ marginRight: 8 }} />;
+  if (!url) return <Tag color="red">{file.name || "Ảnh lỗi"}</Tag>;
+
+  return (
+    <Image
+      src={url}
+      alt={file.name}
+      width={60}
+      height={60}
+      style={{
+        objectFit: "cover",
+        borderRadius: 6,
+        border: "1px solid #d9d9d9",
+      }}
+    />
+  );
+}
+
 function renderFieldValue(
   field: Field,
   val: any,
   findDeptName?: (id: number) => string,
   findUserName?: (id: number) => string,
-  findRoleName?: (id: number) => string
+  findRoleName?: (id: number) => string,
+  recordId?: number,
 ) {
   if (val === undefined || val === null || val === "") {
-    return <Text type="secondary" italic>—</Text>;
+    return (
+      <Text type="secondary" italic>
+        —
+      </Text>
+    );
   }
 
   if (field.type === "DEPT_REF") {
@@ -210,7 +376,65 @@ function renderFieldValue(
     }
   }
 
-  if (field.type === "NUMBER") {
+  if (field.type === "DATETIME") {
+    try {
+      return (
+        <Text>
+          {new Date(val).toLocaleString("vi-VN", {
+            dateStyle: "short",
+            timeStyle: "short",
+          })}
+        </Text>
+      );
+    } catch {
+      return <Text>{String(val)}</Text>;
+    }
+  }
+
+  if (field.type === "TIME") {
+    try {
+      // TIME stored as ISO or HH:mm string
+      const d = new Date(val);
+      if (!isNaN(d.getTime())) {
+        return (
+          <Text>
+            {d.toLocaleTimeString("vi-VN", {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </Text>
+        );
+      }
+      return <Text>{String(val)}</Text>;
+    } catch {
+      return <Text>{String(val)}</Text>;
+    }
+  }
+
+  if (field.type === "MONTH_YEAR") {
+    try {
+      const d = new Date(val + "-01");
+      if (!isNaN(d.getTime())) {
+        return (
+          <Text>
+            {d.toLocaleDateString("vi-VN", {
+              month: "2-digit",
+              year: "numeric",
+            })}
+          </Text>
+        );
+      }
+      return <Text>{String(val)}</Text>;
+    } catch {
+      return <Text>{String(val)}</Text>;
+    }
+  }
+
+  if (
+    field.type === "NUMBER" ||
+    field.type === "DECIMAL" ||
+    field.type === "FORMULA"
+  ) {
     return (
       <Text strong style={{ color: "#0050b3" }}>
         {Number(val).toLocaleString("vi-VN")}
@@ -218,11 +442,69 @@ function renderFieldValue(
     );
   }
 
+  if (field.type === "CURRENCY") {
+    const prefix = field.config?.options?.prefix || "VNĐ";
+    return (
+      <Text strong style={{ color: "#389e0d" }}>
+        {Number(val).toLocaleString("vi-VN")} {prefix}
+      </Text>
+    );
+  }
+
+  if (field.type === "PERCENTAGE") {
+    return (
+      <Text strong style={{ color: "#722ed1" }}>
+        {Number(val).toLocaleString("vi-VN")}%
+      </Text>
+    );
+  }
+
+  if (field.type === "FILE") {
+    const files = Array.isArray(val) ? val : [];
+    if (files.length === 0)
+      return (
+        <Text type="secondary" italic>
+          —
+        </Text>
+      );
+    return (
+      <Space direction="vertical" size={4}>
+        {files.map((f: any, i: number) => (
+          <Space key={i} size={4}>
+            <span>📎</span>
+            <FilePreviewLink file={f} recordId={recordId} />
+          </Space>
+        ))}
+      </Space>
+    );
+  }
+
+  if (field.type === "IMAGE") {
+    const imgs = Array.isArray(val) ? val : [];
+    if (imgs.length === 0)
+      return (
+        <Text type="secondary" italic>
+          —
+        </Text>
+      );
+    return (
+      <Space wrap size={[8, 8]}>
+        {imgs.map((f: any, i: number) => (
+          <ImagePreview key={i} file={f} recordId={recordId} />
+        ))}
+      </Space>
+    );
+  }
+
   if (field.type === "SELECT" || field.type === "MULTI_SELECT") {
     if (Array.isArray(val)) {
       return (
         <Space wrap size={[4, 4]}>
-          {val.map((v, i) => <Tag color="geekblue" key={i}>{v}</Tag>)}
+          {val.map((v, i) => (
+            <Tag color="geekblue" key={i}>
+              {v}
+            </Tag>
+          ))}
         </Space>
       );
     }
@@ -232,42 +514,58 @@ function renderFieldValue(
   if (field.type === "TABLE") {
     const columns = field.config?.options?.columns || [];
     const dataList = Array.isArray(val) ? val : [];
-
     const tableColumns = columns.map((col: any) => ({
       title: col.name,
       dataIndex: col.code,
       key: col.code,
       width: col.type === "STT" ? 50 : undefined,
-      render: (cellVal: any, record: any, index: number) => {
-        if (col.type === "STT") {
-          return <Text strong style={{ color: "#595959" }}>{index + 1}</Text>;
-        }
-        if (col.type === "FORMULA") {
+      render: (cellVal: any, _r: any, index: number) => {
+        if (col.type === "STT")
           return (
-            <div style={{
-              padding: "2px 8px",
-              background: "#fffbe6",
-              border: "1px solid #ffe58f",
-              borderRadius: 4,
-              fontWeight: 600,
-              color: "#d46b08",
-              textAlign: "right",
-              fontSize: 13,
-              display: "inline-block",
-            }}>
-              {cellVal !== undefined && cellVal !== null ? Number(cellVal).toLocaleString("vi-VN") : "—"}
+            <Text strong style={{ color: "#595959" }}>
+              {index + 1}
+            </Text>
+          );
+        if (col.type === "FORMULA")
+          return (
+            <div
+              style={{
+                padding: "2px 8px",
+                background: "#fffbe6",
+                border: "1px solid #ffe58f",
+                borderRadius: 4,
+                fontWeight: 600,
+                color: "#d46b08",
+                textAlign: "right" as const,
+                fontSize: 13,
+                display: "inline-block",
+              }}
+            >
+              {cellVal !== undefined && cellVal !== null
+                ? Number(cellVal).toLocaleString("vi-VN")
+                : "—"}
             </div>
           );
-        }
-        if (col.type === "CHECKBOX") return cellVal ? <Tag color="green">✓</Tag> : <Tag>✗</Tag>;
-        if (col.type === "NUMBER") return cellVal !== undefined && cellVal !== null && cellVal !== "" ? Number(cellVal).toLocaleString("vi-VN") : "—";
-        return cellVal !== undefined && cellVal !== null ? String(cellVal) : "—";
+        if (col.type === "CHECKBOX")
+          return cellVal ? <Tag color="green">✓</Tag> : <Tag>✗</Tag>;
+        if (col.type === "NUMBER")
+          return cellVal !== undefined && cellVal !== null && cellVal !== ""
+            ? Number(cellVal).toLocaleString("vi-VN")
+            : "—";
+        return cellVal !== undefined && cellVal !== null
+          ? String(cellVal)
+          : "—";
       },
     }));
-
-    const hasSummary = columns.some((col: any) => col.summaryType && col.summaryType !== "NONE");
-
-    if (dataList.length === 0) return <Text type="secondary" italic>Không có dữ liệu</Text>;
+    const hasSummary = columns.some(
+      (col: any) => col.summaryType && col.summaryType !== "NONE",
+    );
+    if (dataList.length === 0)
+      return (
+        <Text type="secondary" italic>
+          Không có dữ liệu
+        </Text>
+      );
     return (
       <Table
         dataSource={dataList}
@@ -277,60 +575,90 @@ function renderFieldValue(
         bordered
         rowKey={(_, index) => String(index ?? 0)}
         style={{ width: "100%", marginTop: 4 }}
-        footer={hasSummary ? () => (
-          <div style={{
-            display: "flex",
-            gap: 0,
-            background: "#f6f8fa",
-            borderTop: "2px solid #e8e8e8",
-            fontWeight: 600,
-            fontSize: 13,
-          }}>
-            {columns.map((col: any, i: number) => {
-              const summary = col.summaryType && col.summaryType !== "NONE"
-                ? computeSummary(dataList, col.code, col.summaryType)
-                : "";
-              const label = SUMMARY_LABELS[col.summaryType] || "";
-
-              if (col.type === "STT") {
-                return (
-                  <div key={i} style={{ width: 50, padding: "6px 8px", textAlign: "center", color: "#8c8c8c" }}>
-                    Σ
-                  </div>
-                );
-              }
-
-              if (!summary && i === 0) {
-                return (
-                  <div key={i} style={{ flex: 1, padding: "6px 8px", color: "#8c8c8c" }}>
-                    Tổng hợp
-                  </div>
-                );
-              }
-
-              return (
+        footer={
+          hasSummary
+            ? () => (
                 <div
-                  key={i}
                   style={{
-                    flex: 1,
-                    padding: "6px 8px",
-                    textAlign: summary ? "right" : "left",
-                    color: summary ? "#0050b3" : "transparent",
-                    background: summary ? "#e6f4ff" : undefined,
-                    borderLeft: i > 0 ? "1px solid #e8e8e8" : undefined,
+                    display: "flex",
+                    gap: 0,
+                    background: "#f6f8fa",
+                    borderTop: "2px solid #e8e8e8",
+                    fontWeight: 600,
+                    fontSize: 13,
                   }}
                 >
-                  {summary ? (
-                    <Space size={4}>
-                      <Tag color="blue" style={{ fontSize: 10, lineHeight: "14px", padding: "0 4px" }}>{label}</Tag>
-                      <span>{summary}</span>
-                    </Space>
-                  ) : ""}
+                  {columns.map((col: any, i: number) => {
+                    const summary =
+                      col.summaryType && col.summaryType !== "NONE"
+                        ? computeSummary(dataList, col.code, col.summaryType)
+                        : "";
+                    const lbl = SUMMARY_LABELS[col.summaryType] || "";
+                    if (col.type === "STT")
+                      return (
+                        <div
+                          key={i}
+                          style={{
+                            width: 50,
+                            padding: "6px 8px",
+                            textAlign: "center" as const,
+                            color: "#8c8c8c",
+                          }}
+                        >
+                          Σ
+                        </div>
+                      );
+                    if (!summary && i === 0)
+                      return (
+                        <div
+                          key={i}
+                          style={{
+                            flex: 1,
+                            padding: "6px 8px",
+                            color: "#8c8c8c",
+                          }}
+                        >
+                          Tổng hợp
+                        </div>
+                      );
+                    return (
+                      <div
+                        key={i}
+                        style={{
+                          flex: 1,
+                          padding: "6px 8px",
+                          textAlign: summary
+                            ? ("right" as const)
+                            : ("left" as const),
+                          color: summary ? "#0050b3" : "transparent",
+                          background: summary ? "#e6f4ff" : undefined,
+                          borderLeft: i > 0 ? "1px solid #e8e8e8" : undefined,
+                        }}
+                      >
+                        {summary ? (
+                          <Space size={4}>
+                            <Tag
+                              color="blue"
+                              style={{
+                                fontSize: 10,
+                                lineHeight: "14px",
+                                padding: "0 4px",
+                              }}
+                            >
+                              {lbl}
+                            </Tag>
+                            <span>{summary}</span>
+                          </Space>
+                        ) : (
+                          ""
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-              );
-            })}
-          </div>
-        ) : undefined}
+              )
+            : undefined
+        }
       />
     );
   }
@@ -344,10 +672,26 @@ interface RecordDetailDrawerProps {
   onClose: () => void;
 }
 
-export default function RecordDetailDrawer({ record, open, onClose }: RecordDetailDrawerProps) {
-  const { data: fields = [], isLoading: isFieldsLoading } = useFields(record?.entityId || null);
-  const { data: auditLogs = [], isLoading: isLogsLoading } = useRecordWorkflowLogs(record?.id || null);
-  const status = record ? STATUS_MAP[record.status] || { label: record.status, color: "default" } : null;
+export default function RecordDetailDrawer({
+  record,
+  open,
+  onClose,
+}: RecordDetailDrawerProps) {
+  const [fullscreen, setFullscreen] = useState(false);
+
+  const handleClose = () => {
+    setFullscreen(false);
+    onClose();
+  };
+
+  const { data: fields = [], isLoading: isFieldsLoading } = useFields(
+    record?.entityId || null,
+  );
+  const { data: auditLogs = [], isLoading: isLogsLoading } =
+    useRecordWorkflowLogs(record?.id || null);
+  const status = record
+    ? STATUS_MAP[record.status] || { label: record.status, color: "default" }
+    : null;
 
   const { data: deptTree = [] } = useDepartmentTree();
   const { data: usersData } = useUsers(1, 100);
@@ -380,7 +724,7 @@ export default function RecordDetailDrawer({ record, open, onClose }: RecordDeta
   };
 
   const sortedFields = [...fields].sort(
-    (a, b) => (a.config?.orderIndex || 0) - (b.config?.orderIndex || 0)
+    (a, b) => (a.config?.orderIndex || 0) - (b.config?.orderIndex || 0),
   );
 
   const computedData = useMemo(() => {
@@ -391,8 +735,8 @@ export default function RecordDetailDrawer({ record, open, onClose }: RecordDeta
   return (
     <Drawer
       open={open}
-      onClose={onClose}
-      width={680}
+      onClose={handleClose}
+      width={fullscreen ? "100vw" : 680}
       title={
         <Space>
           <FileTextOutlined style={{ color: "#1890ff", fontSize: 18 }} />
@@ -410,11 +754,25 @@ export default function RecordDetailDrawer({ record, open, onClose }: RecordDeta
         </Space>
       }
       extra={
-        status && (
-          <Tag color={status.color} style={{ fontSize: 13, padding: "4px 12px" }}>
-            {status.label}
-          </Tag>
-        )
+        <Space>
+          <Tooltip title={fullscreen ? "Thu nhỏ" : "Phóng to toàn màn hình"}>
+            <Button
+              type="text"
+              size="small"
+              icon={fullscreen ? <ShrinkOutlined /> : <ExpandAltOutlined />}
+              onClick={() => setFullscreen((prev) => !prev)}
+              style={{ color: "#595959", marginRight: 16 }}
+            />
+          </Tooltip>
+          {status && (
+            <Tag
+              color={status.color}
+              style={{ fontSize: 13, padding: "4px 12px" }}
+            >
+              {status.label}
+            </Tag>
+          )}
+        </Space>
       }
       styles={{
         body: { padding: 24 },
@@ -427,8 +785,17 @@ export default function RecordDetailDrawer({ record, open, onClose }: RecordDeta
       {record && (
         <Space direction="vertical" size="large" className="w-full">
           {/* Metadata */}
-          <Card size="small" title="Thông tin Hồ sơ" bordered={false} style={{ background: "#fafafa", borderRadius: 8 }}>
-            <Descriptions column={2} size="small" labelStyle={{ fontWeight: 600, color: "#595959" }}>
+          <Card
+            size="small"
+            title="Thông tin Hồ sơ"
+            bordered={false}
+            style={{ background: "#fafafa", borderRadius: 8 }}
+          >
+            <Descriptions
+              column={2}
+              size="small"
+              labelStyle={{ fontWeight: 600, color: "#595959" }}
+            >
               <Descriptions.Item label="Mã hồ sơ">
                 <Tag color="blue">{record.businessCode}</Tag>
               </Descriptions.Item>
@@ -457,17 +824,31 @@ export default function RecordDetailDrawer({ record, open, onClose }: RecordDeta
                 <Spin tip="Đang tải cấu hình biểu mẫu..." />
               </div>
             ) : sortedFields.length === 0 ? (
-              <Empty description="Không có thông tin trường dữ liệu" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+              <Empty
+                description="Không có thông tin trường dữ liệu"
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+              />
             ) : (
               <Descriptions
                 bordered
                 column={1}
                 size="small"
-                labelStyle={{ width: 200, fontWeight: 600, background: "#fafafa" }}
+                labelStyle={{
+                  width: 200,
+                  fontWeight: 600,
+                  background: "#fafafa",
+                }}
               >
                 {sortedFields.map((field) => (
                   <Descriptions.Item key={field.id} label={field.name}>
-                    {renderFieldValue(field, computedData?.[field.code], findDeptName, findUserName, findRoleName)}
+                    {renderFieldValue(
+                      field,
+                      computedData?.[field.code],
+                      findDeptName,
+                      findUserName,
+                      findRoleName,
+                      record.id,
+                    )}
                   </Descriptions.Item>
                 ))}
               </Descriptions>
@@ -492,7 +873,11 @@ export default function RecordDetailDrawer({ record, open, onClose }: RecordDeta
                 <Spin tip="Đang tải lịch sử phê duyệt..." />
               </div>
             ) : auditLogs.length === 0 ? (
-              <Empty description="Chưa có nhật ký hoạt động nào cho hồ sơ này." image={Empty.PRESENTED_IMAGE_SIMPLE} style={{ padding: "16px 0" }} />
+              <Empty
+                description="Chưa có nhật ký hoạt động nào cho hồ sơ này."
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                style={{ padding: "16px 0" }}
+              />
             ) : (
               <Timeline
                 mode="left"
@@ -525,7 +910,13 @@ export default function RecordDetailDrawer({ record, open, onClose }: RecordDeta
                     dot: icon,
                     children: (
                       <div style={{ paddingBottom: "12px" }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                          }}
+                        >
                           <Text strong style={{ fontSize: "14px" }}>
                             {log.action === "START" ? "Khởi động" : log.action}
                           </Text>
@@ -538,9 +929,20 @@ export default function RecordDetailDrawer({ record, open, onClose }: RecordDeta
                           <Text strong>{log.user?.fullName || "Hệ thống"}</Text>
                         </div>
                         {log.comment && (
-                          <div style={{ marginTop: "4px", background: "#f5f5f5", padding: "6px 12px", borderRadius: "4px" }}>
-                            <MessageOutlined style={{ marginRight: "6px", color: "#8c8c8c" }} />
-                            <Text italic type="secondary">{log.comment}</Text>
+                          <div
+                            style={{
+                              marginTop: "4px",
+                              background: "#f5f5f5",
+                              padding: "6px 12px",
+                              borderRadius: "4px",
+                            }}
+                          >
+                            <MessageOutlined
+                              style={{ marginRight: "6px", color: "#8c8c8c" }}
+                            />
+                            <Text italic type="secondary">
+                              {log.comment}
+                            </Text>
                           </div>
                         )}
                       </div>

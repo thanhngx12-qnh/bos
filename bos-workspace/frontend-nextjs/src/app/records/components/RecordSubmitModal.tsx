@@ -22,14 +22,21 @@ import {
   Col,
   message,
   TreeSelect,
+  Upload,
 } from "antd";
+
 import {
   PlusOutlined,
   DeleteOutlined,
   InfoCircleOutlined,
   SendOutlined,
   ThunderboltOutlined,
+  ExpandAltOutlined,
+  ShrinkOutlined,
+  PaperClipOutlined,
+  PictureOutlined,
 } from "@ant-design/icons";
+import type { Dayjs } from "dayjs";
 import dayjs from "dayjs";
 import { useFields, Field } from "@/hooks/useFields";
 import { useCreateRecord, useUpdateRecord, RecordData } from "@/hooks/useRecords";
@@ -224,6 +231,19 @@ const SUMMARY_LABELS: Record<string, string> = {
   AVG: "TB",
   MIN: "Min",
   MAX: "Max",
+};
+
+// Helper to parse date values safely
+const parseDateValue = (val: any, type: string): Dayjs | undefined => {
+  if (!val) return undefined;
+  if (type === "TIME") {
+    // If it's a simple HH:mm or HH:mm:ss string
+    if (typeof val === "string" && /^\d{2}:\d{2}(:\d{2})?$/.test(val)) {
+      return dayjs(`2026-06-20T${val}`);
+    }
+  }
+  const parsed = dayjs(val);
+  return parsed.isValid() ? parsed : undefined;
 };
 
 // =================== TABLE FIELD COMPONENT ===================
@@ -488,6 +508,7 @@ function FieldRenderer({
   deptTree,
   userOptions,
   roleOptions,
+  record,
 }: {
   field: Field;
   allFields: Field[];
@@ -495,7 +516,31 @@ function FieldRenderer({
   deptTree: any[];
   userOptions: any[];
   roleOptions: any[];
+  record?: RecordData | null;
 }) {
+  const customUploadRequest = async ({ file, onSuccess, onError, onProgress }: any) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    if (record?.id) {
+      formData.append("recordId", String(record.id));
+    }
+    try {
+      const response = await api.post("/api/v1/attachments/upload", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+        onUploadProgress: ({ total, loaded }) => {
+          if (total) {
+            onProgress({ percent: Math.round((loaded / total) * 100) });
+          }
+        },
+      });
+      onSuccess(response.data, file);
+    } catch (err: any) {
+      onError(err);
+      message.error(`Lỗi tải lên tệp ${file.name}: ${err?.response?.data?.message || err.message}`);
+    }
+  };
   // Watch toàn bộ giá trị form để re-evaluate showIf / requiredIf
   const allValues = Form.useWatch([], form) || {};
   const { options } = field.config || {};
@@ -522,15 +567,41 @@ function FieldRenderer({
   if (options?.regex || options?.regexPattern) {
     const pattern = options.regex || options.regexPattern;
     rules.push({
-      pattern: new RegExp(pattern),
-      message: options.regexError || options.errorMessage || `${field.name} không đúng định dạng`,
+      validator: (_: any, value: any) => {
+        if (value === undefined || value === null || value === "") return Promise.resolve();
+        try {
+          const reg = new RegExp(pattern);
+          if (!reg.test(String(value))) {
+            return Promise.reject(options.regexError || options.errorMessage || `${field.name} không đúng định dạng`);
+          }
+        } catch {
+          // Ignore invalid regex
+        }
+        return Promise.resolve();
+      }
     });
   }
   if (options?.minLength) {
-    rules.push({ min: options.minLength, message: `${field.name} cần tối thiểu ${options.minLength} ký tự` });
+    rules.push({
+      validator: (_: any, value: any) => {
+        if (value === undefined || value === null || value === "") return Promise.resolve();
+        if (String(value).length < options.minLength) {
+          return Promise.reject(`${field.name} cần tối thiểu ${options.minLength} ký tự`);
+        }
+        return Promise.resolve();
+      }
+    });
   }
   if (options?.maxLength) {
-    rules.push({ max: options.maxLength, message: `${field.name} tối đa ${options.maxLength} ký tự` });
+    rules.push({
+      validator: (_: any, value: any) => {
+        if (value === undefined || value === null || value === "") return Promise.resolve();
+        if (String(value).length > options.maxLength) {
+          return Promise.reject(`${field.name} tối đa ${options.maxLength} ký tự`);
+        }
+        return Promise.resolve();
+      }
+    });
   }
 
   // Build select options
@@ -564,15 +635,75 @@ function FieldRenderer({
 
   switch (field.type) {
     case "TEXT":
-    case "EMAIL":
-    case "PHONE":
       return (
         <Col xs={24} md={colSpan} key={field.id}>
-          <Form.Item name={field.code} label={label} rules={rules}>
+          <Form.Item name={field.code} label={label} rules={rules} validateTrigger={["onChange", "onBlur"]}>
             <Input
               placeholder={options?.placeholder || `Nhập ${field.name}...`}
               maxLength={options?.maxLength}
               showCount={!!options?.maxLength}
+            />
+          </Form.Item>
+        </Col>
+      );
+
+    case "EMAIL":
+      return (
+        <Col xs={24} md={colSpan} key={field.id}>
+          <Form.Item
+            name={field.code}
+            label={label}
+            validateTrigger={["onChange", "onBlur"]}
+            rules={[
+              ...rules,
+              {
+                validator: (_: any, value: any) => {
+                  if (value === undefined || value === null || value === "") return Promise.resolve();
+                  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                  if (!emailRegex.test(String(value))) {
+                    return Promise.reject("Email không đúng định dạng (VD: user@example.com)");
+                  }
+                  return Promise.resolve();
+                }
+              }
+            ]}
+          >
+            <Input
+              type="email"
+              placeholder={options?.placeholder || "user@example.com"}
+              maxLength={options?.maxLength}
+            />
+          </Form.Item>
+        </Col>
+      );
+
+    case "PHONE":
+      return (
+        <Col xs={24} md={colSpan} key={field.id}>
+          <Form.Item
+            name={field.code}
+            label={label}
+            validateTrigger={["onChange", "onBlur"]}
+            rules={[
+              ...rules,
+              {
+                validator: (_: any, value: any) => {
+                  if (value === undefined || value === null || value === "") return Promise.resolve();
+                  if (!options?.regex && !options?.regexPattern) {
+                    const phoneRegex = /^(0[3|5|7|8|9])+([0-9]{8})$/;
+                    if (!phoneRegex.test(String(value))) {
+                      return Promise.reject(options?.errorMessage || "Số điện thoại không đúng định dạng VN (VD: 0901234567)");
+                    }
+                  }
+                  return Promise.resolve();
+                }
+              }
+            ]}
+          >
+            <Input
+              type="tel"
+              placeholder={options?.placeholder || "VD: 0901234567"}
+              maxLength={options?.maxLength || 11}
             />
           </Form.Item>
         </Col>
@@ -595,14 +726,67 @@ function FieldRenderer({
     case "NUMBER":
       return (
         <Col xs={24} md={colSpan} key={field.id}>
-          <Form.Item name={field.code} label={label} rules={rules}>
+          <Form.Item name={field.code} label={label} rules={rules} validateTrigger={["onChange", "onBlur"]}>
             <InputNumber
               style={{ width: "100%" }}
-              placeholder="Nhập số..."
-              min={options?.min}
-              max={options?.max}
-              formatter={(v) => v ? String(v).replace(/\B(?=(\d{3})+(?!\d))/g, ",") : ""}
+              placeholder={`Nhập ${field.name}...`}
+              min={options?.min !== undefined ? options.min : undefined}
+              max={options?.max !== undefined ? options.max : undefined}
+              precision={0}
+              formatter={(v) => v !== undefined && v !== null ? String(v).replace(/\B(?=(\d{3})+(?!\d))/g, ",") : ""}
               parser={(v) => v ? Number(v.replace(/,/g, "")) : 0}
+            />
+          </Form.Item>
+        </Col>
+      );
+
+    case "DECIMAL":
+      return (
+        <Col xs={24} md={colSpan} key={field.id}>
+          <Form.Item name={field.code} label={label} rules={rules} validateTrigger={["onChange", "onBlur"]}>
+            <InputNumber
+              style={{ width: "100%" }}
+              placeholder={options?.placeholder || `Nhập ${field.name}...`}
+              min={options?.min !== undefined ? options.min : undefined}
+              max={options?.max !== undefined ? options.max : undefined}
+              step={options?.step || 0.01}
+              precision={2}
+              formatter={(v) => v !== undefined && v !== null ? String(v).replace(/\B(?=(\d{3})+(?!\d))/g, ",") : ""}
+              parser={(v) => v ? Number(v.replace(/,/g, "")) : 0}
+            />
+          </Form.Item>
+        </Col>
+      );
+
+    case "CURRENCY":
+      return (
+        <Col xs={24} md={colSpan} key={field.id}>
+          <Form.Item name={field.code} label={label} rules={rules} validateTrigger={["onChange", "onBlur"]}>
+            <InputNumber
+              style={{ width: "100%" }}
+              placeholder="0"
+              min={options?.min !== undefined ? options.min : 0}
+              addonBefore={options?.prefix || "VNĐ"}
+              formatter={(v) => v !== undefined && v !== null ? String(v).replace(/\B(?=(\d{3})+(?!\d))/g, ",") : ""}
+              parser={(v) => v ? Number(v.replace(/,/g, "")) : 0}
+            />
+          </Form.Item>
+        </Col>
+      );
+
+    case "PERCENTAGE":
+      return (
+        <Col xs={24} md={colSpan} key={field.id}>
+          <Form.Item name={field.code} label={label} rules={rules} validateTrigger={["onChange", "onBlur"]}>
+            <InputNumber
+              style={{ width: "100%" }}
+              placeholder="0"
+              min={options?.min !== undefined ? options.min : 0}
+              max={options?.max !== undefined ? options.max : 100}
+              precision={2}
+              addonAfter="%"
+              formatter={(v) => v !== undefined && v !== null ? String(v) : ""}
+              parser={(v) => v ? Number(v) : 0}
             />
           </Form.Item>
         </Col>
@@ -615,10 +799,76 @@ function FieldRenderer({
             name={field.code}
             label={label}
             rules={rules}
-            getValueFromEvent={(date) => date?.toISOString() || null}
-            getValueProps={(value) => ({ value: value ? dayjs(value) : undefined })}
+            validateTrigger={["onChange"]}
+            getValueFromEvent={(date: Dayjs | null) => date?.toISOString() || null}
+            getValueProps={(value) => ({ value: parseDateValue(value, "DATE") })}
           >
             <DatePicker style={{ width: "100%" }} format="DD/MM/YYYY" placeholder="Chọn ngày..." />
+          </Form.Item>
+        </Col>
+      );
+
+    case "TIME":
+      return (
+        <Col xs={24} md={colSpan} key={field.id}>
+          <Form.Item
+            name={field.code}
+            label={label}
+            rules={rules}
+            validateTrigger={["onChange"]}
+            getValueFromEvent={(date: Dayjs | null) => date?.toISOString() || null}
+            getValueProps={(value) => ({ value: parseDateValue(value, "TIME") })}
+          >
+            <DatePicker.TimePicker
+              style={{ width: "100%" }}
+              format="HH:mm"
+              placeholder="Chọn giờ..."
+              minuteStep={5}
+              changeOnScroll
+              needConfirm={false}
+            />
+          </Form.Item>
+        </Col>
+      );
+
+    case "DATETIME":
+      return (
+        <Col xs={24} md={colSpan} key={field.id}>
+          <Form.Item
+            name={field.code}
+            label={label}
+            rules={rules}
+            validateTrigger={["onChange"]}
+            getValueFromEvent={(date: Dayjs | null) => date?.toISOString() || null}
+            getValueProps={(value) => ({ value: parseDateValue(value, "DATETIME") })}
+          >
+            <DatePicker
+              showTime
+              style={{ width: "100%" }}
+              format="DD/MM/YYYY HH:mm"
+              placeholder="Chọn ngày và giờ..."
+            />
+          </Form.Item>
+        </Col>
+      );
+
+    case "MONTH_YEAR":
+      return (
+        <Col xs={24} md={colSpan} key={field.id}>
+          <Form.Item
+            name={field.code}
+            label={label}
+            rules={rules}
+            validateTrigger={["onChange"]}
+            getValueFromEvent={(date: Dayjs | null) => date ? date.format("YYYY-MM") : null}
+            getValueProps={(value) => ({ value: parseDateValue(value, "MONTH_YEAR") })}
+          >
+            <DatePicker
+              picker="month"
+              style={{ width: "100%" }}
+              format="MM/YYYY"
+              placeholder="Chọn tháng/năm..."
+            />
           </Form.Item>
         </Col>
       );
@@ -755,6 +1005,73 @@ function FieldRenderer({
         </Col>
       );
 
+    case "FILE":
+      return (
+        <Col xs={24} md={colSpan} key={field.id}>
+          <Form.Item
+            name={field.code}
+            label={label}
+            rules={rules}
+            valuePropName="fileList"
+            getValueFromEvent={(e) => Array.isArray(e) ? e : e?.fileList}
+          >
+            <Upload
+              listType="text"
+              multiple={options?.multiple !== false}
+              accept={options?.accept || ".pdf,.doc,.docx,.xlsx,.xls,.csv,.txt"}
+              customRequest={customUploadRequest}
+              beforeUpload={(file) => {
+                const maxSize = options?.maxSize || 10;
+                if (file.size / 1024 / 1024 > maxSize) {
+                  message.error(`Tệp không được vượt quá ${maxSize}MB!`);
+                  return Upload.LIST_IGNORE;
+                }
+                return true;
+              }}
+              maxCount={options?.maxFiles || 5}
+            >
+              <Button icon={<PaperClipOutlined />} style={{ width: "100%", textAlign: "left" }}>
+                Chọn tệp đính kèm{options?.accept ? ` (${options.accept})` : " (PDF, Word, Excel...)"}...
+              </Button>
+            </Upload>
+          </Form.Item>
+        </Col>
+      );
+
+    case "IMAGE":
+      return (
+        <Col xs={24} md={colSpan} key={field.id}>
+          <Form.Item
+            name={field.code}
+            label={label}
+            rules={rules}
+            valuePropName="fileList"
+            getValueFromEvent={(e) => Array.isArray(e) ? e : e?.fileList}
+          >
+            <Upload
+              listType="picture-card"
+              multiple={options?.multiple !== false}
+              accept={options?.accept || ".jpg,.jpeg,.png,.webp,.gif"}
+              customRequest={customUploadRequest}
+              beforeUpload={(file) => {
+                const maxSize = options?.maxSize || 5;
+                if (file.size / 1024 / 1024 > maxSize) {
+                  message.error(`Ảnh không được vượt quá ${maxSize}MB!`);
+                  return Upload.LIST_IGNORE;
+                }
+                return true;
+              }}
+              maxCount={options?.maxFiles || 5}
+            >
+              <div style={{ padding: "8px 0" }}>
+                <PictureOutlined style={{ fontSize: 24, color: "#8c8c8c" }} />
+                <div style={{ marginTop: 8, color: "#8c8c8c", fontSize: 12 }}>Tải ảnh lên</div>
+              </div>
+            </Upload>
+          </Form.Item>
+        </Col>
+      );
+
     default:
       return (
         <Col xs={24} md={colSpan} key={field.id}>
@@ -776,6 +1093,9 @@ export default function RecordSubmitModal({
 }: RecordSubmitModalProps) {
   const [form] = Form.useForm();
   const [submitting, setSubmitting] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
+  const [liveTitle, setLiveTitle] = useState<string>("");
+  const [isTitleManuallyEdited, setIsTitleManuallyEdited] = useState(false);
 
   const { data: fields = [], isLoading: isFieldsLoading } = useFields(entity?.id || null);
   const { data: workflowsData } = useWorkflows(entity?.id || null);
@@ -804,23 +1124,40 @@ export default function RecordSubmitModal({
         fields.forEach((f) => {
           const rawVal = record.data?.[f.code];
           if (rawVal !== undefined && rawVal !== null) {
-            if (f.type === "DATE") {
-              initialValues[f.code] = dayjs(rawVal);
+            if (f.type === "DATE" || f.type === "DATETIME" || f.type === "TIME" || f.type === "MONTH_YEAR") {
+              const parsed = parseDateValue(rawVal, f.type);
+              initialValues[f.code] = parsed || null;
+            } else if (f.type === "FILE" || f.type === "IMAGE") {
+              if (Array.isArray(rawVal)) {
+                initialValues[f.code] = rawVal.map((file: any, index: number) => ({
+                  uid: file.uid || String(index),
+                  name: file.name,
+                  status: "done",
+                  url: file.url || "",
+                }));
+              } else {
+                initialValues[f.code] = [];
+              }
             } else {
               initialValues[f.code] = rawVal;
             }
           }
         });
         form.setFieldsValue(initialValues);
+        setLiveTitle(record.title || "");
+        setIsTitleManuallyEdited(true);
       } else {
         form.resetFields();
+        setIsTitleManuallyEdited(false);
+        setLiveTitle("");
         // Set default values from fields configurations (using initValue or fallback defaultValue)
         const defaultValues: Record<string, any> = {};
         fields.forEach((f) => {
           const defVal = f.config?.options?.initValue !== undefined ? f.config?.options?.initValue : f.config?.options?.defaultValue;
           if (defVal !== undefined && defVal !== null && defVal !== "") {
-            if (f.type === "DATE" || f.type === "DATETIME" || f.type === "MONTH_YEAR") {
-              defaultValues[f.code] = dayjs(defVal);
+            if (f.type === "DATE" || f.type === "DATETIME" || f.type === "TIME" || f.type === "MONTH_YEAR") {
+              const parsed = parseDateValue(defVal, f.type);
+              defaultValues[f.code] = parsed || null;
             } else if (f.type === "NUMBER" || f.type === "DECIMAL" || f.type === "CURRENCY" || f.type === "PERCENTAGE") {
               defaultValues[f.code] = Number(defVal);
             } else if (f.type === "CHECKBOX") {
@@ -835,9 +1172,14 @@ export default function RecordSubmitModal({
           }
         });
         form.setFieldsValue(defaultValues);
+        if (entity?.titlePattern) {
+          const preview = buildLiveTitle(entity.titlePattern, defaultValues);
+          setLiveTitle(preview);
+          form.setFieldValue("title", preview);
+        }
       }
     }
-  }, [open, record, fields, form]);
+  }, [open, record, fields, form, entity]);
 
   // Tìm workflow version PUBLISHED cho entity này
   const activeWorkflow = useMemo(() => {
@@ -849,9 +1191,31 @@ export default function RecordSubmitModal({
     return null;
   }, [workflowsData]);
 
-  const handleValuesChange = (_: any, allValues: any) => {
+  // Build live title preview from pattern + current form values
+  const buildLiveTitle = (pattern: string, values: Record<string, any>): string => {
+    return pattern.replace(/\{([^}]+)\}/g, (_, token) => {
+      if (token === "RECORD_CODE") return "[Mã tự sinh]";
+      const val = values[token];
+      if (val === undefined || val === null || val === "") return `{${token}}`;
+      if (typeof val === "object" && "$d" in val) return (val as any).format("DD/MM/YYYY");
+      return String(val);
+    });
+  };
+
+  const handleValuesChange = (changedValues: any, allValues: any) => {
     const computedValues = calculateFormFormulas(fields, allValues);
     form.setFieldsValue(computedValues);
+    
+    // Check if the title itself was changed by the user (manual edit)
+    if ("title" in changedValues) {
+      setIsTitleManuallyEdited(true);
+      setLiveTitle(changedValues.title);
+    } else if (entity?.titlePattern && !isTitleManuallyEdited) {
+      // Auto-generate title
+      const preview = buildLiveTitle(entity.titlePattern, { ...allValues, ...computedValues });
+      setLiveTitle(preview);
+      form.setFieldValue("title", preview);
+    }
   };
 
   const handleSubmit = async () => {
@@ -859,15 +1223,46 @@ export default function RecordSubmitModal({
       setSubmitting(true);
       const values = await form.validateFields();
 
+      // Lấy field map để biết type
+      const fieldMap = new Map(fields.map((f) => [f.code, f]));
+
       // Làm sạch giá trị
       const cleanData: Record<string, any> = {};
       for (const [key, val] of Object.entries(values)) {
         if (val === undefined || val === null) continue;
-        if (typeof val === "object" && val && "$d" in val) {
-          cleanData[key] = (val as any).toISOString();
-        } else {
-          cleanData[key] = val;
+        const fieldDef = fieldMap.get(key);
+        const fieldType = fieldDef?.type;
+
+        // FILE / IMAGE: AntD Upload trả về mảng UploadFile objects → lấy tên file
+        if (fieldType === "FILE" || fieldType === "IMAGE") {
+          if (Array.isArray(val)) {
+            cleanData[key] = val.map((f: any) => ({
+              name: f.name || f.fileName || String(f),
+              uid: f.uid || String(Math.random()),
+              size: f.size,
+              type: f.type,
+              id: f.id || f.response?.id || f.response?.data?.id,
+              url: f.url || f.response?.url || f.response?.data?.url,
+            }));
+          } else {
+            cleanData[key] = [];
+          }
+          continue;
         }
+
+        // Dayjs object (DATE, DATETIME, TIME, MONTH_YEAR)
+        if (typeof val === "object" && val !== null) {
+          // Dayjs có property $d hoặc là Dayjs instance
+          if ("$d" in val || (typeof (val as any).toISOString === "function" && typeof (val as any).format === "function")) {
+            cleanData[key] = (val as any).toISOString();
+            continue;
+          }
+          // Mảng bình thường (MULTI_SELECT, TABLE, v.v.)
+          cleanData[key] = val;
+          continue;
+        }
+
+        cleanData[key] = val;
       }
 
       // 1. Tạo hoặc cập nhật Record
@@ -942,26 +1337,39 @@ export default function RecordSubmitModal({
     <Modal
       open={open}
       onCancel={handleClose}
-      width={720}
+      width={fullscreen ? "100vw" : 760}
+      style={fullscreen ? { top: 0, margin: 0, padding: 0, maxWidth: "100vw" } : {}}
       title={
-        <Space>
-          <div
-            style={{
-              width: 32, height: 32, borderRadius: 8,
-              background: "linear-gradient(135deg, #0050b3, #1890ff)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-            }}
-          >
-            <SendOutlined style={{ color: "#fff", fontSize: 16 }} />
-          </div>
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 16 }}>{record ? "Chỉnh sửa & Trình ký lại" : "Nộp hồ sơ mới"}</div>
-            <div style={{ fontWeight: 400, fontSize: 12, color: "#8c8c8c" }}>
-              Biểu mẫu: <Tag color="blue" style={{ marginLeft: 4 }}>{entity?.name}</Tag>
-              <Tag color="cyan">{entity?.code}</Tag>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", paddingRight: 8 }}>
+          <Space>
+            <div
+              style={{
+                width: 32, height: 32, borderRadius: 8,
+                background: "linear-gradient(135deg, #0050b3, #1890ff)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                flexShrink: 0,
+              }}
+            >
+              <SendOutlined style={{ color: "#fff", fontSize: 16 }} />
             </div>
-          </div>
-        </Space>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 16 }}>{record ? "Chỉnh sửa & Trình ký lại" : "Nộp hồ sơ mới"}</div>
+              <div style={{ fontWeight: 400, fontSize: 12, color: "#8c8c8c" }}>
+                Biểu mẫu: <Tag color="blue" style={{ marginLeft: 4 }}>{entity?.name}</Tag>
+                <Tag color="cyan">{entity?.code}</Tag>
+              </div>
+            </div>
+          </Space>
+          <Tooltip title={fullscreen ? "Thu nhỏ" : "Phóng to toàn màn hình"}>
+            <Button
+              type="text"
+              size="small"
+              icon={fullscreen ? <ShrinkOutlined /> : <ExpandAltOutlined />}
+              onClick={() => setFullscreen((prev) => !prev)}
+              style={{ color: "#595959", marginRight: 32 }}
+            />
+          </Tooltip>
+        </div>
       }
       footer={
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -999,10 +1407,14 @@ export default function RecordSubmitModal({
       }
       destroyOnClose
       styles={{
-        body: { maxHeight: "70vh", overflowY: "auto", padding: "24px" },
+        body: {
+          maxHeight: fullscreen ? "calc(100vh - 140px)" : "70vh",
+          overflowY: "auto",
+          padding: "24px",
+        },
         header: {
           borderBottom: "1px solid #f0f0f0",
-          padding: "20px 24px",
+          padding: "16px 24px",
           background: "linear-gradient(to right, #f0f5ff, #fff)",
         },
       }}
@@ -1024,7 +1436,26 @@ export default function RecordSubmitModal({
           }
         />
       ) : (
-        <Form form={form} layout="vertical" requiredMark="optional" scrollToFirstError onValuesChange={handleValuesChange}>
+        <Form
+          form={form}
+          layout="vertical"
+          requiredMark={(label, { required }) =>
+            required ? (
+              <>
+                {label}
+                <span style={{ color: "#ff4d4f", marginLeft: 2, fontWeight: 700 }}>*</span>
+              </>
+            ) : (
+              <>
+                {label}
+                <span style={{ color: "#8c8c8c", fontSize: 11, marginLeft: 4, fontWeight: 400 }}>(Tùy chọn)</span>
+              </>
+            )
+          }
+          scrollToFirstError
+          validateTrigger={["onChange", "onBlur"]}
+          onValuesChange={handleValuesChange}
+        >
           {activeWorkflow ? (
             <Alert
               type="info"
@@ -1046,13 +1477,59 @@ export default function RecordSubmitModal({
           <Row gutter={[16, 0]}>
             {entity?.titlePattern ? (
               <Col span={24}>
-                <Form.Item label="Tiêu đề hồ sơ">
+                <Form.Item
+                  name="title"
+                  label={
+                    <Space size={4}>
+                      <span>Tiêu đề hồ sơ</span>
+                      <Tag color="geekblue" style={{ fontSize: 10, lineHeight: "16px", padding: "0 4px" }}>
+                        Tự động sinh
+                      </Tag>
+                      <Tooltip title={`Mẫu: ${entity.titlePattern}`}>
+                        <InfoCircleOutlined style={{ color: "#8c8c8c", fontSize: 12 }} />
+                      </Tooltip>
+                    </Space>
+                  }
+                >
                   <Input
-                    value={`Tự động sinh theo mẫu: ${entity.titlePattern}`}
-                    disabled
-                    style={{ background: "#f5f5f5", color: "#8c8c8c", fontWeight: 500 }}
+                    placeholder={`Xem trước: ${entity.titlePattern}`}
+                    style={{
+                      background: isTitleManuallyEdited ? "#fff" : "#f0f5ff",
+                      borderColor: isTitleManuallyEdited ? undefined : "#adc6ff",
+                      color: "#262626",
+                      fontWeight: isTitleManuallyEdited ? 400 : 500,
+                    }}
+                    suffix={
+                      isTitleManuallyEdited ? (
+                        <Tooltip title="Đặt lại theo mẫu">
+                          <span
+                            style={{ cursor: "pointer", color: "#1890ff", fontSize: 11 }}
+                            onClick={() => {
+                              setIsTitleManuallyEdited(false);
+                              const vals = form.getFieldsValue();
+                              const preview = buildLiveTitle(entity.titlePattern!, vals);
+                              setLiveTitle(preview);
+                              form.setFieldValue("title", preview);
+                            }}
+                          >
+                            ↺ reset
+                          </span>
+                        </Tooltip>
+                      ) : null
+                    }
                   />
                 </Form.Item>
+                {liveTitle && (
+                  <div style={{
+                    marginTop: -12,
+                    marginBottom: 12,
+                    fontSize: 11,
+                    color: "#8c8c8c",
+                    paddingLeft: 2,
+                  }}>
+                    👁 Xem trước: <span style={{ color: "#0050b3", fontWeight: 500 }}>{liveTitle}</span>
+                  </div>
+                )}
               </Col>
             ) : (
               <Col span={24}>
@@ -1074,6 +1551,7 @@ export default function RecordSubmitModal({
                 deptTree={deptTree}
                 userOptions={userOptions}
                 roleOptions={roleOptions}
+                record={record}
               />
             ))}
           </Row>
