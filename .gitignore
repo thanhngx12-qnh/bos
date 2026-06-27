@@ -46,3 +46,5 @@ Thumbs.db
 # Coverage
 # =========================
 coverage/
+
+bos-workspace/backend-nestjs/combined_backend_code.md
