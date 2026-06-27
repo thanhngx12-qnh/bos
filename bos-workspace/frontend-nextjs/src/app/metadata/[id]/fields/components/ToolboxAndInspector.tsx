@@ -49,7 +49,7 @@ import {
   MinusCircleOutlined,
 } from "@ant-design/icons";
 import dayjs from "dayjs";
-import { Field } from "@/hooks/useFields";
+import { Field, useFields } from "@/hooks/useFields";
 import { Entity } from "@/hooks/useEntities";
 import { useDepartmentTree } from "@/hooks/useDepartments";
 import { useUsers } from "@/hooks/useUsers";
@@ -199,6 +199,8 @@ export default function ToolboxAndInspector({
 }: ToolboxAndInspectorProps) {
   const [form] = Form.useForm();
   const watchedType = Form.useWatch("type", form);
+  const watchedLookupEntityId = Form.useWatch(["options", "lookupEntityId"], form);
+  const { data: lookupFieldsData = [] } = useFields(watchedLookupEntityId || null);
   const [activeTab, setActiveTab] = React.useState("toolbox");
 
   // Gọi các API hooks phục vụ cho việc nhập và hiển thị dropdown tham chiếu/cơ cấu tổ chức
@@ -268,6 +270,7 @@ export default function ToolboxAndInspector({
             }
             return col;
           }),
+           filter: selectedField.config?.options?.filter || { status: [] },
           showIf: selectedField.config?.options?.showIf || { logicalOperator: "AND", rules: [] },
           requiredIf: selectedField.config?.options?.requiredIf || { logicalOperator: "AND", rules: [] },
           initValue: (() => {
@@ -674,9 +677,21 @@ export default function ToolboxAndInspector({
                     <Form.Item
                       name={["options", "displayField"]}
                       label="Cột hiển thị nhãn"
-                      rules={[{ required: true, message: "Nhập displayField" }]}
+                      rules={[{ required: true, message: "Chọn trường hiển thị" }]}
                     >
-                      <Input placeholder="Ví dụ: project_name, full_name..." />
+                      <Select
+                        placeholder="Chọn trường hiển thị..."
+                        showSearch
+                        filterOption={(input, opt) => String(opt?.label ?? "").toLowerCase().includes(input.toLowerCase())}
+                        options={[
+                          { value: "businessCode", label: "Mã hồ sơ (businessCode)" },
+                          { value: "title", label: "Tiêu đề (title)" },
+                          ...lookupFieldsData.map((f) => ({
+                            value: f.code,
+                            label: `${f.name} (${f.code})`,
+                          })),
+                        ]}
+                      />
                     </Form.Item>
                     <Form.Item
                       name={["options", "filter", "status"]}

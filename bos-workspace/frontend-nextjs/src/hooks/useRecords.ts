@@ -22,9 +22,11 @@ export function useRecords(
   limit = 10,
   searchQuery = "",
   filters = "",
+  sortBy = "id",
+  sortOrder = "desc",
 ) {
   return useQuery<{ data: RecordData[]; total: number }>({
-    queryKey: ["records", entityId, page, limit, searchQuery, filters],
+    queryKey: ["records", entityId, page, limit, searchQuery, filters, sortBy, sortOrder],
     queryFn: async () => {
       if (!entityId) return { data: [], total: 0 };
       const { data } = await api.get("/api/v1/records", {
@@ -32,8 +34,8 @@ export function useRecords(
           entityId,
           page,
           limit,
-          sortBy: "id",
-          sortOrder: "desc",
+          sortBy,
+          sortOrder,
           searchQuery: searchQuery || undefined,
           filters: filters || undefined,
         },

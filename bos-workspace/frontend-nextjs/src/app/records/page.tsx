@@ -26,7 +26,9 @@ import {
   App as AntdApp,
   message,
   Result,
+  DatePicker,
 } from "antd";
+import dayjs from "dayjs";
 import {
   DashboardOutlined,
   PartitionOutlined,
@@ -210,6 +212,12 @@ function RecordsContent() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("");
 
+  // States cho sắp xếp động và bộ lọc nâng cao theo từng trường
+  const [sortBy, setSortBy] = useState("id");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [customFilters, setCustomFilters] = useState<Record<string, any>>({});
+  const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(false);
+
   // Modal/Drawer state
   const [submitModalOpen, setSubmitModalOpen] = useState(false);
   const [detailRecord, setDetailRecord] = useState<RecordData | null>(null);
@@ -230,12 +238,23 @@ function RecordsContent() {
     [entities, selectedEntityId]
   );
 
-  const filtersStr = statusFilter ? JSON.stringify({ status: statusFilter }) : "";
+  // Tải các trường động của biểu mẫu đang chọn
+  const { data: fields = [] } = useFields(selectedEntityId);
+
+  // Gộp bộ lọc trạng thái và các bộ lọc động theo các trường custom
+  const filtersStr = useMemo(() => {
+    const activeFilters = { ...customFilters };
+    if (statusFilter) {
+      activeFilters.status = statusFilter;
+    }
+    return Object.keys(activeFilters).length > 0 ? JSON.stringify(activeFilters) : "";
+  }, [customFilters, statusFilter]);
+
   const {
     data: recordsData,
     isLoading: isRecordsLoading,
     refetch: refetchRecords,
-  } = useRecords(selectedEntityId, page, 10, searchQuery, filtersStr);
+  } = useRecords(selectedEntityId, page, 10, searchQuery, filtersStr, sortBy, sortOrder);
 
   const { data: tasksData } = useMyTasks("PENDING", 1, 5);
 
@@ -246,88 +265,136 @@ function RecordsContent() {
   const statsPending = records.filter((r) => r.status === "IN_PROGRESS" || r.status === "PENDING").length;
   const statsRejected = records.filter((r) => r.status === "REJECTED").length;
 
-  // Table columns
-  const columns = [
-    {
-      title: "Mã Hồ sơ",
-      dataIndex: "businessCode",
-      key: "businessCode",
-      width: 140,
-      render: (code: string) => (
-        <Tag color="blue" style={{ fontWeight: 600, fontSize: 13 }}>{code}</Tag>
-      ),
-    },
-    {
-      title: "Tiêu đề Hồ sơ",
-      dataIndex: "title",
-      key: "title",
-      ellipsis: true,
-      render: (title: string, record: RecordData) => (
-        <Text strong style={{ cursor: "pointer" }} onClick={() => setDetailRecord(record)}>
-          {title || <Text type="secondary" italic>(Chưa có tiêu đề)</Text>}
-        </Text>
-      ),
-    },
-    {
-      title: "Trạng thái",
-      dataIndex: "status",
-      key: "status",
-      width: 140,
-      render: (status: string) => {
-        const s = STATUS_MAP[status] || { label: status, color: "default", icon: null };
-        return (
-          <Tag icon={s.icon} color={s.color} style={{ borderRadius: 12, padding: "2px 10px" }}>
-            {s.label}
-          </Tag>
-        );
+  // Tạo cấu trúc cột động dựa trên thiết kế biểu mẫu (Metadata Entity Fields)
+  const columns = useMemo(() => {
+    const baseColumns = [
+      {
+        title: "Mã Hồ sơ",
+        dataIndex: "businessCode",
+        key: "businessCode",
+        width: 140,
+        sorter: true,
+        sortOrder: (sortBy === "businessCode" ? (sortOrder === "asc" ? "ascend" : "descend") : undefined) as "ascend" | "descend" | undefined,
+        render: (code: string) => (
+          <Tag color="blue" style={{ fontWeight: 600, fontSize: 13 }}>{code}</Tag>
+        ),
       },
-    },
-    {
-      title: "Ngày nộp",
-      dataIndex: "createdAt",
-      key: "createdAt",
-      width: 160,
-      render: (date: string) => (
-        <Text type="secondary" style={{ fontSize: 12 }}>
-          {new Date(date).toLocaleString("vi-VN")}
-        </Text>
-      ),
-    },
-    {
-      title: "Hành động",
-      key: "actions",
-      width: 120,
-      align: "center" as const,
-      render: (_: any, record: RecordData) => {
-        const canEdit = record.status === "DRAFT" || record.status === "REJECTED";
-        return (
-          <Space>
-            <Tooltip title="Xem chi tiết">
-              <Button
-                type="text"
-                icon={<EyeOutlined />}
-                onClick={() => setDetailRecord(record)}
-                style={{ color: "#1890ff" }}
-              />
-            </Tooltip>
-            {canEdit && (
-              <Tooltip title="Sửa & Trình ký lại">
+      {
+        title: "Tiêu đề Hồ sơ",
+        dataIndex: "title",
+        key: "title",
+        ellipsis: true,
+        sorter: true,
+        sortOrder: (sortBy === "title" ? (sortOrder === "asc" ? "ascend" : "descend") : undefined) as "ascend" | "descend" | undefined,
+        render: (title: string, record: RecordData) => (
+          <Text strong style={{ cursor: "pointer" }} onClick={() => setDetailRecord(record)}>
+            {title || <Text type="secondary" italic>(Chưa có tiêu đề)</Text>}
+          </Text>
+        ),
+      },
+    ];
+
+    // Tạo các cột động cho các trường custom (không hiển thị các trường phức tạp như TABLE hoặc FILE để giữ bảng gọn gàng)
+    const customColumns = fields
+      .filter((f) => f.type !== "TABLE" && f.type !== "FILE" && f.type !== "IMAGE")
+      .map((field) => ({
+        title: field.name,
+        dataIndex: ["data", field.code],
+        key: field.code,
+        sorter: true,
+        sortOrder: (sortBy === field.code ? (sortOrder === "asc" ? "ascend" : "descend") : undefined) as "ascend" | "descend" | undefined,
+        render: (val: any) => {
+          if (val === undefined || val === null || val === "") return "-";
+          if (field.type === "CHECKBOX") {
+            return val === true || val === "true" ? "☑ Có" : "☐ Không";
+          }
+          if (field.type === "DATE") {
+            return new Date(val).toLocaleDateString("vi-VN");
+          }
+          if (field.type === "DATETIME") {
+            return new Date(val).toLocaleString("vi-VN");
+          }
+          if (field.type === "CURRENCY") {
+            return new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(Number(val) || 0);
+          }
+          if (Array.isArray(val)) {
+            return val.join(", ");
+          }
+          if (typeof val === "object") {
+            return JSON.stringify(val);
+          }
+          return String(val);
+        },
+      }));
+
+    const endColumns = [
+      {
+        title: "Trạng thái",
+        dataIndex: "status",
+        key: "status",
+        width: 140,
+        sorter: true,
+        sortOrder: (sortBy === "status" ? (sortOrder === "asc" ? "ascend" : "descend") : undefined) as "ascend" | "descend" | undefined,
+        render: (status: string) => {
+          const s = STATUS_MAP[status] || { label: status, color: "default", icon: null };
+          return (
+            <Tag icon={s.icon} color={s.color} style={{ borderRadius: 12, padding: "2px 10px" }}>
+              {s.label}
+            </Tag>
+          );
+        },
+      },
+      {
+        title: "Ngày nộp",
+        dataIndex: "createdAt",
+        key: "createdAt",
+        width: 160,
+        sorter: true,
+        sortOrder: (sortBy === "createdAt" ? (sortOrder === "asc" ? "ascend" : "descend") : undefined) as "ascend" | "descend" | undefined,
+        render: (date: string) => (
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            {new Date(date).toLocaleString("vi-VN")}
+          </Text>
+        ),
+      },
+      {
+        title: "Hành động",
+        key: "actions",
+        width: 120,
+        align: "center" as const,
+        render: (_: any, record: RecordData) => {
+          const canEdit = record.status === "DRAFT" || record.status === "REJECTED";
+          return (
+            <Space onClick={(e) => e.stopPropagation()}>
+              <Tooltip title="Xem chi tiết">
                 <Button
                   type="text"
-                  icon={<EditOutlined />}
-                  onClick={() => {
-                    setEditingRecord(record);
-                    setSubmitModalOpen(true);
-                  }}
-                  style={{ color: "#faad14" }}
+                  icon={<EyeOutlined />}
+                  onClick={() => setDetailRecord(record)}
+                  style={{ color: "#1890ff" }}
                 />
               </Tooltip>
-            )}
-          </Space>
-        );
+              {canEdit && (
+                <Tooltip title="Sửa & Trình ký lại">
+                  <Button
+                    type="text"
+                    icon={<EditOutlined />}
+                    onClick={() => {
+                      setEditingRecord(record);
+                      setSubmitModalOpen(true);
+                    }}
+                    style={{ color: "#faad14" }}
+                  />
+                </Tooltip>
+              )}
+            </Space>
+          );
+        },
       },
-    },
-  ];
+    ];
+
+    return [...baseColumns, ...customColumns, ...endColumns];
+  }, [fields, sortBy, sortOrder]);
 
 
   if (permissionsLoaded && !isSuperAdmin && !userPermissions.records?.includes("READ")) {
@@ -637,6 +704,13 @@ function RecordsContent() {
                                   { value: "REJECTED", label: "Từ chối" },
                                 ]}
                               />
+                              <Button
+                                icon={<FilterOutlined />}
+                                type={isFilterPanelOpen ? "primary" : "default"}
+                                onClick={() => setIsFilterPanelOpen(!isFilterPanelOpen)}
+                              >
+                                Bộ lọc nâng cao
+                              </Button>
                               <Tooltip title="Làm mới">
                                 <Button icon={<ReloadOutlined />} onClick={() => refetchRecords()} />
                               </Tooltip>
@@ -653,6 +727,112 @@ function RecordsContent() {
                             </Space>
                           </Col>
                         </Row>
+
+                        {/* Advanced Filter Panel for Entity Custom Fields */}
+                        {isFilterPanelOpen && fields.length > 0 && (
+                          <div style={{ marginTop: "16px", paddingTop: "16px", borderTop: "1px dashed #e8e8e8" }}>
+                            <Row gutter={[16, 12]}>
+                              {fields
+                                .filter((f) => f.type !== "TABLE" && f.type !== "FILE" && f.type !== "IMAGE")
+                                .map((field) => (
+                                  <Col xs={24} sm={12} md={8} lg={6} key={field.code}>
+                                    <div style={{ marginBottom: 4 }}>
+                                      <Text type="secondary" style={{ fontSize: 12 }}>{field.name}</Text>
+                                    </div>
+                                    {field.type === "CHECKBOX" ? (
+                                      <Select
+                                        placeholder="Tất cả"
+                                        allowClear
+                                        style={{ width: "100%" }}
+                                        value={customFilters[field.code]}
+                                        onChange={(val) => {
+                                          const newFilters = { ...customFilters };
+                                          if (val !== undefined && val !== null) {
+                                            newFilters[field.code] = val;
+                                          } else {
+                                            delete newFilters[field.code];
+                                          }
+                                          setCustomFilters(newFilters);
+                                          setPage(1);
+                                        }}
+                                        options={[
+                                          { value: "true", label: "Có" },
+                                          { value: "false", label: "Không" },
+                                        ]}
+                                      />
+                                    ) : field.type === "SELECT" || field.type === "MULTI_SELECT" ? (
+                                      <Select
+                                        placeholder={`Chọn ${field.name}...`}
+                                        allowClear
+                                        style={{ width: "100%" }}
+                                        value={customFilters[field.code]}
+                                        onChange={(val) => {
+                                          const newFilters = { ...customFilters };
+                                          if (val) {
+                                            newFilters[field.code] = val;
+                                          } else {
+                                            delete newFilters[field.code];
+                                          }
+                                          setCustomFilters(newFilters);
+                                          setPage(1);
+                                        }}
+                                        options={(field.config?.options?.choices || []).map((c: string) => ({
+                                          value: c,
+                                          label: c,
+                                        }))}
+                                      />
+                                    ) : field.type === "DATE" || field.type === "DATETIME" ? (
+                                      <DatePicker
+                                        placeholder={`Chọn ngày...`}
+                                        style={{ width: "100%" }}
+                                        value={customFilters[field.code] ? dayjs(customFilters[field.code]) : null}
+                                        onChange={(date) => {
+                                          const dateStr = date ? date.format("YYYY-MM-DD") : undefined;
+                                          const newFilters = { ...customFilters };
+                                          if (dateStr) {
+                                            newFilters[field.code] = dateStr;
+                                          } else {
+                                            delete newFilters[field.code];
+                                          }
+                                          setCustomFilters(newFilters);
+                                          setPage(1);
+                                        }}
+                                      />
+                                    ) : (
+                                      <Input
+                                        placeholder={`Nhập ${field.name}...`}
+                                        allowClear
+                                        value={customFilters[field.code] || ""}
+                                        onChange={(e) => {
+                                          const val = e.target.value;
+                                          const newFilters = { ...customFilters };
+                                          if (val) {
+                                            newFilters[field.code] = val;
+                                          } else {
+                                            delete newFilters[field.code];
+                                          }
+                                          setCustomFilters(newFilters);
+                                          setPage(1);
+                                        }}
+                                      />
+                                    )}
+                                  </Col>
+                                ))}
+                              <Col span={24} style={{ textAlign: "right", marginTop: 8 }}>
+                                <Button
+                                  type="link"
+                                  danger
+                                  onClick={() => {
+                                    setCustomFilters({});
+                                    setPage(1);
+                                  }}
+                                >
+                                  Xóa bộ lọc nâng cao
+                                </Button>
+                              </Col>
+                            </Row>
+                          </div>
+                        )}
                       </Card>
 
                       {/* Table */}
@@ -667,6 +847,16 @@ function RecordsContent() {
                           columns={columns}
                           rowKey="id"
                           loading={isRecordsLoading}
+                          onChange={(pagination, filters, sorter: any) => {
+                            if (sorter && sorter.field) {
+                              const fieldCode = Array.isArray(sorter.field) ? sorter.field[1] : sorter.field;
+                              setSortBy(fieldCode);
+                              setSortOrder(sorter.order === "ascend" ? "asc" : "desc");
+                            } else {
+                              setSortBy("id");
+                              setSortOrder("desc");
+                            }
+                          }}
                           pagination={{
                             current: page,
                             pageSize: 10,

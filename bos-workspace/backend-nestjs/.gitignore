@@ -3,3 +3,19 @@ node_modules
 .env
 
 /generated/prisma
+
+
+
+# dependencies
+node_modules/
+
+# build
+dist/
+build/
+
+# logs
+*.log
+
+# env
+.env
+.env.local
