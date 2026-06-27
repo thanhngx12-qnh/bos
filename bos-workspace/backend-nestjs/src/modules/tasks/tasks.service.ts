@@ -60,21 +60,48 @@ export class TasksService {
 
     // Giao việc: Mỗi candidateUser sẽ nhận 1 Task độc lập
     for (const userId of candidateUsers) {
+      // Kiểm tra xem có cấu hình ApprovalDelegation nào đang hiệu lực cho userId này vắng mặt không
+      const now = new Date();
+      const delegation = await tx.approvalDelegation.findFirst({
+        where: {
+          tenantId,
+          fromUserId: userId,
+          isActive: true,
+          startDate: { lte: now },
+          endDate: { gte: now },
+        } as any,
+      });
+
+      let actualAssigneeId = userId;
+      let assignmentData: any = {};
+
+      if (delegation) {
+        actualAssigneeId = delegation.toUserId;
+        assignmentData = {
+          delegatedFromUserId: userId,
+          delegationId: delegation.id,
+          delegatedAt: now.toISOString(),
+        };
+        console.log(
+          `[Approval Delegation] User ID ${userId} đang cấu hình ủy quyền vắng mặt. Task phê duyệt được chuyển tiếp sang User ID ${delegation.toUserId} (Delegation ID: ${delegation.id})`,
+        );
+      }
+
       await tx.task.create({
         data: {
           tenantId: tenantId,
           instanceId: instanceId,
           stepId: stepObj.id,
           assigneeType: 'USER',
-          assigneeId: userId,
-          assignmentStrategy: 'STATIC',
+          assigneeId: actualAssigneeId,
+          assignmentStrategy: delegation ? 'DELEGATED' : 'STATIC',
           status: 'PENDING',
           estimatedCompletionTime: estimatedCompletionTime,
-          assignmentData: {} as any,
+          assignmentData: assignmentData,
         } as any,
       });
       console.log(
-        `[Task Engine] Đã tự động sinh Task cho User ID ${userId} tại Trạm: ${stepObj.name} (SLA: ${slaValue} ${slaUnit}, Hạn chót: ${estimatedCompletionTime.toISOString()})`,
+        `[Task Engine] Đã tự động sinh Task cho User ID ${actualAssigneeId} tại Trạm: ${stepObj.name} (SLA: ${slaValue} ${slaUnit}, Hạn chót: ${estimatedCompletionTime.toISOString()})`,
       );
     }
   }

@@ -344,8 +344,14 @@ export class WorkflowsService {
       return newInstance;
     });
 
-    const firstStepConfig: any = firstStep.permissions || {};
-    const candidateUsers: number[] = firstStepConfig.candidateUsers || [];
+    const actualTasks = await this.prisma.task.findMany({
+      where: {
+        instanceId: instance.id,
+        stepId: firstStep.id,
+        status: 'PENDING',
+      } as any,
+    });
+    const candidateUsers: number[] = actualTasks.map((t) => t.assigneeId).filter(Boolean) as number[];
 
     const initiator = await this.prisma.user.findFirst({
       where: { id: userId } as any,
@@ -665,7 +671,18 @@ export class WorkflowsService {
         }
       }
 
-      const nextStepConfig: any = nextStepObj?.permissions || {};
+      let nextStepAssignees: number[] = [];
+      if (shouldTransition && nextStepId) {
+        const nextTasks = await tx.task.findMany({
+          where: {
+            instanceId,
+            stepId: nextStepId,
+            status: 'PENDING',
+          } as any,
+        });
+        nextStepAssignees = nextTasks.map((t) => t.assigneeId).filter(Boolean) as number[];
+      }
+
       return {
         instanceId,
         entityId: instance.record.entityId,
@@ -681,7 +698,7 @@ export class WorkflowsService {
           ? nextStepId
           : (instance as any).currentStepId,
         nextStepName: nextStepObj?.name || '',
-        nextStepCandidates: nextStepConfig.candidateUsers || [],
+        nextStepCandidates: nextStepAssignees,
         currentStepName: currentStepObj.name,
         shouldTransition,
       };
@@ -977,7 +994,18 @@ export class WorkflowsService {
         }
       }
 
-      const nextStepConfig: any = nextStepObj?.permissions || {};
+      let nextStepAssignees: number[] = [];
+      if (shouldTransition && nextStepId) {
+        const nextTasks = await tx.task.findMany({
+          where: {
+            instanceId,
+            stepId: nextStepId,
+            status: 'PENDING',
+          } as any,
+        });
+        nextStepAssignees = nextTasks.map((t) => t.assigneeId).filter(Boolean) as number[];
+      }
+
       return {
         instanceId,
         entityId: instance.record.entityId,
@@ -991,7 +1019,7 @@ export class WorkflowsService {
         isRejected: finalStatus === 'REJECTED',
         nextStepId,
         nextStepName: nextStepObj?.name || '',
-        nextStepCandidates: nextStepConfig.candidateUsers || [],
+        nextStepCandidates: nextStepAssignees,
         currentStepName: currentStepObj.name,
         shouldTransition,
       };

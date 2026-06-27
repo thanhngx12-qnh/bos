@@ -24,6 +24,7 @@ import {
 } from "@ant-design/icons";
 import { useMyProfile } from "@/hooks/useAuth";
 import SignatureManager from "./SignatureManager";
+import DelegationManager from "./DelegationManager";
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -161,6 +162,9 @@ export default function ProfileManager() {
 
       {/* CARD 2: SIGNATURE MANAGER PANEL */}
       <SignatureManager />
+
+      {/* CARD 3: DELEGATION MANAGER PANEL */}
+      <DelegationManager />
     </Space>
   );
 }
