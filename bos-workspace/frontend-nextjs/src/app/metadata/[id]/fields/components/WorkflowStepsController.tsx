@@ -18,6 +18,9 @@ import {
   InputNumber,
   Popconfirm,
   App,
+  Row,
+  Col,
+  Checkbox,
 } from "antd";
 import {
   PartitionOutlined,
@@ -179,6 +182,7 @@ export default function WorkflowStepsController({
     const approverType = stepConfig.approverType || "SINGLE";
     const assigneeExpression = stepConfig.assigneeExpression || "";
     const candidateUsers = stepConfig.candidateUsers || [];
+    const chooseApproverDynamically = stepConfig.chooseApproverDynamically || false;
 
     let assigneeType = "INITIATOR";
     let assigneeRoleId = undefined;
@@ -200,6 +204,8 @@ export default function WorkflowStepsController({
       assigneeUsers = candidateUsers;
     }
 
+    const sla = stepConfig.sla || { value: undefined, unit: "HOURS", overflowAction: "NONE" };
+
     form.setFieldsValue({
       name: step.name,
       stepType: step.stepType,
@@ -209,6 +215,10 @@ export default function WorkflowStepsController({
       assigneeRoleId,
       assigneeFieldCode,
       assigneeUsers,
+      slaValue: sla.value,
+      slaUnit: sla.unit || "HOURS",
+      slaOverflowAction: sla.overflowAction || "NONE",
+      chooseApproverDynamically,
     });
     setIsModalOpen(true);
   };
@@ -259,7 +269,9 @@ export default function WorkflowStepsController({
             ([key]) =>
               key !== "approverType" &&
               key !== "assigneeExpression" &&
-              key !== "candidateUsers"
+              key !== "candidateUsers" &&
+              key !== "sla" &&
+              key !== "chooseApproverDynamically"
           )
         )
       : {};
@@ -269,6 +281,14 @@ export default function WorkflowStepsController({
       approverType: values.approverType,
       assigneeExpression,
       candidateUsers,
+      chooseApproverDynamically: !!values.chooseApproverDynamically,
+      sla: values.slaValue !== undefined && values.slaValue !== null
+        ? {
+            value: values.slaValue,
+            unit: values.slaUnit || "HOURS",
+            overflowAction: values.slaOverflowAction || "NONE",
+          }
+        : undefined,
     };
 
     const payload = {
@@ -724,6 +744,61 @@ export default function WorkflowStepsController({
               }
               return null;
             }}
+          </Form.Item>
+
+          <Form.Item
+            name="chooseApproverDynamically"
+            valuePropName="checked"
+            style={{ marginBottom: "12px" }}
+          >
+            <Checkbox>Cho phép người gửi/người duyệt trước chọn cụ thể người duyệt tiếp theo</Checkbox>
+          </Form.Item>
+
+          <Divider style={{ margin: "12px 0" }} />
+          <Text strong style={{ fontSize: "13px", display: "block", marginBottom: "12px" }}>
+            Thời hạn xử lý (SLA Limit)
+          </Text>
+          <Row gutter={16}>
+            <Col span={14}>
+              <Form.Item
+                name="slaValue"
+                label="Thời gian tối đa"
+              >
+                <InputNumber
+                  min={1}
+                  placeholder="Không giới hạn thời gian"
+                  style={{ width: "100%" }}
+                />
+              </Form.Item>
+            </Col>
+            <Col span={10}>
+              <Form.Item
+                name="slaUnit"
+                label="Đơn vị"
+                initialValue="HOURS"
+              >
+                <Select
+                  options={[
+                    { value: "HOURS", label: "Giờ (Hours)" },
+                    { value: "DAYS", label: "Ngày làm việc (Days)" },
+                  ]}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Form.Item
+            name="slaOverflowAction"
+            label="Hành động khi trễ hạn"
+            initialValue="NONE"
+          >
+            <Select
+              options={[
+                { value: "NONE", label: "Không xử lý (Chỉ gửi cảnh báo)" },
+                { value: "AUTO_SKIP", label: "Tự động Phê duyệt (Skip)" },
+                { value: "AUTO_REJECT", label: "Tự động Từ chối (Reject)" },
+              ]}
+            />
           </Form.Item>
         </Form>
       </Modal>

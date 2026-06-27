@@ -51,3 +51,30 @@ export function useRegisterTenant() {
     },
   });
 }
+
+export interface UserProfile {
+  id: number;
+  email: string;
+  fullName: string;
+  departmentId: number | null;
+  roleId: number | null;
+  status: string;
+  userType: string;
+  createdAt: string;
+  updatedAt: string;
+  role?: { id: number; name: string; permissions: any } | null;
+  department?: { id: number; name: string } | null;
+  tenant?: { id: number; name: string; code: string } | null;
+}
+
+export function useMyProfile() {
+  return useQuery<UserProfile>({
+    queryKey: ['myProfile'],
+    queryFn: async () => {
+      const { data } = await api.get('/api/v1/auth/me');
+      return data;
+    },
+    enabled: typeof window !== 'undefined' ? !!localStorage.getItem('bos_token') : false,
+  });
+}
+

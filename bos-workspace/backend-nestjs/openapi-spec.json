@@ -549,6 +549,112 @@
         ]
       }
     },
+    "/api/v1/signatures": {
+      "get": {
+        "operationId": "UserSignaturesController_findAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lấy tất cả các mẫu chữ ký/con dấu của tôi",
+        "tags": [
+          "User Signatures (Mẫu chữ ký & Con dấu cá nhân)"
+        ]
+      },
+      "post": {
+        "operationId": "UserSignaturesController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSignatureDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Tạo mới một mẫu chữ ký/con dấu",
+        "tags": [
+          "User Signatures (Mẫu chữ ký & Con dấu cá nhân)"
+        ]
+      }
+    },
+    "/api/v1/signatures/{id}/default": {
+      "patch": {
+        "operationId": "UserSignaturesController_setDefault",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Thiết lập mẫu chữ ký mặc định",
+        "tags": [
+          "User Signatures (Mẫu chữ ký & Con dấu cá nhân)"
+        ]
+      }
+    },
+    "/api/v1/signatures/{id}": {
+      "delete": {
+        "operationId": "UserSignaturesController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Xóa một mẫu chữ ký",
+        "tags": [
+          "User Signatures (Mẫu chữ ký & Con dấu cá nhân)"
+        ]
+      }
+    },
     "/api/v1/auth/login": {
       "post": {
         "operationId": "AuthController_login",
@@ -680,6 +786,26 @@
           }
         ],
         "summary": "Đăng ký doanh nghiệp mới (Chỉ Super Admin)",
+        "tags": [
+          "Auth (Xác thực)"
+        ]
+      }
+    },
+    "/api/v1/auth/me": {
+      "get": {
+        "operationId": "AuthController_getMe",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lấy thông tin tài khoản hiện tại",
         "tags": [
           "Auth (Xác thực)"
         ]
@@ -861,6 +987,72 @@
           }
         ],
         "summary": "Xóa Entity",
+        "tags": [
+          "Metadata - Entities (Thực thể / Biểu mẫu)"
+        ]
+      }
+    },
+    "/api/v1/entities/{id}/versions": {
+      "get": {
+        "operationId": "EntitiesController_findVersions",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lấy lịch sử phiên bản của Entity",
+        "tags": [
+          "Metadata - Entities (Thực thể / Biểu mẫu)"
+        ]
+      }
+    },
+    "/api/v1/entities/{id}/versions/{versionId}/restore": {
+      "post": {
+        "operationId": "EntitiesController_restoreVersion",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "versionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Khôi phục Entity về một phiên bản cũ",
         "tags": [
           "Metadata - Entities (Thực thể / Biểu mẫu)"
         ]
@@ -1605,6 +1797,35 @@
         ]
       }
     },
+    "/api/v1/workflows/instances/{id}/otp-request": {
+      "post": {
+        "operationId": "WorkflowsController_requestOtp",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Yêu cầu gửi mã xác thực OTP qua email để ký duyệt",
+        "tags": [
+          "Workflow Engine (Cỗ máy Quy trình)"
+        ]
+      }
+    },
     "/api/v1/workflows/instances/{id}/logs": {
       "get": {
         "operationId": "WorkflowsController_getInstanceLogs",
@@ -1660,6 +1881,50 @@
         "summary": "Lấy lịch sử Audit Log của lượt chạy mới nhất theo recordId",
         "tags": [
           "Workflow Engine (Cỗ máy Quy trình)"
+        ]
+      }
+    },
+    "/api/v1/workflows/instances/record/{recordId}/progress": {
+      "get": {
+        "operationId": "WorkflowsController_getRecordInstanceProgress",
+        "parameters": [
+          {
+            "name": "recordId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lấy lộ trình và tiến độ phê duyệt của lượt chạy mới nhất",
+        "tags": [
+          "Workflow Engine (Cỗ máy Quy trình)"
+        ]
+      }
+    },
+    "/api/v1/mailer/test": {
+      "post": {
+        "operationId": "MailerController_testEmail",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Gửi email test đến địa chỉ thật",
+        "tags": [
+          "Mailer (Kiểm thử Gửi Email)"
         ]
       }
     },
@@ -1884,6 +2149,35 @@
         ]
       }
     },
+    "/api/v1/workflow-pipeline/steps/{id}/candidates": {
+      "get": {
+        "operationId": "WorkflowStepsController_getStepCandidates",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lấy danh sách nhân sự ứng viên của một bước",
+        "tags": [
+          "Workflow Pipeline (Vẽ luồng quy trình)"
+        ]
+      }
+    },
     "/api/v1/print-templates": {
       "post": {
         "operationId": "PrintTemplatesController_create",
@@ -1909,6 +2203,33 @@
           }
         ],
         "summary": "Tạo mới một mẫu in cho Biểu mẫu",
+        "tags": [
+          "Metadata - Print Templates (Mẫu in động)"
+        ]
+      },
+      "get": {
+        "operationId": "PrintTemplatesController_findAll",
+        "parameters": [
+          {
+            "name": "entityId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lấy danh sách tất cả mẫu in của Biểu mẫu",
         "tags": [
           "Metadata - Print Templates (Mẫu in động)"
         ]
@@ -2044,66 +2365,6 @@
         ]
       }
     },
-    "/api/v1/analytics/entities-summary": {
-      "get": {
-        "operationId": "AnalyticsController_getEntitiesSummary",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Thống kê lượng bản ghi (phiếu) theo từng biểu mẫu",
-        "tags": [
-          "Macro Analytics (Báo cáo Thống kê Vĩ mô)"
-        ]
-      }
-    },
-    "/api/v1/analytics/workflows-summary": {
-      "get": {
-        "operationId": "AnalyticsController_getWorkflowsSummary",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Thống kê trạng thái phê duyệt của các quy trình",
-        "tags": [
-          "Macro Analytics (Báo cáo Thống kê Vĩ mô)"
-        ]
-      }
-    },
-    "/api/v1/analytics/spending-by-department": {
-      "get": {
-        "operationId": "AnalyticsController_getSpendingByDepartment",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Báo cáo vĩ mô: Thống kê tổng ngân sách đề xuất theo từng Phòng ban (Bóc tách JSONB)",
-        "tags": [
-          "Macro Analytics (Báo cáo Thống kê Vĩ mô)"
-        ]
-      }
-    },
     "/api/v1/attachments/upload": {
       "post": {
         "operationId": "AttachmentsController_uploadFile",
@@ -2236,6 +2497,83 @@
         "summary": "Xóa tệp tin",
         "tags": [
           "Metadata - Attachments (Quản lý tệp tin S3/MinIO)"
+        ]
+      }
+    },
+    "/api/v1/analytics/entities-summary": {
+      "get": {
+        "operationId": "AnalyticsController_getEntitiesSummary",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Thống kê lượng bản ghi (phiếu) theo từng biểu mẫu",
+        "tags": [
+          "Macro Analytics (Báo cáo Thống kê Vĩ mô)"
+        ]
+      }
+    },
+    "/api/v1/analytics/workflows-summary": {
+      "get": {
+        "operationId": "AnalyticsController_getWorkflowsSummary",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Thống kê trạng thái phê duyệt của các quy trình",
+        "tags": [
+          "Macro Analytics (Báo cáo Thống kê Vĩ mô)"
+        ]
+      }
+    },
+    "/api/v1/analytics/spending-by-department": {
+      "get": {
+        "operationId": "AnalyticsController_getSpendingByDepartment",
+        "parameters": [
+          {
+            "name": "entityId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "amountField",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Báo cáo vĩ mô: Thống kê tổng ngân sách đề xuất theo từng Phòng ban (Bóc tách JSONB)",
+        "tags": [
+          "Macro Analytics (Báo cáo Thống kê Vĩ mô)"
         ]
       }
     },
@@ -2567,21 +2905,6 @@
         ]
       }
     },
-    "/api/v1/mailer/test": {
-      "post": {
-        "operationId": "MailerController_testEmail",
-        "parameters": [],
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "summary": "Gửi email test đến địa chỉ thật",
-        "tags": [
-          "Mailer (Kiểm thử Gửi Email)"
-        ]
-      }
-    },
     "/api/v1/tasks/my-tasks": {
       "get": {
         "operationId": "TasksController_findMyTasks",
@@ -2689,6 +3012,36 @@
         ]
       }
     },
+    "/api/v1/tasks/batch-complete": {
+      "post": {
+        "operationId": "TasksController_batchCompleteTasks",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchCompleteTasksDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Duyệt nhanh hàng loạt nhiệm vụ",
+        "tags": [
+          "Work Engine - Tasks (Nhiệm vụ & Giao việc)"
+        ]
+      }
+    },
     "/api/v1/tasks/{id}/delegate": {
       "post": {
         "operationId": "TasksController_delegateTask",
@@ -2762,6 +3115,205 @@
         "summary": "Lấy toàn bộ danh sách Task (Super Admin)",
         "tags": [
           "Work Engine - Tasks (Nhiệm vụ & Giao việc)"
+        ]
+      }
+    },
+    "/api/v1/business-calendar": {
+      "get": {
+        "operationId": "BusinessCalendarController_getCalendar",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lấy cấu hình lịch làm việc của Doanh nghiệp",
+        "tags": [
+          "Business Calendar (Lịch làm việc doanh nghiệp)"
+        ]
+      },
+      "patch": {
+        "operationId": "BusinessCalendarController_updateCalendar",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cập nhật cấu hình lịch làm việc",
+        "tags": [
+          "Business Calendar (Lịch làm việc doanh nghiệp)"
+        ]
+      }
+    },
+    "/api/v1/automation/events": {
+      "get": {
+        "operationId": "AutomationController_findEvents",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lấy danh sách các sự kiện kích hoạt khả dụng",
+        "tags": [
+          "Automation Rules (Quy tắc Tự động hóa)"
+        ]
+      }
+    },
+    "/api/v1/automation/rules": {
+      "post": {
+        "operationId": "AutomationController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRuleDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Tạo mới một quy tắc tự động hóa",
+        "tags": [
+          "Automation Rules (Quy tắc Tự động hóa)"
+        ]
+      },
+      "get": {
+        "operationId": "AutomationController_findAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lấy toàn bộ quy tắc tự động hóa",
+        "tags": [
+          "Automation Rules (Quy tắc Tự động hóa)"
+        ]
+      }
+    },
+    "/api/v1/automation/rules/{id}": {
+      "get": {
+        "operationId": "AutomationController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lấy chi tiết một quy tắc",
+        "tags": [
+          "Automation Rules (Quy tắc Tự động hóa)"
+        ]
+      },
+      "patch": {
+        "operationId": "AutomationController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateRuleDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cập nhật quy tắc tự động hóa",
+        "tags": [
+          "Automation Rules (Quy tắc Tự động hóa)"
+        ]
+      },
+      "delete": {
+        "operationId": "AutomationController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Xóa quy tắc tự động hóa",
+        "tags": [
+          "Automation Rules (Quy tắc Tự động hóa)"
         ]
       }
     }
@@ -2933,6 +3485,36 @@
             "description": "ID Doanh nghiệp (Chỉ Super Admin dùng)"
           }
         }
+      },
+      "CreateSignatureDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Tên định danh mẫu chữ ký/con dấu",
+            "example": "Chữ ký chính thức"
+          },
+          "type": {
+            "type": "string",
+            "description": "Kiểu mẫu chữ ký",
+            "enum": [
+              "DRAW",
+              "IMAGE",
+              "STAMP"
+            ],
+            "example": "DRAW"
+          },
+          "signatureUrl": {
+            "type": "string",
+            "description": "Dữ liệu Base64 hình ảnh chữ ký/con dấu",
+            "example": "data:image/png;base64,..."
+          }
+        },
+        "required": [
+          "name",
+          "type",
+          "signatureUrl"
+        ]
       },
       "LoginDto": {
         "type": "object",
@@ -3296,6 +3878,11 @@
             "type": "number",
             "description": "ID của Workflow Version muốn áp dụng",
             "example": 2
+          },
+          "nextAssigneeId": {
+            "type": "number",
+            "description": "ID của người duyệt tiếp theo được chỉ định động",
+            "example": 10
           }
         },
         "required": [
@@ -3320,6 +3907,50 @@
             "type": "string",
             "description": "Mã chữ ký điện tử hoặc chuỗi nét vẽ Base64 (Nếu nút yêu cầu ký duyệt)",
             "example": "SIGNED_BY_ADMIN_MD5_789abc"
+          },
+          "otpCode": {
+            "type": "string",
+            "description": "Mã xác thực OTP (Nếu nút yêu cầu ký duyệt)",
+            "example": "123456"
+          },
+          "stampData": {
+            "type": "string",
+            "description": "Dữ liệu ảnh con dấu Base64 đi kèm (Nếu có)",
+            "example": "data:image/png;base64,..."
+          },
+          "signatureLayout": {
+            "type": "string",
+            "description": "Bố cục hiển thị thông tin chữ ký: dọc hoặc ngang",
+            "enum": [
+              "vertical",
+              "horizontal"
+            ],
+            "example": "vertical"
+          },
+          "showSignerName": {
+            "type": "boolean",
+            "description": "Hiển thị họ tên người ký",
+            "example": true
+          },
+          "showSignerRole": {
+            "type": "boolean",
+            "description": "Hiển thị vai trò/chức danh người ký",
+            "example": true
+          },
+          "showSignerDept": {
+            "type": "boolean",
+            "description": "Hiển thị phòng ban người ký",
+            "example": true
+          },
+          "showSigningTime": {
+            "type": "boolean",
+            "description": "Hiển thị thời gian thực hiện ký",
+            "example": true
+          },
+          "nextAssigneeId": {
+            "type": "number",
+            "description": "ID của người duyệt tiếp theo được chọn động",
+            "example": 101
           }
         },
         "required": [
@@ -3527,6 +4158,22 @@
           }
         }
       },
+      "BatchCompleteTasksDto": {
+        "type": "object",
+        "properties": {
+          "taskIds": {
+            "description": "Danh sách ID nhiệm vụ cần phê duyệt",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "comment": {
+            "type": "string",
+            "description": "Ý kiến phê duyệt chung"
+          }
+        }
+      },
       "DelegateTaskDto": {
         "type": "object",
         "properties": {
@@ -3537,6 +4184,70 @@
           "reason": {
             "type": "string",
             "description": "Lý do ủy quyền"
+          }
+        }
+      },
+      "CreateRuleDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Tên quy tắc",
+            "example": "Tự động chạy quy trình tiếp theo"
+          },
+          "eventId": {
+            "type": "number",
+            "description": "ID của sự kiện kích hoạt",
+            "example": 1
+          },
+          "conditions": {
+            "type": "object",
+            "description": "Cấu hình điều kiện dạng JSON",
+            "example": {}
+          },
+          "actions": {
+            "type": "object",
+            "description": "Cấu hình danh sách hành động dạng JSON",
+            "example": []
+          },
+          "isActive": {
+            "type": "boolean",
+            "description": "Trạng thái hoạt động",
+            "example": true
+          }
+        },
+        "required": [
+          "name",
+          "eventId"
+        ]
+      },
+      "UpdateRuleDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Tên quy tắc",
+            "example": "Tự động chạy quy trình tiếp theo"
+          },
+          "eventId": {
+            "type": "number",
+            "description": "ID của sự kiện kích hoạt",
+            "example": 1
+          },
+          "conditions": {
+            "type": "object",
+            "description": "Cấu hình điều kiện dạng JSON",
+            "example": {}
+          },
+          "actions": {
+            "type": "object",
+            "description": "Cấu hình danh sách hành động dạng JSON",
+            "example": []
+          },
+          "isActive": {
+            "type": "boolean",
+            "description": "Trạng thái hoạt động",
+            "example": true
           }
         }
       }

@@ -102,4 +102,78 @@ export class EntitiesService {
     await this.redis.del(cacheKey);
     return deleted;
   }
+
+  async findVersions(tenantId: number, entityId: number) {
+    return this.prisma.entityVersion.findMany({
+      where: { entityId, tenantId } as any,
+      orderBy: { version: 'desc' } as any,
+    });
+  }
+
+  async restoreVersion(tenantId: number, entityId: number, versionId: number) {
+    return this.prisma.$transaction(async (tx) => {
+      // 1. Get target version
+      const version = await tx.entityVersion.findFirst({
+        where: { id: versionId, entityId, tenantId } as any,
+      });
+      if (!version) throw new NotFoundException('Không tìm thấy phiên bản yêu cầu.');
+
+      // 2. Get current fields of the entity
+      const currentFields = await tx.fieldRegistry.findMany({
+        where: {
+          config: {
+            path: ['entityId'],
+            equals: entityId,
+          },
+        } as any,
+      });
+
+      const currentFieldIds = currentFields.map((f: any) => f.id);
+
+      // 3. Delete current fields
+      if (currentFieldIds.length > 0) {
+        await tx.fieldRegistry.deleteMany({
+          where: { id: { in: currentFieldIds } } as any,
+        });
+      }
+
+      // 4. Restore fields from snapshot
+      const snapshotFields = (version.fieldsSnapshot || []) as any[];
+      for (const f of snapshotFields) {
+        await tx.fieldRegistry.create({
+          data: {
+            tenantId,
+            code: f.code,
+            name: f.name,
+            type: f.type,
+            config: f.config,
+          } as any,
+        });
+      }
+
+      // 5. Create a new EntityVersion snapshot for this restore action (increment version number)
+      const latestVersion = await tx.entityVersion.findFirst({
+        where: { entityId, tenantId } as any,
+        orderBy: { version: 'desc' } as any,
+      });
+      const nextVersion = latestVersion ? latestVersion.version + 1 : 1;
+
+      const newVersion = await tx.entityVersion.create({
+        data: {
+          tenantId,
+          entityId,
+          version: nextVersion,
+          status: 'PUBLISHED',
+          snapshotHash: `restore-from-v${version.version}-${Date.now()}`,
+          fieldsSnapshot: version.fieldsSnapshot,
+        } as any,
+      });
+
+      // Invalidate entity cache
+      const cacheKey = this.getCacheKey(entityId);
+      await this.redis.del(cacheKey);
+
+      return newVersion;
+    });
+  }
 }

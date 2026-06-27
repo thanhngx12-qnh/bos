@@ -1,6 +1,6 @@
 // File: src/modules/workflows/dto/create-instance.dto.ts
-import { ApiProperty } from '@nestjs/swagger';
-import { IsInt, IsNotEmpty } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsInt, IsNotEmpty, IsOptional } from 'class-validator';
 
 export class CreateInstanceDto {
   @ApiProperty({
@@ -18,4 +18,12 @@ export class CreateInstanceDto {
   @IsInt()
   @IsNotEmpty()
   versionId: number;
+
+  @ApiPropertyOptional({
+    description: 'ID của người duyệt tiếp theo được chỉ định động',
+    example: 10,
+  })
+  @IsInt()
+  @IsOptional()
+  nextAssigneeId?: number;
 }

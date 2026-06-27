@@ -41,11 +41,40 @@ export class RecordsService {
   }
 
   private generateRecordCode(pattern: string, count: number): string {
-    const regex = /\{SEQ:(\d+)\}/g;
-    return pattern.replace(regex, (match, length) => {
+    const now = new Date();
+    const yyyy = String(now.getFullYear());
+    const yy = yyyy.slice(-2);
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+
+    let code = pattern;
+
+    // Replace date placeholders
+    code = code.replace(/\{YYYY\}/gi, yyyy);
+    code = code.replace(/\{YY\}/gi, yy);
+    code = code.replace(/\{MM\}/gi, mm);
+    code = code.replace(/\{DD\}/gi, dd);
+
+    // Replace {SEQ:N} placeholder
+    code = code.replace(/\{SEQ:(\d+)\}/g, (match, length) => {
       const padLength = parseInt(length, 10);
       return String(count).padStart(padLength, '0');
     });
+
+    // Replace {NNNN...} sequence placeholder (case-insensitive for N)
+    code = code.replace(/\{(N+)\}/gi, (match, nGroup) => {
+      const padLength = nGroup.length;
+      return String(count).padStart(padLength, '0');
+    });
+
+    // Auto-append sequence if no sequence placeholder exists in the pattern
+    const hasExplicitSequence = /\{SEQ:\d+\}/i.test(pattern) || /\{N+\}/i.test(pattern);
+    if (!hasExplicitSequence) {
+      const separator = (code.endsWith('-') || code.endsWith('/') || code.endsWith('_')) ? '' : '-';
+      code = code + separator + String(count).padStart(4, '0');
+    }
+
+    return code;
   }
 
   private generateRecordTitle(
@@ -151,6 +180,7 @@ export class RecordsService {
   ) {
     let version = await tx.entityVersion.findFirst({
       where: { entityId, tenantId, status: 'PUBLISHED' } as any,
+      orderBy: { version: 'desc' } as any,
     });
 
     if (!version) {
@@ -177,7 +207,14 @@ export class RecordsService {
 
   async create(userId: number, dto: CreateRecordDto) {
     const store = tenantContext.getStore();
-    const tenantId = store?.tenantId || 0;
+    let tenantId = store?.tenantId;
+
+    if (!tenantId) {
+      const user = await this.prisma.user.findFirst({
+        where: { id: userId } as any,
+      });
+      tenantId = user?.tenantId || 0;
+    }
 
     const entity = await this.prisma.entity.findFirst({
       where: { id: dto.entityId } as any,
@@ -322,7 +359,10 @@ export class RecordsService {
       });
     }
 
-    const dataScope = policy ? policy.dataScope : 'OWNED';
+    let dataScope = policy ? policy.dataScope : 'OWNED';
+    if (currentUser.userType === 'SUPER_ADMIN') {
+      dataScope = 'ALL';
+    }
     if (dataScope === 'OWNED') {
       filterClauses.push(`r.created_by_id = ${'$' + paramIndex}`);
       queryParams.push(currentUser.userId);
@@ -464,10 +504,9 @@ export class RecordsService {
   }
 
   async update(userId: number, id: number, dto: UpdateRecordDto) {
-    const store = tenantContext.getStore();
-    const tenantId = store?.tenantId || 0;
-
     const currentRecord = await this.findOne(id);
+    const store = tenantContext.getStore();
+    const tenantId = store?.tenantId || currentRecord?.tenantId || 0;
 
     const entity = await this.prisma.entity.findFirst({
       where: { id: currentRecord.entityId } as any,
@@ -579,7 +618,7 @@ export class RecordsService {
     return this.prisma.$transaction(async (tx) => {
       const deletedRecord = await tx.record.delete({ where: { id } as any });
       const store = tenantContext.getStore();
-      const tenantId = store?.tenantId || 0;
+      const tenantId = store?.tenantId || currentRecord?.tenantId || 0;
 
       const event = this.createDomainEvent(
         'record.deleted',
@@ -645,6 +684,21 @@ export class RecordsService {
 
     const queryParams: any[] = [lookupEntityId, tenantId];
     let paramIndex = 3;
+
+    if (filterConfig.status) {
+      if (Array.isArray(filterConfig.status)) {
+        if (filterConfig.status.length > 0) {
+          const placeholders = filterConfig.status.map((_, i) => `$${paramIndex + i}`).join(', ');
+          sqlQuery += ` AND r.status IN (${placeholders})`;
+          queryParams.push(...filterConfig.status);
+          paramIndex += filterConfig.status.length;
+        }
+      } else if (typeof filterConfig.status === 'string' && filterConfig.status) {
+        sqlQuery += ` AND r.status = $${paramIndex}`;
+        queryParams.push(filterConfig.status);
+        paramIndex += 1;
+      }
+    }
 
     if (filterConfig.recordFilters) {
       for (const [key, val] of Object.entries(filterConfig.recordFilters)) {

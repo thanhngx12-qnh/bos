@@ -9,6 +9,7 @@ import {
   Delete,
   ParseIntPipe,
   UseGuards,
+  Request,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { WorkflowStepsService } from './workflow-steps.service';
@@ -74,5 +75,15 @@ export class WorkflowStepsController {
   @ApiOperation({ summary: 'Lấy toàn bộ sơ đồ các bước và rẽ nhánh' })
   getPipeline(@Param('versionId', ParseIntPipe) versionId: number) {
     return this.stepsService.getPipelineByVersion(versionId);
+  }
+
+  @Get('steps/:id/candidates')
+  @ApiOperation({ summary: 'Lấy danh sách nhân sự ứng viên của một bước' })
+  getStepCandidates(
+    @Request() req,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    const tenantId = req.user.tenantId || 0;
+    return this.stepsService.getStepCandidates(id, tenantId);
   }
 }

@@ -28,6 +28,43 @@ export class FieldsService {
     );
   }
 
+  private async createVersionSnapshot(tenantId: number, entityId: number) {
+    const fields = await this.prisma.fieldRegistry.findMany({
+      where: {
+        config: {
+          path: ['entityId'],
+          equals: entityId,
+        },
+      } as any,
+    });
+
+    const fieldsSnapshot = fields.map((f: any) => ({
+      id: f.id,
+      code: f.code,
+      name: f.name,
+      type: f.type,
+      config: f.config,
+    }));
+
+    const latestVersion = await this.prisma.entityVersion.findFirst({
+      where: { entityId, tenantId } as any,
+      orderBy: { version: 'desc' } as any,
+    });
+
+    const nextVersion = latestVersion ? latestVersion.version + 1 : 1;
+
+    await this.prisma.entityVersion.create({
+      data: {
+        tenantId,
+        entityId,
+        version: nextVersion,
+        status: 'PUBLISHED',
+        snapshotHash: `hash-${nextVersion}-${Date.now()}`,
+        fieldsSnapshot: fieldsSnapshot,
+      } as any,
+    });
+  }
+
   async create(dto: CreateFieldDto) {
     const entity = await this.prisma.entity.findFirst({
       where: { id: dto.entityId } as any,
@@ -62,6 +99,10 @@ export class FieldsService {
       } as any,
     });
 
+    const store = tenantContext.getStore();
+    const tenantId = store?.tenantId || 0;
+
+    await this.createVersionSnapshot(tenantId, dto.entityId);
     await this.invalidateEntityCache(dto.entityId);
     return newField;
   }
@@ -110,7 +151,12 @@ export class FieldsService {
       } as any,
     });
 
-    await this.invalidateEntityCache((updatedField.config as any)?.entityId);
+    const store = tenantContext.getStore();
+    const tenantId = store?.tenantId || 0;
+    const entityId = (updatedField.config as any)?.entityId;
+
+    await this.createVersionSnapshot(tenantId, entityId);
+    await this.invalidateEntityCache(entityId);
     return updatedField;
   }
 
@@ -133,7 +179,11 @@ export class FieldsService {
       where: { id } as any,
     });
 
+    const store = tenantContext.getStore();
+    const tenantId = store?.tenantId || 0;
+
     if (entityId) {
+      await this.createVersionSnapshot(tenantId, entityId);
       await this.invalidateEntityCache(entityId);
     }
     return deletedField;

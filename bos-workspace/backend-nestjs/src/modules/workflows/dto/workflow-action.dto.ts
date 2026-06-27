@@ -27,4 +27,66 @@ export class WorkflowActionDto {
   @IsString()
   @IsOptional()
   signatureData?: string;
+
+  @ApiPropertyOptional({
+    description: 'Mã xác thực OTP (Nếu nút yêu cầu ký duyệt)',
+    example: '123456',
+  })
+  @IsString()
+  @IsOptional()
+  otpCode?: string;
+
+  @ApiPropertyOptional({
+    description: 'Dữ liệu ảnh con dấu Base64 đi kèm (Nếu có)',
+    example: 'data:image/png;base64,...',
+  })
+  @IsString()
+  @IsOptional()
+  stampData?: string;
+
+  @ApiPropertyOptional({
+    description: 'Bố cục hiển thị thông tin chữ ký: dọc hoặc ngang',
+    enum: ['vertical', 'horizontal'],
+    example: 'vertical',
+  })
+  @IsString()
+  @IsOptional()
+  signatureLayout?: string;
+
+  @ApiPropertyOptional({
+    description: 'Hiển thị họ tên người ký',
+    example: true,
+  })
+  @IsOptional()
+  showSignerName?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Hiển thị vai trò/chức danh người ký',
+    example: true,
+  })
+  @IsOptional()
+  showSignerRole?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Hiển thị phòng ban người ký',
+    example: true,
+  })
+  @IsOptional()
+  showSignerDept?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Hiển thị thời gian thực hiện ký',
+    example: true,
+  })
+  @IsOptional()
+  showSigningTime?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'ID của người duyệt tiếp theo được chọn động',
+    example: 101,
+  })
+  @IsInt()
+  @IsOptional()
+  nextAssigneeId?: number;
 }
+

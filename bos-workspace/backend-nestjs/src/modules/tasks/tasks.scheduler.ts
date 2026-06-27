@@ -4,6 +4,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { tenantContext } from 'src/prisma/tenant-context'; // <-- IMPORT CONTEXT
+import { WorkflowsService } from '../workflows/workflows.service';
 
 @Injectable()
 export class TasksScheduler {
@@ -13,6 +14,7 @@ export class TasksScheduler {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
+    private readonly workflowsService: WorkflowsService,
   ) {}
 
   @Cron(CronExpression.EVERY_MINUTE)
@@ -77,6 +79,99 @@ export class TasksScheduler {
                   },
                 },
               );
+            }
+
+            // Tự động chuyển trạm (Auto-Escalation)
+            if (task.instanceId && task.stepId) {
+              try {
+                const step = await this.prisma.workflowStep.findUnique({
+                  where: { id: task.stepId },
+                  include: {
+                    transitionsOut: {
+                      include: {
+                        toStep: true,
+                      },
+                    },
+                  },
+                });
+
+                if (step) {
+                  const permissions = (step.permissions || {}) as any;
+                  const sla = permissions.sla || {};
+                  const overflowAction = sla.overflowAction || 'NONE';
+
+                  if (overflowAction === 'AUTO_SKIP' || overflowAction === 'AUTO_REJECT') {
+                    const stripAccents = (str: string): string => {
+                      return str
+                        .normalize('NFD')
+                        .replace(/[\u0300-\u036f]/g, '')
+                        .replace(/đ/g, 'd')
+                        .replace(/Đ/g, 'd')
+                        .toLowerCase();
+                    };
+
+                    const transitions = step.transitionsOut || [];
+                    let targetTransition: any = null;
+
+                    if (overflowAction === 'AUTO_SKIP') {
+                      targetTransition = transitions.find((t: any) => {
+                        const logic = (t.conditionLogic || {}) as any;
+                        const actionLabel = stripAccents(logic.actionLabel || '');
+                        const toStepName = stripAccents(t.toStep?.name || '');
+                        const isReject =
+                          actionLabel.includes('tu choi') ||
+                          actionLabel.includes('reject') ||
+                          actionLabel.includes('khong duyet') ||
+                          actionLabel.includes('khong phe duyet') ||
+                          toStepName.includes('tu choi') ||
+                          toStepName.includes('reject') ||
+                          toStepName.includes('khong duyet') ||
+                          toStepName.includes('khong phe duyet');
+                        return !isReject;
+                      });
+                    } else if (overflowAction === 'AUTO_REJECT') {
+                      targetTransition = transitions.find((t: any) => {
+                        const logic = (t.conditionLogic || {}) as any;
+                        const actionLabel = stripAccents(logic.actionLabel || '');
+                        const toStepName = stripAccents(t.toStep?.name || '');
+                        const isReject =
+                          actionLabel.includes('tu choi') ||
+                          actionLabel.includes('reject') ||
+                          actionLabel.includes('khong duyet') ||
+                          actionLabel.includes('khong phe duyet') ||
+                          toStepName.includes('tu choi') ||
+                          toStepName.includes('reject') ||
+                          toStepName.includes('khong duyet') ||
+                          toStepName.includes('khong phe duyet');
+                        return isReject;
+                      });
+                    }
+
+                    if (targetTransition) {
+                      const transLogic = (targetTransition.conditionLogic || {}) as any;
+                      const actionLabel = transLogic.actionLabel || (overflowAction === 'AUTO_SKIP' ? 'Tự động duyệt qua SLA' : 'Tự động từ chối qua SLA');
+                      const comment = `Hệ thống tự động thực hiện chuyển trạm [${overflowAction}] do trễ hạn SLA.`;
+                      await this.workflowsService.handleSystemAutoTransition(
+                        task.instanceId,
+                        targetTransition.id,
+                        actionLabel,
+                        comment,
+                      );
+                      this.logger.log(
+                        `[SLA Auto-Escalation] Đã tự động chuyển trạm cho Task #${task.id} (Instance #${task.instanceId}) -> Trạm kế tiếp: ${targetTransition.toStep?.name}`,
+                      );
+                    } else {
+                      this.logger.warn(
+                        `[SLA Auto-Escalation] Không tìm thấy Đường nối (Transition) phù hợp với hành động ${overflowAction} cho Task #${task.id}`,
+                      );
+                    }
+                  }
+                }
+              } catch (err) {
+                this.logger.error(
+                  `[SLA Auto-Escalation] Lỗi khi chuyển trạm tự động cho Task #${task.id}: ${err.message}`,
+                );
+              }
             }
           }
         });

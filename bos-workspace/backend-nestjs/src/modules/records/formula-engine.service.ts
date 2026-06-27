@@ -61,7 +61,7 @@ export class FormulaEngineService {
     for (const field of formulaFields) {
       const config: any = field.config || {};
       const options: any = config.options || {};
-      let expression = options.formula;
+      let expression = options.formula || config.formula;
 
       if (expression) {
         try {

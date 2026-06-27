@@ -53,8 +53,10 @@ import {
   TeamOutlined,
   FileTextOutlined,
   BranchesOutlined,
+  CalendarOutlined,
 } from "@ant-design/icons";
 import { useRouter } from "next/navigation";
+import BusinessCalendarManager from "./components/BusinessCalendarManager";
 import { useDepartmentTree, DepartmentNode } from "@/hooks/useDepartments";
 import {
   useRoles,
@@ -127,6 +129,16 @@ export default function SystemSettingsPage() {
       setPermissionsLoaded(true);
     }
   }, [router]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get("tab");
+      if (tabParam) {
+        setActiveTab(tabParam);
+      }
+    }
+  }, []);
 
   const tenantQuery = useTenantDetail(tenantId);
   const activeTenantName = tenantId === null
@@ -202,6 +214,8 @@ export default function SystemSettingsPage() {
     onClick: (info: any) => {
       if (info.key === "logout") {
         handleLogout();
+      } else if (info.key === "profile") {
+        router.push("/profile");
       }
     },
   };
@@ -928,6 +942,19 @@ export default function SystemSettingsPage() {
                             )}
                           </Card>
                         ),
+                      }
+                    ]
+                  : []),
+                ...(tenantId !== null
+                  ? [
+                      {
+                        key: "business_calendar",
+                        label: (
+                          <span>
+                            <CalendarOutlined /> Lịch làm việc & SLA
+                          </span>
+                        ),
+                        children: <BusinessCalendarManager />,
                       },
                     ]
                   : []),
@@ -937,7 +964,7 @@ export default function SystemSettingsPage() {
         </Content>
       </Layout>
 
-      {/* --- CÁC MODAL HÀNH ĐỘNG THÀNH VIÊN --- */}
+
       <Modal
         title="Tạo Thành viên mới"
         open={isUserModalOpen}

@@ -178,6 +178,8 @@ export default function EntitiesListPage() {
     onClick: (info: any) => {
       if (info.key === "logout") {
         handleLogout();
+      } else if (info.key === "profile") {
+        router.push("/profile");
       }
     },
   };
@@ -206,6 +208,14 @@ export default function EntitiesListPage() {
     const currentVal = formInstance.getFieldValue("titlePattern") || "";
     formInstance.setFieldsValue({
       titlePattern: currentVal + pattern,
+    });
+  };
+
+  const handleInsertCodePattern = (formInstance: any, token?: string) => {
+    if (!token) return;
+    const currentVal = formInstance.getFieldValue("autoCodePattern") || "";
+    formInstance.setFieldsValue({
+      autoCodePattern: currentVal + token,
     });
   };
 
@@ -528,10 +538,23 @@ export default function EntitiesListPage() {
           </Form.Item>
           <Form.Item
             name="autoCodePattern"
-            label="Mẫu tự sinh mã nghiệp vụ (autoCodePattern)"
-            extra="Cú pháp hỗ trợ dạng SEQ (ví dụ: QTMS-{SEQ:4})"
+            label="Tiền tố tự sinh mã hồ sơ (autoCodePattern)"
+            extra="Ví dụ: DXMS- hoặc PAY-{YYYY}-. Số thứ tự 4 số (ví dụ: -0001) sẽ tự động được thêm ở cuối."
           >
-            <Input placeholder="QTMS-{SEQ:4}" />
+            <Input placeholder="Ví dụ: DXMS-" />
+          </Form.Item>
+          <Form.Item label="Chèn nhanh biến ngày tháng vào tiền tố mã">
+            <Select
+              placeholder="Chọn định dạng ngày tháng..."
+              value={undefined}
+              onChange={(val) => handleInsertCodePattern(entityForm, val)}
+              options={[
+                { value: "{YYYY}", label: "Năm 4 số ({YYYY})" },
+                { value: "{YY}", label: "Năm 2 số ({YY})" },
+                { value: "{MM}", label: "Tháng 2 số ({MM})" },
+                { value: "{DD}", label: "Ngày 2 số ({DD})" },
+              ]}
+            />
           </Form.Item>
           <Form.Item
             name="titlePattern"
@@ -569,9 +592,23 @@ export default function EntitiesListPage() {
           </Form.Item>
           <Form.Item
             name="autoCodePattern"
-            label="Mẫu tự sinh mã nghiệp vụ (autoCodePattern)"
+            label="Tiền tố tự sinh mã hồ sơ (autoCodePattern)"
+            extra="Ví dụ: DXMS- hoặc PAY-{YYYY}-. Số thứ tự 4 số (ví dụ: -0001) sẽ tự động được thêm ở cuối."
           >
-            <Input />
+            <Input placeholder="Ví dụ: DXMS-" />
+          </Form.Item>
+          <Form.Item label="Chèn nhanh biến ngày tháng vào tiền tố mã">
+            <Select
+              placeholder="Chọn định dạng ngày tháng..."
+              value={undefined}
+              onChange={(val) => handleInsertCodePattern(entityEditForm, val)}
+              options={[
+                { value: "{YYYY}", label: "Năm 4 số ({YYYY})" },
+                { value: "{YY}", label: "Năm 2 số ({YY})" },
+                { value: "{MM}", label: "Tháng 2 số ({MM})" },
+                { value: "{DD}", label: "Ngày 2 số ({DD})" },
+              ]}
+            />
           </Form.Item>
           <Form.Item
             name="titlePattern"

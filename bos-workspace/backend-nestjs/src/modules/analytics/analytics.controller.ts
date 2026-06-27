@@ -1,6 +1,5 @@
-// File: src/modules/analytics/analytics.controller.ts
-import { Controller, Get, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { Controller, Get, UseGuards, Query } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { AnalyticsService } from './analytics.service';
 import { JwtAuthGuard } from '../../core/guards/jwt-auth.guard';
 
@@ -30,7 +29,14 @@ export class AnalyticsController {
     summary:
       'Báo cáo vĩ mô: Thống kê tổng ngân sách đề xuất theo từng Phòng ban (Bóc tách JSONB)',
   })
-  getSpendingByDepartment() {
-    return this.analyticsService.getSpendingByDepartment();
+  @ApiQuery({ name: 'entityId', required: false, type: Number })
+  @ApiQuery({ name: 'amountField', required: false, type: String })
+  getSpendingByDepartment(
+    @Query('entityId') entityId?: string,
+    @Query('amountField') amountField?: string,
+  ) {
+    const eid = entityId ? Number(entityId) : 1;
+    const field = amountField || 'total_amount';
+    return this.analyticsService.getSpendingByDepartment(eid, field);
   }
 }

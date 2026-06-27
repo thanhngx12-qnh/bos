@@ -1,11 +1,12 @@
-// File: src/modules/users/users.module.ts
 import { Module } from '@nestjs/common';
 import { UsersController } from './users.controller';
 import { UsersService } from './users.service';
+import { UserSignaturesController } from './user-signatures.controller';
+import { UserSignaturesService } from './user-signatures.service';
 
 @Module({
-  controllers: [UsersController],
-  providers: [UsersService],
-  exports: [UsersService], // Export để Module Auth dùng hàm findByEmailForAuth
+  controllers: [UsersController, UserSignaturesController],
+  providers: [UsersService, UserSignaturesService],
+  exports: [UsersService, UserSignaturesService],
 })
 export class UsersModule {}

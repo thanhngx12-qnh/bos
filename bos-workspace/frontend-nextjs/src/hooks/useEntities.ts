@@ -77,3 +77,50 @@ export function useDeleteEntity() {
     },
   });
 }
+
+export interface EntityVersion {
+  id: number;
+  tenantId: number;
+  entityId: number;
+  version: number;
+  status: string;
+  snapshotHash: string;
+  fieldsSnapshot: any;
+  createdAt: string;
+}
+
+export function useEntityVersions(entityId: number | null) {
+  return useQuery<EntityVersion[]>({
+    queryKey: ["entity-versions", entityId],
+    queryFn: async () => {
+      if (!entityId) return [];
+      const { data } = await api.get(`/api/v1/entities/${entityId}/versions`);
+      return data || [];
+    },
+    enabled: !!entityId,
+  });
+}
+
+export function useRestoreEntityVersion() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      entityId,
+      versionId,
+    }: {
+      entityId: number;
+      versionId: number;
+    }) => {
+      const { data } = await api.post(
+        `/api/v1/entities/${entityId}/versions/${versionId}/restore`
+      );
+      return data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["entities"] });
+      queryClient.invalidateQueries({ queryKey: ["entity-versions", variables.entityId] });
+      queryClient.invalidateQueries({ queryKey: ["fields", variables.entityId] });
+    },
+  });
+}
+

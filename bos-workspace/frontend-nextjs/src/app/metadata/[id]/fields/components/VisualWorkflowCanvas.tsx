@@ -17,6 +17,8 @@ import {
   Divider,
   App,
   Tooltip,
+  Row,
+  Col,
 } from "antd";
 import {
   ZoomInOutlined,
@@ -129,6 +131,7 @@ export default function VisualWorkflowCanvas({
     const approverType = stepConfig.approverType || "SINGLE";
     const assigneeExpression = stepConfig.assigneeExpression || "";
     const candidateUsers = stepConfig.candidateUsers || [];
+    const chooseApproverDynamically = stepConfig.chooseApproverDynamically || false;
 
     let assigneeType = "INITIATOR";
     let assigneeRoleId = undefined;
@@ -150,6 +153,8 @@ export default function VisualWorkflowCanvas({
       assigneeUsers = candidateUsers;
     }
 
+    const sla = stepConfig.sla || { value: undefined, unit: "HOURS", overflowAction: "NONE" };
+
     stepForm.setFieldsValue({
       name: step.name,
       stepType: step.stepType,
@@ -159,6 +164,10 @@ export default function VisualWorkflowCanvas({
       assigneeRoleId,
       assigneeFieldCode,
       assigneeUsers,
+      slaValue: sla.value,
+      slaUnit: sla.unit || "HOURS",
+      slaOverflowAction: sla.overflowAction || "NONE",
+      chooseApproverDynamically,
     });
     setIsStepModalOpen(true);
   };
@@ -188,7 +197,9 @@ export default function VisualWorkflowCanvas({
               key !== "approverType" &&
               key !== "assigneeExpression" &&
               key !== "candidateUsers" &&
-              key !== "position" // preserve coordinates
+              key !== "position" && // preserve coordinates
+              key !== "sla" &&
+              key !== "chooseApproverDynamically"
           )
         )
       : {};
@@ -198,7 +209,15 @@ export default function VisualWorkflowCanvas({
       approverType: values.approverType,
       assigneeExpression,
       candidateUsers,
+      chooseApproverDynamically: !!values.chooseApproverDynamically,
       position: editingStep?.permissions?.position || undefined,
+      sla: values.slaValue !== undefined && values.slaValue !== null
+        ? {
+            value: values.slaValue,
+            unit: values.slaUnit || "HOURS",
+            overflowAction: values.slaOverflowAction || "NONE",
+          }
+        : undefined,
     };
 
     const payload = {
@@ -553,7 +572,9 @@ export default function VisualWorkflowCanvas({
     transForm.setFieldsValue({
       autoSkip: transition.autoSkip || false,
       operator: logic.operator || "AND",
-      rules: hasRules ? logic.rules : logic.field ? [logic] : [],
+      rules: hasRules ? logic.rules : (logic.field ? [logic] : []),
+      actionLabel: logic.actionLabel || "",
+      requiresSignature: logic.requiresSignature || false,
     });
 
     setIsTransitionModalOpen(true);
@@ -572,6 +593,8 @@ export default function VisualWorkflowCanvas({
         field: rules[0].field,
         operator: rules[0].operator,
         value: rules[0].value,
+        actionLabel: values.actionLabel || "",
+        requiresSignature: !!values.requiresSignature,
       };
     } else if (rules.length > 1) {
       // Multiple nested logic rules
@@ -582,6 +605,14 @@ export default function VisualWorkflowCanvas({
           operator: r.operator,
           value: r.value,
         })),
+        actionLabel: values.actionLabel || "",
+        requiresSignature: !!values.requiresSignature,
+      };
+    } else {
+      // No condition rules, just action label and signature config
+      conditionLogic = {
+        actionLabel: values.actionLabel || "",
+        requiresSignature: !!values.requiresSignature,
       };
     }
 
@@ -991,6 +1022,24 @@ export default function VisualWorkflowCanvas({
               </Checkbox>
             </Form.Item>
 
+            <Form.Item
+              name="actionLabel"
+              label="Nhãn của nút bấm (Tên hành động)"
+              extra="Tên nút bấm hiển thị cho người duyệt (ví dụ: 'Phê duyệt', 'Đồng ý', 'Chuyển kế toán'). Để trống mặc định là 'Phê duyệt'."
+            >
+              <Input placeholder="Ví dụ: Đồng ý, Xác nhận..." />
+            </Form.Item>
+
+            <Form.Item
+              name="requiresSignature"
+              valuePropName="checked"
+              style={{ marginBottom: "16px" }}
+            >
+              <Checkbox>
+                Yêu cầu Chữ ký số / Chữ ký điện tử (OTP & Vẽ chữ ký) khi bấm nút này
+              </Checkbox>
+            </Form.Item>
+
             <Divider style={{ margin: "12px 0" }}>Điều kiện kích hoạt nhánh</Divider>
 
             <Paragraph type="secondary" style={{ fontSize: "12px" }}>
@@ -1263,6 +1312,61 @@ export default function VisualWorkflowCanvas({
               }
               return null;
             }}
+          </Form.Item>
+
+          <Form.Item
+            name="chooseApproverDynamically"
+            valuePropName="checked"
+            style={{ marginBottom: "12px" }}
+          >
+            <Checkbox>Cho phép người gửi/người duyệt trước chọn cụ thể người duyệt tiếp theo</Checkbox>
+          </Form.Item>
+
+          <Divider style={{ margin: "12px 0" }} />
+          <Text strong style={{ fontSize: "13px", display: "block", marginBottom: "12px" }}>
+            Thời hạn xử lý (SLA Limit)
+          </Text>
+          <Row gutter={16}>
+            <Col span={14}>
+              <Form.Item
+                name="slaValue"
+                label="Thời gian tối đa"
+              >
+                <InputNumber
+                  min={1}
+                  placeholder="Không giới hạn thời gian"
+                  style={{ width: "100%" }}
+                />
+              </Form.Item>
+            </Col>
+            <Col span={10}>
+              <Form.Item
+                name="slaUnit"
+                label="Đơn vị"
+                initialValue="HOURS"
+              >
+                <Select
+                  options={[
+                    { value: "HOURS", label: "Giờ (Hours)" },
+                    { value: "DAYS", label: "Ngày làm việc (Days)" },
+                  ]}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Form.Item
+            name="slaOverflowAction"
+            label="Hành động khi trễ hạn"
+            initialValue="NONE"
+          >
+            <Select
+              options={[
+                { value: "NONE", label: "Không xử lý (Chỉ gửi cảnh báo)" },
+                { value: "AUTO_SKIP", label: "Tự động Phê duyệt (Skip)" },
+                { value: "AUTO_REJECT", label: "Tự động Từ chối (Reject)" },
+              ]}
+            />
           </Form.Item>
         </Form>
       </Modal>

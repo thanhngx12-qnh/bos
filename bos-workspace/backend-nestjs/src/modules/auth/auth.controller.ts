@@ -64,4 +64,12 @@ export class AuthController {
   registerTenant(@Body() dto: RegisterTenantDto) {
     return this.authService.registerTenant(dto);
   }
+
+  @Get('me')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Lấy thông tin tài khoản hiện tại' })
+  getMe(@Request() req) {
+    return this.authService.getMe(req.user.userId);
+  }
 }

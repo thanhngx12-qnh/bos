@@ -10,5 +10,6 @@ import { OutboxModule } from '../outbox/outbox.module';
   imports: [OutboxModule],
   controllers: [RecordsController],
   providers: [RecordsService, DynamicValidationService, FormulaEngineService], // Thêm vào providers
+  exports: [RecordsService],
 })
 export class RecordsModule {}

@@ -19,3 +19,14 @@ export class DelegateTaskDto {
   @IsOptional()
   reason?: string;
 }
+
+export class BatchCompleteTasksDto {
+  @ApiPropertyOptional({ description: 'Danh sách ID nhiệm vụ cần phê duyệt' })
+  @IsInt({ each: true })
+  taskIds: number[];
+
+  @ApiPropertyOptional({ description: 'Ý kiến phê duyệt chung' })
+  @IsString()
+  @IsOptional()
+  comment?: string;
+}

@@ -9,6 +9,7 @@ import {
   Param,
   ParseIntPipe,
   UseGuards,
+  Query,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { PrintTemplatesService } from './print-templates.service';
@@ -27,6 +28,13 @@ export class PrintTemplatesController {
   @ApiOperation({ summary: 'Tạo mới một mẫu in cho Biểu mẫu' })
   create(@Body() dto: CreateTemplateDto) {
     return this.printTemplatesService.create(dto);
+  }
+
+  @Get()
+  @ApiOperation({ summary: 'Lấy danh sách tất cả mẫu in của Biểu mẫu' })
+  findAll(@Query('entityId') entityId?: string) {
+    const parsedEntityId = entityId ? Number(entityId) : undefined;
+    return this.printTemplatesService.findAll(parsedEntityId);
   }
 
   // --- HÀM BỔ SUNG ĐỂ SỬA LỖI 404 ---

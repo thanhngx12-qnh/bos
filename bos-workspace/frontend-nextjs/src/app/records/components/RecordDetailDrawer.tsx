@@ -18,6 +18,11 @@ import {
   Image,
   message,
   Tooltip,
+  Dropdown,
+  Modal,
+  Steps,
+  Tabs,
+  Avatar,
 } from "antd";
 import { api } from "@/lib/axios";
 import {
@@ -30,13 +35,16 @@ import {
   ExportOutlined,
   ExpandAltOutlined,
   ShrinkOutlined,
+  PrinterOutlined,
 } from "@ant-design/icons";
-import { RecordData } from "@/hooks/useRecords";
+import { RecordData, useRecordRevisions } from "@/hooks/useRecords";
 import { useFields, Field } from "@/hooks/useFields";
 import { useRecordWorkflowLogs } from "@/hooks/useTasks";
 import { useDepartmentTree } from "@/hooks/useDepartments";
 import { useUsers } from "@/hooks/useUsers";
 import { useRoles } from "@/hooks/useRoles";
+import { usePrintTemplates } from "@/hooks/usePrintTemplates";
+import { useRecordWorkflowProgress } from "@/hooks/useWorkflows";
 
 const { Text, Title } = Typography;
 
@@ -147,7 +155,7 @@ function calculateFormFormulas(
   const formulaFields = fields.filter((f) => f.type === "FORMULA");
   for (let pass = 0; pass < 3; pass++) {
     formulaFields.forEach((field) => {
-      const formula = field.config?.options?.formula;
+      const formula = field.config?.options?.formula || field.config?.formula;
       if (formula) {
         const preprocessed = preprocessRollups(formula, result);
         const calculated = evaluateFormulaString(preprocessed, result);
@@ -689,6 +697,10 @@ export default function RecordDetailDrawer({
   );
   const { data: auditLogs = [], isLoading: isLogsLoading } =
     useRecordWorkflowLogs(record?.id || null);
+  const { data: progressData, isLoading: isProgressLoading } =
+    useRecordWorkflowProgress(record?.id || null);
+  const { data: revisions = [], isLoading: isRevisionsLoading } =
+    useRecordRevisions(record?.id || null);
   const status = record
     ? STATUS_MAP[record.status] || { label: record.status, color: "default" }
     : null;
@@ -723,6 +735,120 @@ export default function RecordDetailDrawer({
     return r ? r.name : `Vai trò #${id}`;
   };
 
+  const renderRevisionDiff = (revision: any) => {
+    const patches = revision.patchData || {};
+    const changedKeys = Object.keys(patches);
+
+    if (changedKeys.length === 0) {
+      return (
+        <Text type="secondary" italic>
+          Không có thay đổi dữ liệu nào.
+        </Text>
+      );
+    }
+
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+        {changedKeys.map((key) => {
+          const field = fields.find((f) => f.code === key);
+          const label = field ? field.name : key;
+          const { old: oldVal, new: newVal } = patches[key];
+
+          return (
+            <div
+              key={key}
+              style={{
+                borderBottom: "1px solid #f0f0f0",
+                paddingBottom: "8px",
+              }}
+            >
+              <div
+                style={{
+                  fontWeight: 600,
+                  fontSize: "13px",
+                  color: "#595959",
+                  marginBottom: "4px",
+                }}
+              >
+                {label}
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: "8px",
+                  alignItems: "center",
+                }}
+              >
+                <div
+                  style={{
+                    background: "#fff1f0",
+                    border: "1px solid #ffa39e",
+                    padding: "4px 8px",
+                    borderRadius: "4px",
+                    textDecoration: "line-through",
+                    color: "#cf1322",
+                    fontSize: "12px",
+                  }}
+                >
+                  {oldVal === undefined || oldVal === null || oldVal === "" ? (
+                    <Text
+                      type="secondary"
+                      italic
+                      style={{ textDecoration: "none", color: "#bfbfbf" }}
+                    >
+                      (trống)
+                    </Text>
+                  ) : field ? (
+                    renderFieldValue(
+                      field,
+                      oldVal,
+                      findDeptName,
+                      findUserName,
+                      findRoleName,
+                      record?.id || 0,
+                    )
+                  ) : (
+                    String(oldVal)
+                  )}
+                </div>
+                <span style={{ color: "#bfbfbf" }}>➔</span>
+                <div
+                  style={{
+                    background: "#f6ffed",
+                    border: "1px solid #b7eb8f",
+                    padding: "4px 8px",
+                    borderRadius: "4px",
+                    fontWeight: "bold",
+                    color: "#389e0d",
+                    fontSize: "12px",
+                  }}
+                >
+                  {newVal === undefined || newVal === null || newVal === "" ? (
+                    <Text type="secondary" italic style={{ color: "#bfbfbf" }}>
+                      (trống)
+                    </Text>
+                  ) : field ? (
+                    renderFieldValue(
+                      field,
+                      newVal,
+                      findDeptName,
+                      findUserName,
+                      findRoleName,
+                      record?.id || 0,
+                    )
+                  ) : (
+                    String(newVal)
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   const sortedFields = [...fields].sort(
     (a, b) => (a.config?.orderIndex || 0) - (b.config?.orderIndex || 0),
   );
@@ -731,6 +857,53 @@ export default function RecordDetailDrawer({
     if (!record?.data) return {};
     return calculateFormFormulas(fields, record.data);
   }, [record, fields]);
+
+  // Queries & state for print templates integration
+  const { data: printTemplates = [] } = usePrintTemplates(record?.entityId || null);
+  const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
+  const [renderedHtml, setRenderedHtml] = useState("");
+  const [printLoading, setPrintLoading] = useState(false);
+
+  const handlePrintClick = async (templateId: number) => {
+    if (!record) return;
+    setPrintLoading(true);
+    try {
+      const { data } = await api.get(`/api/v1/print-templates/${templateId}/render/${record.id}`);
+      if (data?.renderedHtml) {
+        setRenderedHtml(data.renderedHtml);
+        setIsPreviewModalOpen(true);
+      } else {
+        message.error("Không thể biên dịch mẫu in.");
+      }
+    } catch (err: any) {
+      message.error("Lỗi khi kết xuất dữ liệu mẫu in.");
+    } finally {
+      setPrintLoading(false);
+    }
+  };
+
+  const printHtml = (htmlContent: string) => {
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "fixed";
+    iframe.style.right = "0";
+    iframe.style.bottom = "0";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "0";
+    document.body.appendChild(iframe);
+    
+    const doc = iframe.contentWindow?.document || iframe.contentDocument;
+    if (doc) {
+      doc.write(htmlContent);
+      doc.close();
+      
+      iframe.contentWindow?.focus();
+      setTimeout(() => {
+        iframe.contentWindow?.print();
+        document.body.removeChild(iframe);
+      }, 500);
+    }
+  };
 
   return (
     <Drawer
@@ -755,6 +928,24 @@ export default function RecordDetailDrawer({
       }
       extra={
         <Space>
+          {printTemplates.length > 0 && (
+            <Dropdown
+              menu={{
+                items: printTemplates.map((t) => ({
+                  key: String(t.id),
+                  label: t.name,
+                  icon: <PrinterOutlined />,
+                })),
+                onClick: (info) => handlePrintClick(Number(info.key)),
+              }}
+              trigger={["click"]}
+              placement="bottomRight"
+            >
+              <Button icon={<PrinterOutlined />} loading={printLoading}>
+                In hồ sơ
+              </Button>
+            </Dropdown>
+          )}
           <Tooltip title={fullscreen ? "Thu nhỏ" : "Phóng to toàn màn hình"}>
             <Button
               type="text"
@@ -783,177 +974,588 @@ export default function RecordDetailDrawer({
       }}
     >
       {record && (
-        <Space direction="vertical" size="large" className="w-full">
-          {/* Metadata */}
-          <Card
-            size="small"
-            title="Thông tin Hồ sơ"
-            bordered={false}
-            style={{ background: "#fafafa", borderRadius: 8 }}
-          >
-            <Descriptions
-              column={2}
-              size="small"
-              labelStyle={{ fontWeight: 600, color: "#595959" }}
-            >
-              <Descriptions.Item label="Mã hồ sơ">
-                <Tag color="blue">{record.businessCode}</Tag>
-              </Descriptions.Item>
-              <Descriptions.Item label="Trạng thái">
-                {status && <Tag color={status.color}>{status.label}</Tag>}
-              </Descriptions.Item>
-              <Descriptions.Item label="Ngày nộp">
-                {new Date(record.createdAt).toLocaleString("vi-VN")}
-              </Descriptions.Item>
-              <Descriptions.Item label="Cập nhật lần cuối">
-                {new Date(record.updatedAt).toLocaleString("vi-VN")}
-              </Descriptions.Item>
-            </Descriptions>
-          </Card>
+        <Tabs
+          defaultActiveKey="detail"
+          type="line"
+          size="middle"
+          items={[
+            {
+              key: "detail",
+              label: (
+                <span>
+                  <FileTextOutlined style={{ marginRight: "6px" }} />
+                  Thông tin Hồ sơ
+                </span>
+              ),
+              children: (
+                <Space direction="vertical" size="large" className="w-full" style={{ marginTop: "16px" }}>
+                  {/* Metadata */}
+                  <Card
+                    size="small"
+                    title="Thông tin Hồ sơ"
+                    bordered={false}
+                    style={{ background: "#fafafa", borderRadius: 8 }}
+                  >
+                    <Descriptions
+                      column={2}
+                      size="small"
+                      labelStyle={{ fontWeight: 600, color: "#595959" }}
+                    >
+                      <Descriptions.Item label="Mã hồ sơ">
+                        <Tag color="blue">{record.businessCode}</Tag>
+                      </Descriptions.Item>
+                      <Descriptions.Item label="Trạng thái">
+                        {status && <Tag color={status.color}>{status.label}</Tag>}
+                      </Descriptions.Item>
+                      <Descriptions.Item label="Ngày nộp">
+                        {new Date(record.createdAt).toLocaleString("vi-VN")}
+                      </Descriptions.Item>
+                      <Descriptions.Item label="Cập nhật lần cuối">
+                        {new Date(record.updatedAt).toLocaleString("vi-VN")}
+                      </Descriptions.Item>
+                    </Descriptions>
+                  </Card>
 
-          {/* Dynamic Fields */}
-          <Card
-            size="small"
-            title="Nội dung Hồ sơ"
-            bordered={false}
-            style={{ borderRadius: 8 }}
-            headStyle={{ background: "#fafafa" }}
-          >
-            {isFieldsLoading ? (
-              <div className="flex justify-center py-8">
-                <Spin tip="Đang tải cấu hình biểu mẫu..." />
-              </div>
-            ) : sortedFields.length === 0 ? (
-              <Empty
-                description="Không có thông tin trường dữ liệu"
-                image={Empty.PRESENTED_IMAGE_SIMPLE}
-              />
-            ) : (
-              <Descriptions
-                bordered
-                column={1}
-                size="small"
-                labelStyle={{
-                  width: 200,
-                  fontWeight: 600,
-                  background: "#fafafa",
-                }}
-              >
-                {sortedFields.map((field) => (
-                  <Descriptions.Item key={field.id} label={field.name}>
-                    {renderFieldValue(
-                      field,
-                      computedData?.[field.code],
-                      findDeptName,
-                      findUserName,
-                      findRoleName,
-                      record.id,
-                    )}
-                  </Descriptions.Item>
-                ))}
-              </Descriptions>
-            )}
-          </Card>
-
-          {/* Timeline Lịch sử phê duyệt */}
-          <Card
-            size="small"
-            title={
-              <Space>
-                <ClockCircleOutlined style={{ color: "#1890ff" }} />
-                <span>Lịch sử Lộ trình phê duyệt</span>
-              </Space>
-            }
-            bordered={false}
-            style={{ borderRadius: 8 }}
-            headStyle={{ background: "#fafafa" }}
-          >
-            {isLogsLoading ? (
-              <div className="flex justify-center py-8">
-                <Spin tip="Đang tải lịch sử phê duyệt..." />
-              </div>
-            ) : auditLogs.length === 0 ? (
-              <Empty
-                description="Chưa có nhật ký hoạt động nào cho hồ sơ này."
-                image={Empty.PRESENTED_IMAGE_SIMPLE}
-                style={{ padding: "16px 0" }}
-              />
-            ) : (
-              <Timeline
-                mode="left"
-                style={{ marginTop: "16px" }}
-                items={auditLogs.map((log) => {
-                  let color = "blue";
-                  let icon = <ClockCircleOutlined />;
-                  const normalizedAction = log.action.toLowerCase();
-                  if (log.action === "START") {
-                    color = "gray";
-                    icon = <FileTextOutlined />;
-                  } else if (
-                    normalizedAction.includes("từ chối") ||
-                    normalizedAction.includes("bác bỏ") ||
-                    normalizedAction.includes("không phê duyệt") ||
-                    normalizedAction.includes("reject")
-                  ) {
-                    color = "red";
-                    icon = <CloseCircleOutlined />;
-                  } else if (
-                    normalizedAction.includes("duyệt") ||
-                    normalizedAction.includes("đồng ý") ||
-                    normalizedAction.includes("approve")
-                  ) {
-                    color = "green";
-                    icon = <CheckCircleOutlined />;
-                  }
-                  return {
-                    color,
-                    dot: icon,
-                    children: (
-                      <div style={{ paddingBottom: "12px" }}>
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            alignItems: "center",
-                          }}
-                        >
-                          <Text strong style={{ fontSize: "14px" }}>
-                            {log.action === "START" ? "Khởi động" : log.action}
-                          </Text>
-                          <Text type="secondary" style={{ fontSize: "12px" }}>
-                            {new Date(log.createdAt).toLocaleString("vi-VN")}
-                          </Text>
-                        </div>
-                        <div>
-                          <Text type="secondary">Thực hiện bởi: </Text>
-                          <Text strong>{log.user?.fullName || "Hệ thống"}</Text>
-                        </div>
-                        {log.comment && (
-                          <div
-                            style={{
-                              marginTop: "4px",
-                              background: "#f5f5f5",
-                              padding: "6px 12px",
-                              borderRadius: "4px",
-                            }}
-                          >
-                            <MessageOutlined
-                              style={{ marginRight: "6px", color: "#8c8c8c" }}
-                            />
-                            <Text italic type="secondary">
-                              {log.comment}
-                            </Text>
-                          </div>
-                        )}
+                  {/* Dynamic Fields */}
+                  <Card
+                    size="small"
+                    title="Nội dung Hồ sơ"
+                    bordered={false}
+                    style={{ borderRadius: 8 }}
+                    headStyle={{ background: "#fafafa" }}
+                  >
+                    {isFieldsLoading ? (
+                      <div className="flex justify-center py-8">
+                        <Spin tip="Đang tải cấu hình biểu mẫu..." />
                       </div>
-                    ),
-                  };
-                })}
-              />
-            )}
-          </Card>
-        </Space>
+                    ) : sortedFields.length === 0 ? (
+                      <Empty
+                        description="Không có thông tin trường dữ liệu"
+                        image={Empty.PRESENTED_IMAGE_SIMPLE}
+                      />
+                    ) : (
+                      <Descriptions
+                        bordered
+                        column={1}
+                        size="small"
+                        labelStyle={{
+                          width: 200,
+                          fontWeight: 600,
+                          background: "#fafafa",
+                        }}
+                      >
+                        {sortedFields.map((field) => (
+                          <Descriptions.Item key={field.id} label={field.name}>
+                            {renderFieldValue(
+                              field,
+                              computedData?.[field.code],
+                              findDeptName,
+                              findUserName,
+                              findRoleName,
+                              record.id,
+                            )}
+                          </Descriptions.Item>
+                        ))}
+                      </Descriptions>
+                    )}
+                  </Card>
+
+                  {/* Lộ trình & Tiến độ phê duyệt */}
+                  {progressData?.hasWorkflow && (
+                    <Card
+                      size="small"
+                      title={
+                        <Space>
+                          <SyncOutlined style={{ color: "#1890ff" }} />
+                          <span>Tiến độ Lộ trình phê duyệt</span>
+                        </Space>
+                      }
+                      bordered={false}
+                      style={{ borderRadius: 8 }}
+                      headStyle={{ background: "#fafafa" }}
+                    >
+                      {isProgressLoading ? (
+                        <div className="flex justify-center py-8">
+                          <Spin tip="Đang tải lộ trình phê duyệt..." />
+                        </div>
+                      ) : (
+                        <div style={{ padding: "8px 12px 0 12px" }}>
+                          <Steps
+                            direction="vertical"
+                            size="small"
+                            current={progressData.steps?.findIndex(s => s.status === 'PENDING' || s.status === 'REJECTED') ?? 0}
+                            items={progressData.steps?.map((step) => {
+                              let status: 'wait' | 'process' | 'finish' | 'error' = 'wait';
+                              if (step.status === 'COMPLETED') status = 'finish';
+                              else if (step.status === 'PENDING') status = 'process';
+                              else if (step.status === 'REJECTED') status = 'error';
+                              else status = 'wait';
+
+                              const title = (
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
+                                  <span style={{ fontWeight: 600, fontSize: "14px", color: status === 'finish' ? '#389e0d' : status === 'process' ? '#096dd9' : status === 'error' ? '#cf1322' : '#595959' }}>
+                                    {step.name}
+                                  </span>
+                                  <Space size={4}>
+                                    {step.status === 'COMPLETED' && (
+                                      <Tag color="success" style={{ margin: 0 }}>Đã duyệt</Tag>
+                                    )}
+                                    {step.status === 'PENDING' && (
+                                      <Tag color="processing" style={{ margin: 0 }} icon={<SyncOutlined spin />}>Đang chờ duyệt</Tag>
+                                    )}
+                                    {step.status === 'REJECTED' && (
+                                      <Tag color="error" style={{ margin: 0 }}>Từ chối</Tag>
+                                    )}
+                                    {step.status === 'FUTURE' && (
+                                      <Tag color="default" style={{ margin: 0 }}>Chưa đến lượt</Tag>
+                                    )}
+                                  </Space>
+                                </div>
+                              );
+
+                              const description = (
+                                <div style={{ marginTop: 4, marginBottom: 8 }}>
+                                  {/* Phê duyệt bởi */}
+                                  {step.status === 'COMPLETED' && step.logs && step.logs.map((log: any) => {
+                                    if (log.action === 'START') return null;
+                                    return (
+                                      <div key={log.id} style={{ fontSize: "12px", color: '#595959', margin: '4px 0' }}>
+                                        <span>Phê duyệt bởi: </span>
+                                        <Text strong>{log.user?.fullName || "Hệ thống"}</Text>
+                                        <span style={{ margin: '0 8px', color: '#bfbfbf' }}>|</span>
+                                        <span style={{ color: '#8c8c8c' }}>{new Date(log.createdAt).toLocaleString("vi-VN")}</span>
+                                        {log.comment && (
+                                          <div style={{ fontStyle: 'italic', color: '#8c8c8c', marginTop: 2 }}>
+                                            "{log.comment}"
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+
+                                  {/* Chờ duyệt bởi ai */}
+                                  {step.status === 'PENDING' && (
+                                    <div style={{ marginTop: 4 }}>
+                                      {step.tasks && step.tasks.length > 0 ? (
+                                        <div>
+                                          <div style={{ fontSize: "12px", color: '#595959', marginBottom: 4 }}>
+                                            Đang chờ xử lý bởi:
+                                          </div>
+                                          <Space wrap size={[4, 4]}>
+                                            {step.tasks.map((task: any) => (
+                                              <Tooltip key={task.id} title={task.assigneeEmail || "Không có email"}>
+                                                <Tag color="blue" style={{ fontSize: "11px", padding: "1px 6px" }}>
+                                                  👤 {task.assigneeName}
+                                                </Tag>
+                                              </Tooltip>
+                                            ))}
+                                          </Space>
+                                          {step.tasks[0]?.estimatedCompletionTime && (
+                                            <div style={{ marginTop: 4, fontSize: "11px", color: '#fa8c16' }}>
+                                              🕒 Hạn chót dự kiến: {new Date(step.tasks[0].estimatedCompletionTime).toLocaleString("vi-VN")}
+                                            </div>
+                                          )}
+                                        </div>
+                                      ) : (
+                                        <Text type="secondary" italic style={{ fontSize: "12px" }}>
+                                          Không có nhiệm vụ chờ xử lý hoặc hệ thống đang tự động xử lý.
+                                        </Text>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {step.status === 'FUTURE' && (
+                                    <div style={{ fontSize: "11px", color: '#8c8c8c', fontStyle: 'italic' }}>
+                                      Chưa kích hoạt
+                                    </div>
+                                  )}
+                                </div>
+                              );
+
+                              return {
+                                title,
+                                description,
+                                status,
+                              };
+                            })}
+                          />
+                        </div>
+                      )}
+                    </Card>
+                  )}
+
+                  {/* Timeline Lịch sử phê duyệt */}
+                  <Card
+                    size="small"
+                    title={
+                      <Space>
+                        <ClockCircleOutlined style={{ color: "#1890ff" }} />
+                        <span>Lịch sử Lộ trình phê duyệt</span>
+                      </Space>
+                    }
+                    bordered={false}
+                    style={{ borderRadius: 8 }}
+                    headStyle={{ background: "#fafafa" }}
+                  >
+                    {isLogsLoading ? (
+                      <div className="flex justify-center py-8">
+                        <Spin tip="Đang tải lịch sử phê duyệt..." />
+                      </div>
+                    ) : auditLogs.length === 0 ? (
+                      <Empty
+                        description="Chưa có nhật ký hoạt động nào cho hồ sơ này."
+                        image={Empty.PRESENTED_IMAGE_SIMPLE}
+                        style={{ padding: "16px 0" }}
+                      />
+                    ) : (
+                      <Timeline
+                        mode="left"
+                        style={{ marginTop: "16px" }}
+                        items={auditLogs.map((log) => {
+                          let color = "blue";
+                          let icon = <ClockCircleOutlined />;
+                          const normalizedAction = log.action.toLowerCase();
+                          if (log.action === "START") {
+                            color = "gray";
+                            icon = <FileTextOutlined />;
+                          } else if (
+                            normalizedAction.includes("từ chối") ||
+                            normalizedAction.includes("bác bỏ") ||
+                            normalizedAction.includes("không phê duyệt") ||
+                            normalizedAction.includes("reject")
+                          ) {
+                            color = "red";
+                            icon = <CloseCircleOutlined />;
+                          } else if (
+                            normalizedAction.includes("duyệt") ||
+                            normalizedAction.includes("đồng ý") ||
+                            normalizedAction.includes("approve")
+                          ) {
+                            color = "green";
+                            icon = <CheckCircleOutlined />;
+                          }
+                          return {
+                            color,
+                            dot: icon,
+                            children: (
+                              <div style={{ paddingBottom: "12px" }}>
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    alignItems: "center",
+                                  }}
+                                >
+                                  <Text strong style={{ fontSize: "14px" }}>
+                                    {log.action === "START" ? "Khởi động" : log.action}
+                                  </Text>
+                                  <Text type="secondary" style={{ fontSize: "12px" }}>
+                                    {new Date(log.createdAt).toLocaleString("vi-VN")}
+                                  </Text>
+                                </div>
+                                <div>
+                                  <Text type="secondary">Thực hiện bởi: </Text>
+                                  <Text strong>{log.user?.fullName || "Hệ thống"}</Text>
+                                </div>
+                                {log.comment && (
+                                  <div
+                                    style={{
+                                      marginTop: "4px",
+                                      background: "#f5f5f5",
+                                      padding: "6px 12px",
+                                      borderRadius: "4px",
+                                    }}
+                                  >
+                                    <MessageOutlined
+                                      style={{ marginRight: "6px", color: "#8c8c8c" }}
+                                    />
+                                    <Text italic type="secondary">
+                                      {log.comment}
+                                    </Text>
+                                  </div>
+                                )}
+                                {log.snapshot?.signature && (
+                                  <div style={{ marginTop: "8px" }}>
+                                    {log.snapshot.signature.startsWith("data:image/") ? (
+                                      (() => {
+                                        const layout = log.snapshot.layout || "vertical";
+                                        const isHorizontal = layout === "horizontal";
+                                        const showName = log.snapshot.showSignerName !== false;
+                                        const showRole = log.snapshot.showSignerRole !== false;
+                                        const showDept = log.snapshot.showSignerDept !== false;
+                                        const showTime = log.snapshot.showSigningTime !== false;
+
+                                        if (isHorizontal) {
+                                          return (
+                                            <div
+                                              style={{
+                                                display: "inline-flex",
+                                                alignItems: "center",
+                                                gap: "12px",
+                                                border: "1px solid #e2e8f0",
+                                                padding: "8px",
+                                                borderRadius: "6px",
+                                                backgroundColor: "#fafafa",
+                                                fontFamily: "sans-serif",
+                                                textAlign: "left",
+                                                lineHeight: "1.3",
+                                              }}
+                                            >
+                                              <div
+                                                style={{
+                                                  position: "relative",
+                                                  height: "44px",
+                                                  minWidth: "90px",
+                                                  display: "flex",
+                                                  alignItems: "center",
+                                                  justifyContent: "center",
+                                                  background: "#ffffff",
+                                                  border: "1px solid #cbd5e1",
+                                                  borderRadius: "4px",
+                                                  padding: "2px",
+                                                }}
+                                              >
+                                                <img
+                                                  src={log.snapshot.signature}
+                                                  alt="Signature"
+                                                  style={{ maxHeight: "38px", maxWidth: "86px", display: "block" }}
+                                                />
+                                                {log.snapshot.stamp && (
+                                                  <img
+                                                    src={log.snapshot.stamp}
+                                                    alt="Stamp"
+                                                    style={{
+                                                      position: "absolute",
+                                                      right: "-10px",
+                                                      bottom: "-6px",
+                                                      maxHeight: "40px",
+                                                      maxWidth: "40px",
+                                                      opacity: 0.85,
+                                                      mixBlendMode: "multiply",
+                                                    }}
+                                                  />
+                                                )}
+                                              </div>
+                                              <div>
+                                                <div
+                                                  style={{
+                                                    fontSize: "8px",
+                                                    color: "green",
+                                                    fontFamily: "monospace",
+                                                    fontWeight: "bold",
+                                                    marginBottom: "2px",
+                                                  }}
+                                                >
+                                                  [ĐÃ KÝ ĐIỆN TỬ]
+                                                </div>
+                                                {showName && (
+                                                  <div style={{ fontSize: "11px", fontWeight: "bold", color: "#1e293b" }}>
+                                                    {log.snapshot.signerName || log.user?.fullName}
+                                                  </div>
+                                                )}
+                                                {showRole && log.snapshot.signerRole && (
+                                                  <div style={{ fontSize: "9px", color: "#64748b" }}>{log.snapshot.signerRole}</div>
+                                                )}
+                                                {showDept && log.snapshot.signerDept && (
+                                                  <div style={{ fontSize: "9px", color: "#64748b" }}>{log.snapshot.signerDept}</div>
+                                                )}
+                                                {showTime && log.snapshot.signingTime && (
+                                                  <div style={{ fontSize: "8px", color: "#94a3b8", marginTop: "1px" }}>
+                                                    {log.snapshot.signingTime}
+                                                  </div>
+                                                )}
+                                              </div>
+                                            </div>
+                                          );
+                                        } else {
+                                          return (
+                                            <div
+                                              style={{
+                                                display: "inline-flex",
+                                                flexDirection: "column",
+                                                alignItems: "center",
+                                                textAlign: "center",
+                                                border: "1px solid #e2e8f0",
+                                                padding: "8px",
+                                                borderRadius: "6px",
+                                                backgroundColor: "#fafafa",
+                                                fontFamily: "sans-serif",
+                                                minWidth: "120px",
+                                                lineHeight: "1.3",
+                                              }}
+                                            >
+                                              <div
+                                                style={{
+                                                  fontSize: "8px",
+                                                  color: "green",
+                                                  fontFamily: "monospace",
+                                                  fontWeight: "bold",
+                                                  marginBottom: "4px",
+                                                }}
+                                              >
+                                                [ĐÃ KÝ ĐIỆN TỬ]
+                                              </div>
+                                              <div
+                                                style={{
+                                                  position: "relative",
+                                                  height: "44px",
+                                                  width: "90px",
+                                                  display: "flex",
+                                                  alignItems: "center",
+                                                  justifyContent: "center",
+                                                  background: "#ffffff",
+                                                  border: "1px solid #cbd5e1",
+                                                  borderRadius: "4px",
+                                                  padding: "2px",
+                                                  marginBottom: "4px",
+                                                  marginLeft: "auto",
+                                                  marginRight: "auto",
+                                                }}
+                                              >
+                                                <img
+                                                  src={log.snapshot.signature}
+                                                  alt="Signature"
+                                                  style={{ maxHeight: "38px", maxWidth: "86px", display: "block" }}
+                                                />
+                                                {log.snapshot.stamp && (
+                                                  <img
+                                                    src={log.snapshot.stamp}
+                                                    alt="Stamp"
+                                                    style={{
+                                                      position: "absolute",
+                                                      right: "-10px",
+                                                      bottom: "-6px",
+                                                      maxHeight: "40px",
+                                                      maxWidth: "40px",
+                                                      opacity: 0.85,
+                                                      mixBlendMode: "multiply",
+                                                    }}
+                                                  />
+                                                )}
+                                              </div>
+                                              {showName && (
+                                                <div style={{ fontSize: "11px", fontWeight: "bold", color: "#1e293b" }}>
+                                                  {log.snapshot.signerName || log.user?.fullName}
+                                                </div>
+                                              )}
+                                              {showRole && log.snapshot.signerRole && (
+                                                <div style={{ fontSize: "9px", color: "#64748b", marginTop: "1px" }}>
+                                                  {log.snapshot.signerRole}
+                                                </div>
+                                              )}
+                                              {showDept && log.snapshot.signerDept && (
+                                                <div style={{ fontSize: "9px", color: "#64748b" }}>{log.snapshot.signerDept}</div>
+                                              )}
+                                              {showTime && log.snapshot.signingTime && (
+                                                <div style={{ fontSize: "8px", color: "#94a3b8", marginTop: "2px" }}>
+                                                  {log.snapshot.signingTime}
+                                                </div>
+                                              )}
+                                            </div>
+                                          );
+                                        }
+                                      })()
+                                    ) : (
+                                      <Tag color="purple">{log.snapshot.signature}</Tag>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            ),
+                          };
+                        })}
+                      />
+                    )}
+                  </Card>
+                </Space>
+              ),
+            },
+            {
+              key: "history",
+              label: (
+                <span>
+                  <ClockCircleOutlined style={{ marginRight: "6px" }} />
+                  Lịch sử chỉnh sửa
+                </span>
+              ),
+              children: (
+                <div style={{ marginTop: "16px" }}>
+                  {isRevisionsLoading ? (
+                    <div className="flex justify-center py-8">
+                      <Spin tip="Đang tải lịch sử chỉnh sửa..." />
+                    </div>
+                  ) : revisions.length === 0 ? (
+                    <Empty
+                      description="Không có lịch sử chỉnh sửa nào cho hồ sơ này."
+                      image={Empty.PRESENTED_IMAGE_SIMPLE}
+                      style={{ padding: "32px 0" }}
+                    />
+                  ) : (
+                    <Timeline
+                      mode="left"
+                      items={revisions.map((rev) => ({
+                        color: "blue",
+                        children: (
+                          <div style={{ paddingBottom: "16px" }}>
+                            <Card
+                              size="small"
+                              title={
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                  <Space>
+                                    <Avatar size="small" style={{ backgroundColor: "#1890ff" }}>
+                                      {(rev.user?.fullName || "U").charAt(0).toUpperCase()}
+                                    </Avatar>
+                                    <Text strong>{rev.user?.fullName || "Thành viên"}</Text>
+                                    <Text type="secondary" style={{ fontSize: "12px", fontWeight: "normal" }}>
+                                      ({rev.user?.email || ""})
+                                    </Text>
+                                  </Space>
+                                  <Text type="secondary" style={{ fontSize: "12px", fontWeight: "normal" }}>
+                                    {new Date(rev.createdAt).toLocaleString("vi-VN")}
+                                  </Text>
+                                </div>
+                              }
+                              style={{ borderRadius: 8, border: "1px solid #f0f0f0" }}
+                              bodyStyle={{ padding: "12px 16px" }}
+                            >
+                              {renderRevisionDiff(rev)}
+                            </Card>
+                          </div>
+                        ),
+                      }))}
+                    />
+                  )}
+                </div>
+              ),
+            }
+          ]}
+        />
       )}
+
+      {/* Modal Xem trước mẫu in */}
+      <Modal
+        title="Xem trước tài liệu in"
+        open={isPreviewModalOpen}
+        onCancel={() => setIsPreviewModalOpen(false)}
+        width={850}
+        destroyOnClose
+        okText="In ngay"
+        cancelText="Đóng"
+        onOk={() => printHtml(renderedHtml)}
+        bodyStyle={{ padding: "20px", background: "#f0f2f5" }}
+      >
+        <div
+          style={{
+            background: "white",
+            padding: "40px",
+            boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+            borderRadius: "4px",
+            maxHeight: "60vh",
+            overflowY: "auto",
+          }}
+          dangerouslySetInnerHTML={{ __html: renderedHtml }}
+        />
+      </Modal>
     </Drawer>
   );
 }

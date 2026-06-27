@@ -188,6 +188,8 @@ export default function DepartmentTreePage() {
     onClick: (info: any) => {
       if (info.key === "logout") {
         handleLogout();
+      } else if (info.key === "profile") {
+        router.push("/profile");
       }
     },
   };

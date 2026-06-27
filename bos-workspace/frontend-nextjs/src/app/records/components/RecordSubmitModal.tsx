@@ -23,6 +23,7 @@ import {
   message,
   TreeSelect,
   Upload,
+  Card,
 } from "antd";
 
 import {
@@ -40,7 +41,7 @@ import type { Dayjs } from "dayjs";
 import dayjs from "dayjs";
 import { useFields, Field } from "@/hooks/useFields";
 import { useCreateRecord, useUpdateRecord, RecordData } from "@/hooks/useRecords";
-import { useWorkflows } from "@/hooks/useWorkflows";
+import { useWorkflows, useWorkflowSteps, useStepCandidates } from "@/hooks/useWorkflows";
 import { useDepartmentTree } from "@/hooks/useDepartments";
 import { useUsers } from "@/hooks/useUsers";
 import { useRoles } from "@/hooks/useRoles";
@@ -163,7 +164,7 @@ function calculateFormFormulas(fields: any[], currentValues: Record<string, any>
   const formulaFields = fields.filter((f) => f.type === "FORMULA");
   for (let pass = 0; pass < 3; pass++) {
     formulaFields.forEach((field) => {
-      const formula = field.config?.options?.formula;
+      const formula = field.config?.options?.formula || field.config?.formula;
       if (formula) {
         const preprocessed = preprocessRollups(formula, result);
         const calculated = evaluateFormulaString(preprocessed, result);
@@ -1099,6 +1100,23 @@ export default function RecordSubmitModal({
 
   const { data: fields = [], isLoading: isFieldsLoading } = useFields(entity?.id || null);
   const { data: workflowsData } = useWorkflows(entity?.id || null);
+
+  // Tìm workflow version PUBLISHED cho entity này
+  const activeWorkflow = useMemo(() => {
+    const workflows = workflowsData?.data || [];
+    for (const wf of workflows) {
+      const published = wf.versions?.find((v) => v.status === "PUBLISHED");
+      if (published) return { workflowId: wf.id, versionId: published.id, name: wf.name };
+    }
+    return null;
+  }, [workflowsData]);
+
+  const { data: workflowSteps = [] } = useWorkflowSteps(activeWorkflow?.versionId || null);
+  const firstStep = useMemo(() => {
+    return [...workflowSteps].sort((a, b) => a.orderIndex - b.orderIndex)[0] || null;
+  }, [workflowSteps]);
+  const isFirstStepDynamic = firstStep?.permissions?.chooseApproverDynamically || false;
+  const { data: stepCandidates = [] } = useStepCandidates(isFirstStepDynamic ? firstStep.id : null);
   const createRecord = useCreateRecord();
   const updateRecord = useUpdateRecord();
 
@@ -1181,15 +1199,7 @@ export default function RecordSubmitModal({
     }
   }, [open, record, fields, form, entity]);
 
-  // Tìm workflow version PUBLISHED cho entity này
-  const activeWorkflow = useMemo(() => {
-    const workflows = workflowsData?.data || [];
-    for (const wf of workflows) {
-      const published = wf.versions?.find((v) => v.status === "PUBLISHED");
-      if (published) return { workflowId: wf.id, versionId: published.id, name: wf.name };
-    }
-    return null;
-  }, [workflowsData]);
+  // activeWorkflow hook has been moved to the top of the component
 
   // Build live title preview from pattern + current form values
   const buildLiveTitle = (pattern: string, values: Record<string, any>): string => {
@@ -1292,6 +1302,7 @@ export default function RecordSubmitModal({
           await api.post("/api/v1/workflows/instances/start", {
             recordId: targetRecordId,
             versionId: activeWorkflow.versionId,
+            nextAssigneeId: values.nextAssigneeId,
           });
           message.success(
             record
@@ -1554,6 +1565,38 @@ export default function RecordSubmitModal({
                 record={record}
               />
             ))}
+            {isFirstStepDynamic && (
+              <Col span={24}>
+                <Card 
+                  size="small" 
+                  title={
+                    <span style={{ color: "#fa8c16" }}>
+                      👉 Chọn người duyệt cho trạm tiếp theo: <strong>{firstStep?.name}</strong>
+                    </span>
+                  }
+                  style={{ marginBottom: 16, border: "1px solid #ffe7ba", backgroundColor: "#fffbe6" }}
+                >
+                  <Form.Item
+                    name="nextAssigneeId"
+                    label="Người duyệt tiếp theo"
+                    rules={[{ required: true, message: "Vui lòng chọn người duyệt tiếp theo" }]}
+                    style={{ marginBottom: 0 }}
+                  >
+                    <Select
+                      placeholder="Chọn nhân sự phê duyệt..."
+                      options={stepCandidates.map((c: any) => ({
+                        value: c.id,
+                        label: `${c.fullName} (${c.email})`,
+                      }))}
+                      showSearch
+                      filterOption={(input, opt) =>
+                        String(opt?.label ?? "").toLowerCase().includes(input.toLowerCase())
+                      }
+                    />
+                  </Form.Item>
+                </Card>
+              </Col>
+            )}
           </Row>
         </Form>
       )}

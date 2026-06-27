@@ -18,7 +18,7 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { TasksService } from './tasks.service';
-import { CompleteTaskDto, DelegateTaskDto } from './dto/task-action.dto';
+import { CompleteTaskDto, DelegateTaskDto, BatchCompleteTasksDto } from './dto/task-action.dto';
 import { JwtAuthGuard } from 'src/core/guards/jwt-auth.guard';
 import { SuperAdminGuard } from 'src/core/guards/super-admin.guard';
 
@@ -70,6 +70,15 @@ export class TasksController {
     @Body() dto: CompleteTaskDto,
   ) {
     return this.tasksService.completeTask(id, req.user.userId, dto);
+  }
+
+  @Post('batch-complete')
+  @ApiOperation({ summary: 'Duyệt nhanh hàng loạt nhiệm vụ' })
+  batchCompleteTasks(
+    @Request() req,
+    @Body() dto: BatchCompleteTasksDto,
+  ) {
+    return this.tasksService.batchCompleteTasks(req.user.userId, dto);
   }
 
   @Post(':id/delegate')

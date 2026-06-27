@@ -142,4 +142,45 @@ export class WorkflowStepsService {
       orderBy: { orderIndex: 'asc' },
     });
   }
+
+  async getStepCandidates(stepId: number, tenantId: number) {
+    const step = await this.prisma.workflowStep.findUnique({
+      where: { id: stepId } as any,
+    });
+    if (!step) throw new NotFoundException('Không tìm thấy Bước duyệt.');
+
+    const permissions: any = step.permissions || {};
+    const candidateUsers: number[] = permissions.candidateUsers || [];
+    const candidateRoles: number[] = permissions.candidateRoles || [];
+    const candidateDepts: number[] = permissions.candidateDepts || [];
+
+    // Nếu không có cấu hình ứng viên nào, trả về mảng rỗng
+    if (
+      candidateUsers.length === 0 &&
+      candidateRoles.length === 0 &&
+      candidateDepts.length === 0
+    ) {
+      return [];
+    }
+
+    // Truy vấn tất cả Active Users khớp với danh sách ứng viên
+    const users = await this.prisma.user.findMany({
+      where: {
+        tenantId,
+        status: 'ACTIVE',
+        OR: [
+          { id: { in: candidateUsers } },
+          { roleId: { in: candidateRoles } },
+          { departmentId: { in: candidateDepts } },
+        ] as any,
+      } as any,
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+      },
+    });
+
+    return users;
+  }
 }

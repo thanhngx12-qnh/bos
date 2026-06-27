@@ -8,14 +8,16 @@ import {
 import { PrismaService } from 'src/prisma/prisma.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { paginate, PaginateOptions } from 'src/prisma/prisma.helper';
-import { CompleteTaskDto, DelegateTaskDto } from './dto/task-action.dto';
+import { CompleteTaskDto, DelegateTaskDto, BatchCompleteTasksDto } from './dto/task-action.dto';
 import { tenantContext } from 'src/prisma/tenant-context';
+import { BusinessCalendarService } from '../business-calendar/business-calendar.service';
 
 @Injectable()
 export class TasksService {
   constructor(
     private readonly prisma: PrismaService,
-    private eventEmitter: EventEmitter2,
+    private readonly eventEmitter: EventEmitter2,
+    private readonly calendarService: BusinessCalendarService,
   ) {}
 
   // ==========================================
@@ -29,17 +31,32 @@ export class TasksService {
     instanceId: number,
     stepObj: any,
     recordData: any,
+    selectedAssigneeId?: number,
   ) {
     if (stepObj.stepType === 'SYSTEM_TASK') return; // Máy làm thì không cần sinh Task con người
 
     const permissions: any = stepObj.permissions || {};
-    const candidateUsers: number[] = permissions.candidateUsers || [];
+    let candidateUsers: number[] = [];
+
+    if (selectedAssigneeId) {
+      candidateUsers = [selectedAssigneeId];
+    } else {
+      candidateUsers = permissions.candidateUsers || [];
+    }
 
     if (candidateUsers.length === 0) return;
 
-    // TÍNH TOÁN HẠN CHÓT SLA (Tạm thời mock cộng thêm 24 giờ. Sau này sẽ gọi BusinessCalendarService)
-    const estimatedCompletionTime = new Date();
-    estimatedCompletionTime.setHours(estimatedCompletionTime.getHours() + 24);
+    // TÍNH TOÁN HẠN CHÓT SLA (Gọi BusinessCalendarService)
+    const sla = permissions.sla || {}; // { value: number, unit: 'HOURS' | 'DAYS' }
+    const slaValue = Number(sla.value) || 24;
+    const slaUnit = (sla.unit || 'HOURS') as 'HOURS' | 'DAYS';
+
+    const estimatedCompletionTime = await this.calendarService.calculateDeadline(
+      tenantId,
+      new Date(),
+      slaValue,
+      slaUnit,
+    );
 
     // Giao việc: Mỗi candidateUser sẽ nhận 1 Task độc lập
     for (const userId of candidateUsers) {
@@ -57,7 +74,7 @@ export class TasksService {
         } as any,
       });
       console.log(
-        `[Task Engine] Đã tự động sinh Task cho User ID ${userId} tại Trạm: ${stepObj.name}`,
+        `[Task Engine] Đã tự động sinh Task cho User ID ${userId} tại Trạm: ${stepObj.name} (SLA: ${slaValue} ${slaUnit}, Hạn chót: ${estimatedCompletionTime.toISOString()})`,
       );
     }
   }
@@ -206,6 +223,27 @@ export class TasksService {
     });
 
     return updatedTask;
+  }
+
+  async batchCompleteTasks(userId: number, dto: BatchCompleteTasksDto) {
+    const results: any[] = [];
+    const errors: any[] = [];
+
+    for (const taskId of dto.taskIds) {
+      try {
+        const result = await this.completeTask(taskId, userId, { comment: dto.comment });
+        results.push(result);
+      } catch (err) {
+        errors.push({ taskId, message: err.message });
+      }
+    }
+
+    return {
+      successCount: results.length,
+      failedCount: errors.length,
+      results: results.map((r) => r.id),
+      errors,
+    };
   }
 
   async delegateTask(taskId: number, userId: number, dto: DelegateTaskDto) {

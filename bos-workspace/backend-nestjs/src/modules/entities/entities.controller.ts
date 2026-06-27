@@ -9,6 +9,7 @@ import {
   Delete,
   ParseIntPipe,
   UseGuards,
+  Request,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { EntitiesService } from './entities.service';
@@ -71,5 +72,26 @@ export class EntitiesController {
   @ApiOperation({ summary: 'Xóa Entity' })
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.entitiesService.remove(id);
+  }
+
+  @Get(':id/versions')
+  @ApiOperation({ summary: 'Lấy lịch sử phiên bản của Entity' })
+  findVersions(
+    @Request() req: any,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    const tenantId = req.user.tenantId;
+    return this.entitiesService.findVersions(tenantId, id);
+  }
+
+  @Post(':id/versions/:versionId/restore')
+  @ApiOperation({ summary: 'Khôi phục Entity về một phiên bản cũ' })
+  restoreVersion(
+    @Request() req: any,
+    @Param('id', ParseIntPipe) id: number,
+    @Param('versionId', ParseIntPipe) versionId: number,
+  ) {
+    const tenantId = req.user.tenantId;
+    return this.entitiesService.restoreVersion(tenantId, id, versionId);
   }
 }

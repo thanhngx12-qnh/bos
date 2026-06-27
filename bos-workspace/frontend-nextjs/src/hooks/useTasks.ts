@@ -50,6 +50,7 @@ export interface WorkflowLog {
     fullName: string;
     email: string;
   };
+  snapshot?: any;
 }
 
 // Lấy danh sách nhiệm vụ được giao cho tôi
@@ -95,16 +96,40 @@ export function useWorkflowAction() {
       transitionId,
       comment,
       signatureData,
+      otpCode,
+      stampData,
+      signatureLayout,
+      showSignerName,
+      showSignerRole,
+      showSignerDept,
+      showSigningTime,
+      nextAssigneeId,
     }: {
       instanceId: number;
       transitionId: number;
       comment?: string;
       signatureData?: string;
+      otpCode?: string;
+      stampData?: string;
+      signatureLayout?: string;
+      showSignerName?: boolean;
+      showSignerRole?: boolean;
+      showSignerDept?: boolean;
+      showSigningTime?: boolean;
+      nextAssigneeId?: number;
     }) => {
       const { data } = await api.post(`/api/v1/workflows/instances/${instanceId}/action`, {
         transitionId,
         comment,
         signatureData,
+        otpCode,
+        stampData,
+        signatureLayout,
+        showSignerName,
+        showSignerRole,
+        showSignerDept,
+        showSigningTime,
+        nextAssigneeId,
       });
       return data;
     },

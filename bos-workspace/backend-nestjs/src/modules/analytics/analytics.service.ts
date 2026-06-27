@@ -51,23 +51,28 @@ export class AnalyticsService {
 
   // --- BÁO CÁO 3: THỐNG KÊ TIÊU DÙNG THEO PHÒNG BAN (Aggregating JSONB) ---
   // Phép toán vĩ mô: Cộng dồn total_amount từ JSONB group theo Department của người tạo Record
-  async getSpendingByDepartment() {
+  async getSpendingByDepartment(entityId: number, amountField: string) {
     try {
-      // BẢN VÁ:
-      // 1. Sửa r.created_by thành r.created_by_id để khớp cột vật lý trong Postgres
-      // 2. Chuyển JOIN departments thành LEFT JOIN để giữ lại các hồ sơ chưa được gán phòng ban (Coalesce về "Chưa phân phòng ban")
-      // 3. Sử dụng COALESCE lồng nhau để bóc tách cả 2 key "budget_amount" và "total_amount" từ JSONB một cách an toàn
+      const tenantStore = anytenantContextStore();
+      // Để tránh import circular dependency hoặc lỗi runtime, chúng ta sẽ import và đọc tenantContext động
+      const { tenantContext: tc } = require('../../prisma/tenant-context');
+      const tenantId = tc.getStore()?.tenantId || null;
+
+      // Chuẩn hóa tên trường để chống SQL Injection
+      const safeAmountField = amountField.replace(/[^a-zA-Z0-9_]/g, '');
+
       const result = await this.prisma.$queryRawUnsafe<any[]>(`
         SELECT 
           COALESCE(d.name, 'Chưa phân phòng ban') as "departmentName", 
-          COALESCE(SUM((COALESCE(r.data->>'budget_amount', r.data->>'total_amount', '0'))::numeric), 0) as "totalSpending"
+          COALESCE(SUM((COALESCE(r.data->>'${safeAmountField}', '0'))::numeric), 0) as "totalSpending"
         FROM records r
         JOIN users u ON r.created_by_id = u.id
         LEFT JOIN departments d ON u.department_id = d.id
-        WHERE r.entity_id = 1
+        WHERE r.entity_id = $1
+          AND (r.tenant_id = $2 OR (r.tenant_id IS NULL AND $2 IS NULL))
         GROUP BY d.name
         ORDER BY "totalSpending" DESC;
-      `);
+      `, entityId, tenantId);
 
       return result.map((item) => ({
         departmentName: item.departmentName,
@@ -78,5 +83,15 @@ export class AnalyticsService {
         'Lỗi hệ thống khi truy xuất báo cáo ngân sách phòng ban.',
       );
     }
+  }
+}
+
+// Hàm phụ để tránh lỗi compile nếu import bị thiếu
+function anytenantContextStore() {
+  try {
+    const { tenantContext } = require('../../prisma/tenant-context');
+    return tenantContext.getStore();
+  } catch (e) {
+    return null;
   }
 }

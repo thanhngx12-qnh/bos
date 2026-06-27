@@ -128,6 +128,17 @@ export class WorkflowsController {
     return this.workflowsService.handleAction(instanceId, userId, dto);
   }
 
+  @Post('instances/:id/otp-request')
+  @ApiOperation({ summary: 'Yêu cầu gửi mã xác thực OTP qua email để ký duyệt' })
+  requestOtp(
+    @Request() req,
+    @Param('id', ParseIntPipe) instanceId: number,
+    @Body('transitionId', ParseIntPipe) transitionId: number,
+  ) {
+    const userId = req.user.userId;
+    return this.workflowsService.requestTransitionOtp(instanceId, transitionId, userId);
+  }
+
   @Get('instances/:id/logs')
   @ApiOperation({ summary: 'Lấy lịch sử Audit Log phê duyệt của lượt chạy' })
   getInstanceLogs(@Param('id', ParseIntPipe) instanceId: number) {
@@ -138,5 +149,11 @@ export class WorkflowsController {
   @ApiOperation({ summary: 'Lấy lịch sử Audit Log của lượt chạy mới nhất theo recordId' })
   getRecordInstanceLogs(@Param('recordId', ParseIntPipe) recordId: number) {
     return this.workflowsService.getLatestInstanceLogs(recordId);
+  }
+
+  @Get('instances/record/:recordId/progress')
+  @ApiOperation({ summary: 'Lấy lộ trình và tiến độ phê duyệt của lượt chạy mới nhất' })
+  getRecordInstanceProgress(@Param('recordId', ParseIntPipe) recordId: number) {
+    return this.workflowsService.getLatestInstanceProgress(recordId);
   }
 }

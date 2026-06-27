@@ -13,11 +13,15 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 
 import { NotificationsService } from '../notifications/notifications.service';
+import { ReferenceResolverService } from '../../core/engines/reference-resolver.service';
 import { paginate, PaginateOptions } from '../../prisma/prisma.helper';
 import { ConditionEvaluatorService } from '../../core/engines/condition-evaluator.service';
 import { TasksService } from '../tasks/tasks.service';
 import { OnEvent } from '@nestjs/event-emitter';
-import { ReferenceResolverService } from '../../core/engines/reference-resolver.service';
+import { OutboxService } from '../outbox/outbox.service';
+import { v4 as uuidv4 } from 'uuid';
+import { RedisService } from '../redis/redis.service';
+import { MailerService } from '../mailer/mailer.service';
 
 @Injectable()
 export class WorkflowsService {
@@ -28,6 +32,9 @@ export class WorkflowsService {
     private readonly referenceResolver: ReferenceResolverService,
     private readonly tasksService: TasksService,
     @InjectQueue('webhook-queue') private readonly webhookQueue: Queue,
+    private readonly outboxService: OutboxService,
+    private readonly redis: RedisService,
+    private readonly mailerService: MailerService,
   ) {}
 
   private stripAccents(str: string): string {
@@ -314,12 +321,18 @@ export class WorkflowsService {
         }
       }
 
+      // Kiểm tra nếu bước tiếp theo yêu cầu chọn người duyệt động
+      if (stepConfig.chooseApproverDynamically && !dto.nextAssigneeId) {
+        throw new BadRequestException('Vui lòng chọn người duyệt tiếp theo.');
+      }
+
       await this.tasksService.createTasksForStep(
         tx,
         (record as any).tenantId,
         newInstance.id,
         firstStep,
         record,
+        dto.nextAssigneeId,
       );
 
       // ĐỒNG BỘ: Cập nhật record status → IN_PROGRESS khi bắt đầu quy trình
@@ -434,10 +447,32 @@ export class WorkflowsService {
       const actionLabel = transLogic.actionLabel || 'Phê duyệt';
       const requiresSignature = transLogic.requiresSignature || false;
 
-      if (requiresSignature && !dto.signatureData) {
-        throw new BadRequestException(
-          `Nút bấm '${actionLabel}' yêu cầu bạn phải thực hiện Chữ ký điện tử.`,
-        );
+      if (requiresSignature) {
+        if (!dto.signatureData) {
+          throw new BadRequestException(
+            `Nút bấm '${actionLabel}' yêu cầu bạn phải thực hiện vẽ Chữ ký điện tử.`,
+          );
+        }
+        if (!dto.otpCode) {
+          throw new BadRequestException(
+            `Nút bấm '${actionLabel}' yêu cầu bạn phải nhập mã xác thực OTP.`,
+          );
+        }
+
+        const redisKey = `otp:instance:${instanceId}:user:${userId}:transition:${dto.transitionId}`;
+        const cachedOtp = await this.redis.get(redisKey);
+        if (!cachedOtp) {
+          throw new BadRequestException(
+            'Mã OTP đã hết hạn hoặc chưa được yêu cầu. Vui lòng bấm gửi lại mã OTP.',
+          );
+        }
+        if (cachedOtp !== dto.otpCode) {
+          throw new BadRequestException(
+            'Mã xác thực OTP không chính xác. Vui lòng kiểm tra lại.',
+          );
+        }
+
+        await this.redis.del(redisKey);
       }
 
       // === BẢN VÁ 1: KIỂM TRA ĐIỀU KIỆN CHUYỂN BƯỚC ===
@@ -451,6 +486,27 @@ export class WorkflowsService {
         );
       }
 
+      let snapshotObj: any = undefined;
+      if (requiresSignature) {
+        const userObj = await tx.user.findUnique({
+          where: { id: userId },
+          include: { department: true, role: true },
+        });
+        snapshotObj = {
+          signature: dto.signatureData,
+          stamp: dto.stampData || undefined,
+          layout: dto.signatureLayout || 'vertical',
+          signerName: userObj?.fullName || 'Hệ thống',
+          signerRole: userObj?.role?.name || 'Thành viên',
+          signerDept: userObj?.department?.name || 'Doanh nghiệp',
+          signingTime: new Date().toLocaleString('vi-VN'),
+          showSignerName: dto.showSignerName !== false,
+          showSignerRole: dto.showSignerRole !== false,
+          showSignerDept: dto.showSignerDept !== false,
+          showSigningTime: dto.showSigningTime !== false,
+        };
+      }
+
       await tx.workflowLog.create({
         data: {
           instanceId,
@@ -458,9 +514,7 @@ export class WorkflowsService {
           userId,
           action: actionLabel,
           comment: dto.comment || `Đã thực hiện hành động: ${actionLabel}`,
-          snapshot: dto.signatureData
-            ? ({ signature: dto.signatureData } as any)
-            : undefined,
+          snapshot: snapshotObj,
         } as any,
       });
 
@@ -554,6 +608,28 @@ export class WorkflowsService {
           });
         }
 
+        if (finalStatus === 'COMPLETED') {
+          const completedEvent = {
+            eventType: 'workflow.completed',
+            payload: {
+              recordId: instance.recordId,
+              entityId: instance.record.entityId,
+              recordCode: (instance.record as any).businessCode || `#${instance.record.id}`,
+              recordData: instance.record.data,
+              workflowId: instance.version.workflowId,
+              instanceId: instance.id,
+              initiatorId: (instance.record as any).createdById,
+            },
+            metadata: {
+              tenantId: (instance as any).tenantId,
+              correlationId: uuidv4(),
+              timestamp: new Date().toISOString(),
+              userId: userId,
+            },
+          };
+          await this.outboxService.addToOutbox(tx, completedEvent);
+        }
+
         if (finalStatus === 'IN_PROGRESS' && evaluatingStepObj) {
           const nextStepConfig: any = evaluatingStepObj.permissions || {};
           const nextAssigneeExpression = nextStepConfig.assigneeExpression;
@@ -571,12 +647,18 @@ export class WorkflowsService {
             }
           }
 
+          // Kiểm tra nếu bước tiếp theo yêu cầu chọn người duyệt động
+          if (nextStepConfig.chooseApproverDynamically && !dto.nextAssigneeId) {
+            throw new BadRequestException('Vui lòng chọn người duyệt tiếp theo.');
+          }
+
           await this.tasksService.createTasksForStep(
             tx,
             (instance as any).tenantId,
             instanceId,
             evaluatingStepObj,
             instance.record,
+            dto.nextAssigneeId,
           );
 
           nextStepObj = evaluatingStepObj;
@@ -710,6 +792,328 @@ export class WorkflowsService {
     };
   }
 
+  async handleSystemAutoTransition(
+    instanceId: number,
+    transitionId: number,
+    actionLabel: string,
+    comment: string,
+  ) {
+    const result = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRawUnsafe(
+        `SELECT id FROM workflow_instances WHERE id = $1 FOR UPDATE`,
+        instanceId,
+      );
+
+      const instance = await tx.workflowInstance.findFirst({
+        where: { id: instanceId } as any,
+        include: {
+          record: true,
+          version: {
+            include: {
+              steps: {
+                include: { transitionsOut: true },
+              },
+              workflow: { select: { name: true } },
+            },
+          },
+        },
+      });
+
+      if (!instance)
+        throw new NotFoundException('Không tìm thấy lượt chạy quy trình.');
+
+      if (instance.status !== 'IN_PROGRESS') {
+        throw new BadRequestException(
+          'Lượt chạy quy trình này đã kết thúc hoặc đang được xử lý.',
+        );
+      }
+
+      const transition = await tx.workflowTransition.findFirst({
+        where: { id: transitionId } as any,
+        include: { fromStep: true, toStep: true },
+      });
+
+      if (!transition)
+        throw new NotFoundException(
+          'Không tìm thấy đường nối quy trình (Nút bấm).',
+        );
+      if (transition.fromStepId !== (instance as any).currentStepId) {
+        throw new BadRequestException(
+          'Đường nối không thuộc về bước duyệt hiện tại của phiếu.',
+        );
+      }
+
+      const currentStepObj = transition.fromStep;
+      let nextStepObj = transition.toStep;
+
+      await tx.workflowLog.create({
+        data: {
+          instanceId,
+          stepId: (instance as any).currentStepId,
+          userId: null,
+          action: actionLabel,
+          comment: comment || `Hệ thống tự động chuyển trạm: ${actionLabel}`,
+          snapshot: undefined,
+        } as any,
+      });
+
+      let shouldTransition = true;
+      let finalStatus = 'IN_PROGRESS';
+      let nextStepId: number | null = transition.toStepId;
+
+      if (shouldTransition) {
+        await this.tasksService.cancelPendingTasks(
+          tx,
+          instanceId,
+          (instance as any).currentStepId,
+          undefined,
+        );
+
+        let evaluatingStepObj = nextStepObj;
+
+        while (evaluatingStepObj) {
+          if (evaluatingStepObj.stepType === 'SYSTEM_TASK') {
+            const cleanName = this.stripAccents(evaluatingStepObj.name);
+            const isRejectStep =
+              cleanName.includes('tu choi') ||
+              cleanName.includes('reject') ||
+              cleanName.includes('khong duyet') ||
+              cleanName.includes('khong phe duyet');
+            finalStatus = isRejectStep ? 'REJECTED' : 'COMPLETED';
+            break;
+          }
+
+          const fullStepData = instance.version.steps.find(
+            (s) => s.id === evaluatingStepObj.id,
+          );
+          const outgoingTransitions = fullStepData?.transitionsOut || [];
+
+          const autoSkipTransition = outgoingTransitions.find((t) => {
+            if (!t.autoSkip) return false;
+            const logic: any = t.conditionLogic || {};
+            return this.conditionEvaluator.evaluate(
+              logic,
+              instance.record.data as any,
+            );
+          });
+
+          if (autoSkipTransition) {
+            console.log(
+              `[Auto-Skip] Bước '${evaluatingStepObj.name}' tự động bị bỏ qua!`,
+            );
+            nextStepId = autoSkipTransition.toStepId;
+            evaluatingStepObj = instance.version.steps.find(
+              (s) => s.id === nextStepId,
+            ) as any;
+          } else {
+            break;
+          }
+        }
+
+        await tx.workflowInstance.update({
+          where: { id: instanceId } as any,
+          data: {
+            currentStepId: nextStepId,
+            status: finalStatus,
+          } as any,
+        });
+
+        if (finalStatus === 'COMPLETED' || finalStatus === 'REJECTED') {
+          await tx.record.update({
+            where: { id: instance.recordId } as any,
+            data: { status: finalStatus } as any,
+          });
+        }
+
+        if (finalStatus === 'COMPLETED') {
+          const completedEvent = {
+            eventType: 'workflow.completed',
+            payload: {
+              recordId: instance.recordId,
+              entityId: instance.record.entityId,
+              recordCode: (instance.record as any).businessCode || `#${instance.record.id}`,
+              recordData: instance.record.data,
+              workflowId: instance.version.workflowId,
+              instanceId: instance.id,
+              initiatorId: (instance.record as any).createdById,
+            },
+            metadata: {
+              tenantId: (instance as any).tenantId,
+              correlationId: uuidv4(),
+              timestamp: new Date().toISOString(),
+              userId: undefined,
+            },
+          };
+          await this.outboxService.addToOutbox(tx, completedEvent);
+        }
+
+        if (finalStatus === 'IN_PROGRESS' && evaluatingStepObj) {
+          const nextStepConfig: any = evaluatingStepObj.permissions || {};
+          const nextAssigneeExpression = nextStepConfig.assigneeExpression;
+
+          if (nextAssigneeExpression) {
+            const resolvedUsers =
+              await this.referenceResolver.resolveCandidates(
+                nextAssigneeExpression,
+                instance.recordId,
+                (instance.record as any).createdById,
+              );
+            if (resolvedUsers.length > 0) {
+              nextStepConfig.candidateUsers = resolvedUsers;
+              evaluatingStepObj.permissions = nextStepConfig;
+            }
+          }
+
+          await this.tasksService.createTasksForStep(
+            tx,
+            (instance as any).tenantId,
+            instanceId,
+            evaluatingStepObj,
+            instance.record,
+            undefined,
+          );
+
+          nextStepObj = evaluatingStepObj;
+        }
+      }
+
+      const nextStepConfig: any = nextStepObj?.permissions || {};
+      return {
+        instanceId,
+        entityId: instance.record.entityId,
+        isCompleted: finalStatus === 'COMPLETED',
+        recordData: instance.record.data,
+        recordCode:
+          (instance.record as any).businessCode || `#${instance.record.id}`,
+        initiatorId: (instance.record as any).createdById,
+        workflowName: (instance.version as any).workflow.name,
+        actionExecuted: actionLabel,
+        isRejected: finalStatus === 'REJECTED',
+        nextStepId,
+        nextStepName: nextStepObj?.name || '',
+        nextStepCandidates: nextStepConfig.candidateUsers || [],
+        currentStepName: currentStepObj.name,
+        shouldTransition,
+      };
+    });
+
+    if (result.isCompleted) {
+      const initiator = await this.prisma.user.findFirst({
+        where: { id: result.initiatorId } as any,
+      });
+      await this.notificationsService.createNotification(
+        result.initiatorId,
+        'Quy trình phê duyệt hoàn tất (Tự động)',
+        `Hồ sơ ${result.recordCode} của bạn đã được HỆ THỐNG TỰ ĐỘNG PHÊ DUYỆT do quá hạn SLA!`,
+        {
+          emailJobName: 'send-workflow-completed',
+          emailPayload: {
+            recipientName: initiator?.fullName || 'Người dùng',
+            recordCode: result.recordCode,
+            status: 'Hoàn tất (Tự động)',
+          },
+        },
+      );
+    } else if (result.isRejected) {
+      const initiator = await this.prisma.user.findFirst({
+        where: { id: result.initiatorId } as any,
+      });
+      await this.notificationsService.createNotification(
+        result.initiatorId,
+        'Quy trình phê duyệt bị từ chối (Tự động)',
+        `Hồ sơ ${result.recordCode} của bạn đã bị HỆ THỐNG TỰ ĐỘNG TỪ CHỐI do quá hạn SLA!`,
+        {
+          emailJobName: 'send-workflow-completed',
+          emailPayload: {
+            recipientName: initiator?.fullName || 'Người dùng',
+            recordCode: result.recordCode,
+            status: 'Từ chối (Tự động)',
+          },
+        },
+      );
+    } else if (result.nextStepId) {
+      await this.notificationsService.createNotification(
+        result.initiatorId,
+        'Cập nhật tiến trình hồ sơ (Tự động)',
+        `Hồ sơ ${result.recordCode} của bạn đã được chuyển tiếp tự động sang bước: ${result.nextStepName} do trễ hạn SLA.`,
+      );
+
+      for (const candidateId of result.nextStepCandidates) {
+        const recipient = await this.prisma.user.findFirst({
+          where: { id: candidateId } as any,
+        });
+        await this.notificationsService.createNotification(
+          candidateId,
+          'Yêu cầu phê duyệt mới cần xử lý (Tự động)',
+          `Bạn nhận được một yêu cầu phê duyệt mới chuyển tiếp tự động do quá hạn SLA cho hồ sơ ${result.recordCode} tại trạm: ${result.nextStepName}.`,
+          {
+            emailJobName: 'send-new-approval-request',
+            emailPayload: {
+              recipientName: recipient?.fullName || 'Thành viên',
+              recordCode: result.recordCode,
+              initiatorName: 'Hệ thống SLA',
+              stepName: result.nextStepName,
+            },
+          },
+        );
+      }
+    }
+
+    if (result.isCompleted) {
+      try {
+        const configuredWebhooks = await this.prisma.webhookEndpoint.findMany({
+          where: {
+            entityId: result.entityId,
+            isActive: true,
+          } as any,
+        });
+
+        const activeWebhooks = configuredWebhooks.filter((w) => {
+          const events = w.events as string[];
+          return Array.isArray(events) && events.includes('RECORD_COMPLETED');
+        });
+
+        for (const webhook of activeWebhooks) {
+          await this.webhookQueue.add(
+            'send-webhook',
+            {
+              instanceId: result.instanceId,
+              webhookUrl: webhook.url,
+              payload: {
+                event: 'WORKFLOW_COMPLETED',
+                workflowName: result.workflowName,
+                instanceId: result.instanceId,
+                recordData: result.recordData,
+                timestamp: new Date().toISOString(),
+              },
+            },
+            {
+              attempts: 3,
+              backoff: { type: 'exponential', delay: 2000 },
+            },
+          );
+          console.log(
+            `[Webhook Queue] Đã xếp hàng gửi Webhook đến URL: ${webhook.url}`,
+          );
+        }
+      } catch (error) {
+        console.error(
+          `[Webhook Queue] Lỗi khi kích hoạt Webhook tự động: ${error.message}`,
+        );
+      }
+    }
+
+    const updatedInstance = await this.prisma.workflowInstance.findFirst({
+      where: { id: instanceId } as any,
+    });
+
+    return {
+      ...updatedInstance,
+      transitioned: true,
+      actionExecuted: result.actionExecuted,
+    };
+  }
+
   async getInstanceLogs(instanceId: number) {
     return this.prisma.workflowLog.findMany({
       where: { instanceId } as any,
@@ -796,5 +1200,170 @@ export class WorkflowsService {
 
       await this.handleAction(payload.instanceId, payload.userId, actionDto);
     }
+  }
+
+  async getLatestInstanceProgress(recordId: number) {
+    const latestInstance = await this.prisma.workflowInstance.findFirst({
+      where: { recordId } as any,
+      orderBy: { id: 'desc' },
+      include: {
+        version: {
+          include: {
+            steps: {
+              orderBy: { orderIndex: 'asc' },
+            },
+          },
+        },
+        tasks: {
+          where: { status: 'PENDING' } as any,
+        },
+        logs: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                fullName: true,
+                email: true,
+              },
+            },
+          },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+    });
+
+    if (!latestInstance) {
+      return { hasWorkflow: false };
+    }
+
+    const assigneeIds = latestInstance.tasks
+      .map((t) => t.assigneeId)
+      .filter((id) => id !== null && id !== undefined) as number[];
+
+    const assignees = assigneeIds.length > 0
+      ? await this.prisma.user.findMany({
+          where: { id: { in: assigneeIds } },
+          select: { id: true, fullName: true, email: true },
+        })
+      : [];
+
+    const assigneeMap = new Map(assignees.map((u) => [u.id, u]));
+
+    const activeTasks = latestInstance.tasks.map((task) => ({
+      ...task,
+      assignee: task.assigneeId ? assigneeMap.get(task.assigneeId) : null,
+    }));
+
+    return {
+      hasWorkflow: true,
+      instanceId: latestInstance.id,
+      status: latestInstance.status,
+      currentStepId: (latestInstance as any).currentStepId,
+      version: {
+        id: latestInstance.version.id,
+        version: latestInstance.version.version,
+      },
+      steps: latestInstance.version.steps.map((step) => {
+        const stepLogs = latestInstance.logs.filter((l) => l.stepId === step.id);
+        const isCurrent = (latestInstance as any).currentStepId === step.id && latestInstance.status === 'IN_PROGRESS';
+        
+        let stepStatus = 'FUTURE'; // FUTURE, PENDING, COMPLETED, REJECTED
+        if (latestInstance.status === 'APPROVED' || latestInstance.status === 'COMPLETED') {
+          stepStatus = 'COMPLETED';
+        } else if (latestInstance.status === 'REJECTED') {
+          if ((latestInstance as any).currentStepId === step.id) {
+            stepStatus = 'REJECTED';
+          } else if (stepLogs.length > 0) {
+            stepStatus = 'COMPLETED';
+          } else {
+            stepStatus = 'FUTURE';
+          }
+        } else {
+          if (isCurrent) {
+            stepStatus = 'PENDING';
+          } else if (stepLogs.length > 0) {
+            stepStatus = 'COMPLETED';
+          } else {
+            stepStatus = 'FUTURE';
+          }
+        }
+
+        const stepTasks = activeTasks.filter((t) => t.stepId === step.id);
+
+        return {
+          id: step.id,
+          name: step.name,
+          stepType: step.stepType,
+          orderIndex: step.orderIndex,
+          status: stepStatus,
+          logs: stepLogs.map((log) => ({
+            id: log.id,
+            action: log.action,
+            comment: log.comment,
+            createdAt: log.createdAt,
+            user: log.user,
+            snapshot: log.snapshot,
+          })),
+          tasks: stepTasks.map((t) => ({
+            id: t.id,
+            assigneeId: t.assigneeId,
+            assigneeName: t.assignee?.fullName || `User #${t.assigneeId}`,
+            assigneeEmail: t.assignee?.email,
+            status: t.status,
+            estimatedCompletionTime: t.estimatedCompletionTime,
+          })),
+        };
+      }),
+    };
+  }
+
+  async requestTransitionOtp(instanceId: number, transitionId: number, userId: number) {
+    const instance = await this.prisma.workflowInstance.findUnique({
+      where: { id: instanceId },
+      include: {
+        record: true,
+      },
+    });
+    if (!instance) {
+      throw new NotFoundException('Không tìm thấy lượt chạy quy trình.');
+    }
+
+    const transition = await this.prisma.workflowTransition.findUnique({
+      where: { id: transitionId },
+      include: { fromStep: true },
+    });
+    if (!transition || transition.fromStepId !== (instance as any).currentStepId) {
+      throw new BadRequestException('Nút bấm không hợp lệ hoặc không thuộc bước hiện tại.');
+    }
+
+    const stepConfig: any = transition.fromStep.permissions || {};
+    const candidateUsers = stepConfig.candidateUsers || [];
+    if (candidateUsers.length > 0 && !candidateUsers.includes(userId)) {
+      throw new BadRequestException(
+        'Tài khoản của bạn không được phân quyền thực hiện hành động tại bước này.',
+      );
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+    if (!user) {
+      throw new NotFoundException('Không tìm thấy người dùng.');
+    }
+
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+    const redisKey = `otp:instance:${instanceId}:user:${userId}:transition:${transitionId}`;
+    await this.redis.set(redisKey, otpCode, 120);
+
+    const transLogic = (transition.conditionLogic || {}) as any;
+    const actionLabel = transLogic.actionLabel || 'Phê duyệt';
+    await this.mailerService.sendOtpCode(user.email, user.fullName, otpCode, actionLabel);
+
+    return {
+      success: true,
+      message: 'Mã xác thực OTP đã được gửi qua email của bạn.',
+      mockCode: otpCode,
+    };
   }
 }

@@ -678,7 +678,22 @@ export default function ToolboxAndInspector({
                     >
                       <Input placeholder="Ví dụ: project_name, full_name..." />
                     </Form.Item>
-
+                    <Form.Item
+                      name={["options", "filter", "status"]}
+                      label="Lọc theo trạng thái hồ sơ liên kết"
+                    >
+                      <Select
+                        mode="multiple"
+                        placeholder="Chọn trạng thái lọc (Mặc định: Tất cả)"
+                        allowClear
+                        options={[
+                          { value: "DRAFT", label: "Nháp (DRAFT)" },
+                          { value: "IN_PROGRESS", label: "Đang duyệt (IN_PROGRESS)" },
+                          { value: "COMPLETED", label: "Hoàn thành (COMPLETED)" },
+                          { value: "REJECTED", label: "Bị từ chối (REJECTED)" },
+                        ]}
+                      />
+                    </Form.Item>
                   </>
                 )}
 

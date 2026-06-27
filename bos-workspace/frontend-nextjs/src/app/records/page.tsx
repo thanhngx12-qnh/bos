@@ -186,7 +186,13 @@ function RecordsContent() {
       { type: "divider" as const },
       { key: "logout", label: "Đăng xuất hệ thống", danger: true },
     ],
-    onClick: (info: any) => { if (info.key === "logout") handleLogout(); },
+    onClick: (info: any) => {
+      if (info.key === "logout") {
+        handleLogout();
+      } else if (info.key === "profile") {
+        router.push("/profile");
+      }
+    },
   };
 
   const handleMenuClick = (e: { key: string }) => {

@@ -21,6 +21,7 @@ import {
   Tabs,
   List,
   Drawer,
+  Modal,
   Timeline,
   Descriptions,
   Table,
@@ -37,6 +38,7 @@ import {
   Upload,
   Checkbox,
   TreeSelect,
+  Segmented,
 } from "antd";
 import {
   DashboardOutlined,
@@ -73,8 +75,10 @@ import { useMyTenants, useSwitchTenant } from "@/hooks/useAuth";
 import { BankOutlined } from "@ant-design/icons";
 import { useMyTasks, useWorkflowAction, useWorkflowLogs, Task } from "@/hooks/useTasks";
 import { useFields, Field } from "@/hooks/useFields";
-import { useWorkflowSteps } from "@/hooks/useWorkflows";
+import { useWorkflowSteps, useStepCandidates } from "@/hooks/useWorkflows";
 import { useUpdateRecord } from "@/hooks/useRecords";
+import SignatureOtpModal from "@/components/SignatureOtpModal";
+import DashboardAnalytics from "@/components/DashboardAnalytics";
 import { useDepartmentTree } from "@/hooks/useDepartments";
 import { useUsers } from "@/hooks/useUsers";
 import { useRoles } from "@/hooks/useRoles";
@@ -194,7 +198,7 @@ function calculateFormFormulas(fields: any[], currentValues: Record<string, any>
   const formulaFields = fields.filter((f) => f.type === "FORMULA");
   for (let pass = 0; pass < 3; pass++) {
     formulaFields.forEach((field) => {
-      const formula = field.config?.options?.formula;
+      const formula = field.config?.options?.formula || field.config?.formula;
       if (formula) {
         const preprocessed = preprocessRollups(formula, result);
         const calculated = evaluateFormulaString(preprocessed, result);
@@ -630,18 +634,63 @@ export default function DashboardPortal() {
     onClick: (info: any) => {
       if (info.key === "logout") {
         handleLogout();
+      } else if (info.key === "profile") {
+        router.push("/profile");
       }
     },
   };
 
   // State Tabs và Drawer phê duyệt
   const [activeTab, setActiveTab] = useState<"PENDING" | "COMPLETED">("PENDING");
+  const [viewMode, setViewMode] = useState<"tasks" | "analytics">("tasks");
   const [page, setPage] = useState(1);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [comment, setComment] = useState("");
   const [drawerFullscreen, setDrawerFullscreen] = useState(false);
 
+  // Batch Selection States
+  const [selectedTaskIds, setSelectedTaskIds] = useState<number[]>([]);
+  const [isBatchApproveModalOpen, setIsBatchApproveModalOpen] = useState(false);
+  const [batchComment, setBatchComment] = useState("");
+  const [isBatchSubmitting, setIsBatchSubmitting] = useState(false);
+
+  // Signature States
+  const [isSignatureModalOpen, setIsSignatureModalOpen] = useState(false);
+  const [sigTransitionId, setSigTransitionId] = useState<number | null>(null);
+  const [sigActionLabel, setSigActionLabel] = useState("");
+
+  useEffect(() => {
+    setSelectedTaskIds([]);
+  }, [activeTab, page]);
+
+  const handleBatchApproveSubmit = async () => {
+    if (selectedTaskIds.length === 0) return;
+    if (!batchComment.trim()) {
+      message.error("Vui lòng nhập ý kiến phê duyệt chung.");
+      return;
+    }
+    setIsBatchSubmitting(true);
+    try {
+      const { data } = await api.post("/api/v1/tasks/batch-complete", {
+        taskIds: selectedTaskIds,
+        comment: batchComment,
+      });
+      message.success(`Đã phê duyệt hàng loạt thành công ${data.successCount} nhiệm vụ!`);
+      if (data.failedCount > 0) {
+        message.warning(`Có ${data.failedCount} nhiệm vụ duyệt thất bại.`);
+      }
+      setSelectedTaskIds([]);
+      setIsBatchApproveModalOpen(false);
+      refetchTasks();
+    } catch (err: any) {
+      message.error(err?.response?.data?.message || err?.message || "Lỗi khi thực hiện duyệt hàng loạt.");
+    } finally {
+      setIsBatchSubmitting(false);
+    }
+  };
+
   const [taskForm] = Form.useForm();
+  const taskFormValues = Form.useWatch([], taskForm) || {};
   const updateRecordMutation = useUpdateRecord();
 
   // Gọi APIs lấy danh sách nhiệm vụ của tôi
@@ -665,6 +714,17 @@ export default function DashboardPortal() {
 
   // Mutations thực thi duyệt/bác hồ sơ
   const workflowActionMutation = useWorkflowAction();
+
+  // Trạng thái chọn người duyệt tiếp theo (dynamic next approver)
+  const [nextStepStepId, setNextStepStepId] = useState<number | null>(null);
+  const [isNextAssigneeModalOpen, setIsNextAssigneeModalOpen] = useState(false);
+  const [selectedNextAssigneeId, setSelectedNextAssigneeId] = useState<number | undefined>(undefined);
+  const [activeTransitionId, setActiveTransitionId] = useState<number | null>(null);
+  const [activeActionLabel, setActiveActionLabel] = useState<string>("");
+
+  const { data: nonSigCandidates = [] } = useStepCandidates(
+    !isSignatureModalOpen && isNextAssigneeModalOpen ? nextStepStepId : null
+  );
 
   // Gọi các hooks lấy dữ liệu phòng ban, thành viên, vai trò cho các reference fields
   const { data: deptTree = [] } = useDepartmentTree();
@@ -726,7 +786,19 @@ export default function DashboardPortal() {
   const currentStep = selectedTask ? workflowSteps.find((s) => s.id === selectedTask.stepId) : null;
   const transitions = currentStep?.transitionsOut || [];
 
-  const handleActionClick = async (transitionId: number, actionLabel: string) => {
+  const executeWorkflowAction = async (
+    transitionId: number,
+    actionLabel: string,
+    signatureData?: string,
+    otpCode?: string,
+    stampData?: string,
+    signatureLayout?: string,
+    showSignerName?: boolean,
+    showSignerRole?: boolean,
+    showSignerDept?: boolean,
+    showSigningTime?: boolean,
+    nextAssigneeId?: number
+  ) => {
     if (!selectedTask || !selectedTask.instance?.record) return;
     const hideLoading = message.loading(`Đang thực thi: ${actionLabel}...`, 0);
     try {
@@ -794,12 +866,22 @@ export default function DashboardPortal() {
         instanceId: selectedTask.instanceId,
         transitionId,
         comment: comment || `Đã thực hiện hành động: ${actionLabel}`,
+        signatureData,
+        otpCode,
+        stampData,
+        signatureLayout,
+        showSignerName,
+        showSignerRole,
+        showSignerDept,
+        showSigningTime,
+        nextAssigneeId,
       });
 
       message.success(`Đã xử lý thành công hành động: ${actionLabel}`);
       setSelectedTask(null);
       setComment("");
       refetchTasks();
+      setIsSignatureModalOpen(false);
     } catch (err: any) {
       message.error(err?.response?.data?.message || err?.message || "Có lỗi xảy ra khi thực thi phê duyệt.");
     } finally {
@@ -807,11 +889,53 @@ export default function DashboardPortal() {
     }
   };
 
+  const handleActionClick = async (transitionId: number, actionLabel: string) => {
+    if (!selectedTask || !selectedTask.instance?.record) return;
+
+    // Check if signature is required
+    const transition = transitions.find((t: any) => t.id === transitionId);
+    const requiresSignature = transition?.conditionLogic?.requiresSignature || false;
+
+    // Check if next step requires dynamic assignee selection
+    const targetStep = workflowSteps.find((s) => s.id === transition?.targetStepId);
+    const isNextStepDynamic = targetStep?.permissions?.chooseApproverDynamically || false;
+
+    if (requiresSignature) {
+      setSigTransitionId(transitionId);
+      setSigActionLabel(actionLabel);
+      setNextStepStepId(isNextStepDynamic ? transition.targetStepId : null);
+      setIsSignatureModalOpen(true);
+      return;
+    }
+
+    if (isNextStepDynamic) {
+      setActiveTransitionId(transitionId);
+      setActiveActionLabel(actionLabel);
+      setNextStepStepId(transition.targetStepId);
+      setIsNextAssigneeModalOpen(true);
+      return;
+    }
+
+    await executeWorkflowAction(transitionId, actionLabel);
+  };
+
   // Helper render ô nhập liệu dựa trên kiểu dữ liệu của trường (khi có quyền WRITE)
   const renderFieldInput = (field: Field) => {
     const { options } = field.config || {};
     const rules: any[] = [];
-    if (field.config?.isRequired) {
+    
+    // === REQUIRED (static + dynamic) ===
+    let isRequired = !!field.config?.isRequired;
+    const requiredIfCondition = options?.requiredIf as DynamicCondition | undefined;
+    if (!isRequired && requiredIfCondition && requiredIfCondition.field) {
+      const evalContext = {
+        ...selectedTask?.instance?.record?.data,
+        ...taskFormValues,
+      };
+      isRequired = evaluateCondition(requiredIfCondition, evalContext);
+    }
+
+    if (isRequired) {
       rules.push({ required: true, message: `${field.name} là bắt buộc` });
     }
     if (options?.regex || options?.regexPattern) {
@@ -1488,7 +1612,7 @@ export default function DashboardPortal() {
           <Content style={{ margin: "24px 24px 0", overflow: "initial" }}>
             <Space direction="vertical" size="large" className="w-full">
               {/* Page Header Tiêu Chuẩn */}
-              <div className="flex justify-between items-center bg-white p-6 rounded-lg border border-gray-100">
+              <div className="flex justify-between items-center bg-white p-6 rounded-lg border border-gray-100 flex-wrap gap-4">
                 <div>
                   <Breadcrumb
                     items={[
@@ -1500,182 +1624,250 @@ export default function DashboardPortal() {
                   <Paragraph type="secondary" style={{ margin: "4px 0 0 0" }}>
                     Hệ thống Động hóa Doanh nghiệp đa ngành Low-Code - Trạng thái hệ thống tổng quan.
                   </Paragraph>
+                  <div style={{ marginTop: "12px" }}>
+                    <Segmented
+                      value={viewMode}
+                      onChange={(value) => setViewMode(value as any)}
+                      options={[
+                        { label: "Nhiệm vụ & Công việc", value: "tasks", icon: <ClockCircleOutlined /> },
+                        { label: "Báo cáo & Phân tích (BI)", value: "analytics", icon: <DashboardOutlined /> },
+                      ]}
+                      size="middle"
+                    />
+                  </div>
                 </div>
                 <Button type="primary" size="large" icon={<ArrowRightOutlined />} onClick={() => router.push("/metadata")}>
                   Thiết kế Biểu mẫu Động
                 </Button>
               </div>
 
-              {/* KPI Metrics row */}
-              <Row gutter={[20, 20]}>
-                <Col xs={24} md={8}>
-                  <Card bordered={false} className="shadow-sm bg-gradient-to-br from-blue-50 to-white" style={{ borderLeft: "4px solid #1890ff", borderRadius: "8px" }}>
-                    <Space direction="vertical">
-                      <Text type="secondary" strong>Nhiệm vụ Chờ phê duyệt</Text>
-                      <Title level={2} style={{ margin: 0, color: "#0050b3" }}>
-                        {isTasksLoading ? <Spin size="small" /> : (activeTab === "PENDING" ? tasksData?.total || 0 : "N/A")}
-                      </Title>
-                    </Space>
-                  </Card>
-                </Col>
-                <Col xs={24} md={8}>
-                  <Card bordered={false} className="shadow-sm" style={{ borderLeft: "4px solid #52c41a", borderRadius: "8px" }}>
-                    <Space direction="vertical">
-                      <Text type="secondary" strong>Nhiệm vụ Đã hoàn thành</Text>
-                      <Title level={2} style={{ margin: 0, color: "#237804" }}>
-                        {isTasksLoading ? <Spin size="small" /> : (activeTab === "COMPLETED" ? tasksData?.total || 0 : "N/A")}
-                      </Title>
-                    </Space>
-                  </Card>
-                </Col>
-                <Col xs={24} md={8}>
-                  <Card bordered={false} className="shadow-sm" style={{ borderLeft: "4px solid #faad14", borderRadius: "8px" }}>
-                    <Space direction="vertical">
-                      <Text type="secondary" strong>Đơn vị / Phòng ban</Text>
-                      <Title level={2} style={{ margin: 0, color: "#d48806" }}>
-                        1
-                      </Title>
-                    </Space>
-                  </Card>
-                </Col>
-              </Row>
+              {viewMode === "tasks" ? (
+                <>
+                  {/* KPI Metrics row */}
+                  <Row gutter={[20, 20]}>
+                    <Col xs={24} md={8}>
+                      <Card bordered={false} className="shadow-sm bg-gradient-to-br from-blue-50 to-white" style={{ borderLeft: "4px solid #1890ff", borderRadius: "8px" }}>
+                        <Space direction="vertical">
+                          <Text type="secondary" strong>Nhiệm vụ Chờ phê duyệt</Text>
+                          <Title level={2} style={{ margin: 0, color: "#0050b3" }}>
+                            {isTasksLoading ? <Spin size="small" /> : (activeTab === "PENDING" ? tasksData?.total || 0 : "N/A")}
+                          </Title>
+                        </Space>
+                      </Card>
+                    </Col>
+                    <Col xs={24} md={8}>
+                      <Card bordered={false} className="shadow-sm" style={{ borderLeft: "4px solid #52c41a", borderRadius: "8px" }}>
+                        <Space direction="vertical">
+                          <Text type="secondary" strong>Nhiệm vụ Đã hoàn thành</Text>
+                          <Title level={2} style={{ margin: 0, color: "#237804" }}>
+                            {isTasksLoading ? <Spin size="small" /> : (activeTab === "COMPLETED" ? tasksData?.total || 0 : "N/A")}
+                          </Title>
+                        </Space>
+                      </Card>
+                    </Col>
+                    <Col xs={24} md={8}>
+                      <Card bordered={false} className="shadow-sm" style={{ borderLeft: "4px solid #faad14", borderRadius: "8px" }}>
+                        <Space direction="vertical">
+                          <Text type="secondary" strong>Đơn vị / Phòng ban</Text>
+                          <Title level={2} style={{ margin: 0, color: "#d48806" }}>
+                            1
+                          </Title>
+                        </Space>
+                      </Card>
+                    </Col>
+                  </Row>
 
-              {/* TRUNG TÂM PHÊ DUYỆT (APPROVALS CENTER) */}
-              <Card
-                bordered={false}
-                className="shadow-sm"
-                title={
-                  <Space>
-                    <DeploymentUnitOutlined style={{ color: "#0050b3", fontSize: "18px" }} />
-                    <span style={{ fontSize: "16px", fontWeight: 600 }}>Trung tâm Phê duyệt & Lịch trình Công việc</span>
-                  </Space>
-                }
-                style={{ borderRadius: "8px" }}
-              >
-                <Tabs
-                  activeKey={activeTab}
-                  onChange={(key) => {
-                    setActiveTab(key as any);
-                    setPage(1);
-                  }}
-                  items={[
-                    {
-                      key: "PENDING",
-                      label: (
-                        <span>
-                          Chờ tôi xử lý{" "}
-                          {activeTab === "PENDING" && tasksData?.total ? (
-                            <Badge count={tasksData?.total || 0} style={{ backgroundColor: "#ff4d4f", marginLeft: "4px" }} />
-                          ) : null}
-                        </span>
-                      ),
-                    },
-                    {
-                      key: "COMPLETED",
-                      label: "Lịch sử xử lý",
-                    },
-                  ]}
-                />
+                  {/* TRUNG TÂM PHÊ DUYỆT (APPROVALS CENTER) */}
+                  <Card
+                    bordered={false}
+                    className="shadow-sm"
+                    title={
+                      <Space>
+                        <DeploymentUnitOutlined style={{ color: "#0050b3", fontSize: "18px" }} />
+                        <span style={{ fontSize: "16px", fontWeight: 600 }}>Trung tâm Phê duyệt & Lịch trình Công việc</span>
+                      </Space>
+                    }
+                    style={{ borderRadius: "8px" }}
+                  >
+                    <Tabs
+                      activeKey={activeTab}
+                      onChange={(key) => {
+                        setActiveTab(key as any);
+                        setPage(1);
+                      }}
+                      items={[
+                        {
+                          key: "PENDING",
+                          label: (
+                            <span>
+                              Chờ tôi xử lý{" "}
+                              {activeTab === "PENDING" && tasksData?.total ? (
+                                <Badge count={tasksData?.total || 0} style={{ backgroundColor: "#ff4d4f", marginLeft: "4px" }} />
+                              ) : null}
+                            </span>
+                          ),
+                        },
+                        {
+                          key: "COMPLETED",
+                          label: "Lịch sử xử lý",
+                        },
+                      ]}
+                    />
 
-                {isTasksLoading ? (
-                  <div className="flex justify-center items-center py-12">
-                    <Spin tip="Đang tải danh sách nhiệm vụ..." />
-                  </div>
-                ) : (tasksData?.data?.length || 0) === 0 ? (
-                  <Empty
-                    image={Empty.PRESENTED_IMAGE_SIMPLE}
-                    description={`Bạn không có nhiệm vụ nào trong danh sách ${activeTab === "PENDING" ? "chờ xử lý" : "đã hoàn thành"}.`}
-                  />
-                ) : (
-                  <List
-                    itemLayout="horizontal"
-                    dataSource={tasksData?.data || []}
-                    pagination={{
-                      current: page,
-                      pageSize: 5,
-                      total: tasksData?.total || 0,
-                      onChange: (p) => setPage(p),
-                    }}
-                    renderItem={(task) => {
-                      const record = task.instance?.record;
-                      const instanceStatus = task.instance?.status;
-                      const isRejected = instanceStatus === "REJECTED" || record?.status === "REJECTED";
-                      const isApproved = instanceStatus === "COMPLETED" || record?.status === "COMPLETED" || record?.status === "APPROVED";
-                      const isPending = task.status === "PENDING" && !isRejected && !isApproved;
-
-                      // Avatar background/color theo trạng thái
-                      const avatarBg = isPending ? "#e6f7ff" : isRejected ? "#fff1f0" : "#f6ffed";
-                      const avatarColor = isPending ? "#1890ff" : isRejected ? "#ff4d4f" : "#52c41a";
-                      const avatarIcon = isPending ? <ClockCircleOutlined /> : isRejected ? <CloseCircleOutlined /> : <CheckCircleOutlined />;
-
-                      return (
-                        <List.Item
-                          actions={[
-                            isRejected && (
-                              <Tag color="error" icon={<CloseCircleOutlined />} key="rejected-tag">
-                                Đã từ chối
-                              </Tag>
-                            ),
-                            <Button
-                              type="primary"
-                              ghost
-                              icon={<RightOutlined />}
-                              onClick={() => setSelectedTask(task)}
-                              key="action"
-                              danger={isRejected}
-                            >
-                              {isPending ? "Xử lý hồ sơ" : "Xem chi tiết"}
-                            </Button>,
-                          ].filter(Boolean)}
-                          style={{
-                            borderBottom: "1px solid #f0f0f0",
-                            padding: "16px 24px",
-                            transition: "background-color 0.2s",
-                            background: isRejected ? "#fff9f9" : undefined,
+                    {activeTab === "PENDING" && selectedTaskIds.length > 0 && (
+                      <div style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        background: "#e6f7ff",
+                        border: "1px solid #91d5ff",
+                        padding: "12px 24px",
+                        borderRadius: "6px",
+                        marginBottom: "16px",
+                      }}>
+                        <Space>
+                          <Text strong style={{ color: "#0050b3" }}>
+                            Đang chọn: {selectedTaskIds.length} nhiệm vụ chờ phê duyệt
+                          </Text>
+                          <Button
+                            type="link"
+                            onClick={() => setSelectedTaskIds([])}
+                            style={{ padding: 0 }}
+                          >
+                            Bỏ chọn tất cả
+                          </Button>
+                        </Space>
+                        <Button
+                          type="primary"
+                          style={{ backgroundColor: "#52c41a", borderColor: "#52c41a" }}
+                          icon={<CheckCircleOutlined />}
+                          onClick={() => {
+                            setBatchComment("");
+                            setIsBatchApproveModalOpen(true);
                           }}
-                          className="hover:bg-slate-50"
                         >
-                          <List.Item.Meta
-                            avatar={
-                              <Avatar
-                                icon={avatarIcon}
-                                style={{ backgroundColor: avatarBg, color: avatarColor }}
+                          Duyệt nhanh hàng loạt
+                        </Button>
+                      </div>
+                    )}
+
+                    {isTasksLoading ? (
+                      <div className="flex justify-center items-center py-12">
+                        <Spin tip="Đang tải danh sách nhiệm vụ..." />
+                      </div>
+                    ) : (tasksData?.data?.length || 0) === 0 ? (
+                      <Empty
+                        image={Empty.PRESENTED_IMAGE_SIMPLE}
+                        description={`Bạn không có nhiệm vụ nào trong danh sách ${activeTab === "PENDING" ? "chờ xử lý" : "đã hoàn thành"}.`}
+                      />
+                    ) : (
+                      <List
+                        itemLayout="horizontal"
+                        dataSource={tasksData?.data || []}
+                        pagination={{
+                          current: page,
+                          pageSize: 5,
+                          total: tasksData?.total || 0,
+                          onChange: (p) => setPage(p),
+                        }}
+                        renderItem={(task) => {
+                          const record = task.instance?.record;
+                          const instanceStatus = task.instance?.status;
+                          const isRejected = instanceStatus === "REJECTED" || record?.status === "REJECTED";
+                          const isApproved = instanceStatus === "COMPLETED" || record?.status === "COMPLETED" || record?.status === "APPROVED";
+                          const isPending = task.status === "PENDING" && !isRejected && !isApproved;
+
+                          // Avatar background/color theo trạng thái
+                          const avatarBg = isPending ? "#e6f7ff" : isRejected ? "#fff1f0" : "#f6ffed";
+                          const avatarColor = isPending ? "#1890ff" : isRejected ? "#ff4d4f" : "#52c41a";
+                          const avatarIcon = isPending ? <ClockCircleOutlined /> : isRejected ? <CloseCircleOutlined /> : <CheckCircleOutlined />;
+
+                          return (
+                            <List.Item
+                              actions={[
+                                isRejected && (
+                                  <Tag color="error" icon={<CloseCircleOutlined />} key="rejected-tag">
+                                    Đã từ chối
+                                  </Tag>
+                                ),
+                                <Button
+                                  type="primary"
+                                  ghost
+                                  icon={<RightOutlined />}
+                                  onClick={() => setSelectedTask(task)}
+                                  key="action"
+                                  danger={isRejected}
+                                >
+                                  {isPending ? "Xử lý hồ sơ" : "Xem chi tiết"}
+                                </Button>,
+                              ].filter(Boolean)}
+                              style={{
+                                borderBottom: "1px solid #f0f0f0",
+                                padding: "16px 24px",
+                                display: "flex",
+                                alignItems: "center",
+                                transition: "background-color 0.2s",
+                                background: isRejected ? "#fff9f9" : undefined,
+                              }}
+                              className="hover:bg-slate-50"
+                            >
+                              {activeTab === "PENDING" && isPending && (
+                                <Checkbox
+                                  checked={selectedTaskIds.includes(task.id)}
+                                  onChange={(e) => {
+                                    const checked = e.target.checked;
+                                    setSelectedTaskIds((prev) =>
+                                      checked ? [...prev, task.id] : prev.filter((id) => id !== task.id)
+                                    );
+                                  }}
+                                  style={{ marginRight: 20 }}
+                                />
+                              )}
+                              <List.Item.Meta
+                                avatar={
+                                  <Avatar
+                                    icon={avatarIcon}
+                                    style={{ backgroundColor: avatarBg, color: avatarColor }}
+                                  />
+                                }
+                                title={
+                                  <Space>
+                                    <Text strong style={{ fontSize: "14px" }}>
+                                      {record?.title || record?.businessCode || "Hồ sơ không tên"}
+                                    </Text>
+                                    <Tag color="blue">{record?.businessCode}</Tag>
+                                    {isRejected && (
+                                      <Tag color="red" style={{ marginLeft: 4 }}>Từ chối</Tag>
+                                    )}
+                                    {isApproved && (
+                                      <Tag color="green" style={{ marginLeft: 4 }}>Đã duyệt</Tag>
+                                    )}
+                                  </Space>
+                                }
+                                description={
+                                  <Space direction="vertical" size={2}>
+                                    <div>
+                                      <Text type="secondary">Trạng thái: </Text>
+                                      <Text strong style={{ color: isPending ? "#1890ff" : isRejected ? "#ff4d4f" : "#52c41a" }}>
+                                        {isPending ? "Chờ xử lý" : isRejected ? "Hồ sơ bị từ chối" : "Đã phê duyệt"}
+                                      </Text>
+                                    </div>
+                                    <Text type="secondary" style={{ fontSize: "12px" }}>
+                                      Thời gian nhận: {new Date(task.createdAt).toLocaleString("vi-VN")}
+                                    </Text>
+                                  </Space>
+                                }
                               />
-                            }
-                            title={
-                              <Space>
-                                <Text strong style={{ fontSize: "14px" }}>
-                                  {record?.title || record?.businessCode || "Hồ sơ không tên"}
-                                </Text>
-                                <Tag color="blue">{record?.businessCode}</Tag>
-                                {isRejected && (
-                                  <Tag color="red" style={{ marginLeft: 4 }}>Từ chối</Tag>
-                                )}
-                                {isApproved && (
-                                  <Tag color="green" style={{ marginLeft: 4 }}>Đã duyệt</Tag>
-                                )}
-                              </Space>
-                            }
-                            description={
-                              <Space direction="vertical" size={2}>
-                                <div>
-                                  <Text type="secondary">Trạng thái: </Text>
-                                  <Text strong style={{ color: isPending ? "#1890ff" : isRejected ? "#ff4d4f" : "#52c41a" }}>
-                                    {isPending ? "Chờ xử lý" : isRejected ? "Hồ sơ bị từ chối" : "Đã phê duyệt"}
-                                  </Text>
-                                </div>
-                                <Text type="secondary" style={{ fontSize: "12px" }}>
-                                  Thời gian nhận: {new Date(task.createdAt).toLocaleString("vi-VN")}
-                                </Text>
-                              </Space>
-                            }
-                          />
-                        </List.Item>
-                      );
-                    }}
-                  />
-                )}
-              </Card>
+                            </List.Item>
+                          );
+                        }}
+                      />
+                    )}
+                  </Card>
+                </>
+              ) : (
+                <DashboardAnalytics />
+              )}
             </Space>
           </Content>
         </Layout>
@@ -1744,6 +1936,17 @@ export default function DashboardPortal() {
 
                         if (permission === "HIDDEN") {
                           return null;
+                        }
+
+                        // === SHOW IF EVALUATION ===
+                        const showIfCondition = field.config?.options?.showIf as DynamicCondition | undefined;
+                        if (showIfCondition && showIfCondition.field) {
+                          const evalContext = {
+                            ...selectedTask.instance?.record?.data,
+                            ...taskFormValues,
+                          };
+                          const shouldShow = evaluateCondition(showIfCondition, evalContext);
+                          if (!shouldShow) return null;
                         }
 
                         return (
@@ -1815,6 +2018,192 @@ export default function DashboardPortal() {
                               <div style={{ marginTop: "4px", background: "#f5f5f5", padding: "6px 12px", borderRadius: "4px" }}>
                                 <MessageOutlined style={{ marginRight: "6px", color: "#8c8c8c" }} />
                                 <Text italic type="secondary">{log.comment}</Text>
+                              </div>
+                            )}
+                            {log.snapshot?.signature && (
+                              <div style={{ marginTop: "8px" }}>
+                                {log.snapshot.signature.startsWith("data:image/") ? (
+                                  (() => {
+                                    const layout = log.snapshot.layout || "vertical";
+                                    const isHorizontal = layout === "horizontal";
+                                    const showName = log.snapshot.showSignerName !== false;
+                                    const showRole = log.snapshot.showSignerRole !== false;
+                                    const showDept = log.snapshot.showSignerDept !== false;
+                                    const showTime = log.snapshot.showSigningTime !== false;
+
+                                    if (isHorizontal) {
+                                      return (
+                                        <div
+                                          style={{
+                                            display: "inline-flex",
+                                            alignItems: "center",
+                                            gap: "12px",
+                                            border: "1px solid #e2e8f0",
+                                            padding: "8px",
+                                            borderRadius: "6px",
+                                            backgroundColor: "#fafafa",
+                                            fontFamily: "sans-serif",
+                                            textAlign: "left",
+                                            lineHeight: "1.3",
+                                          }}
+                                        >
+                                          <div
+                                            style={{
+                                              position: "relative",
+                                              height: "44px",
+                                              minWidth: "90px",
+                                              display: "flex",
+                                              alignItems: "center",
+                                              justifyContent: "center",
+                                              background: "#ffffff",
+                                              border: "1px solid #cbd5e1",
+                                              borderRadius: "4px",
+                                              padding: "2px",
+                                            }}
+                                          >
+                                            <img
+                                              src={log.snapshot.signature}
+                                              alt="Signature"
+                                              style={{ maxHeight: "38px", maxWidth: "86px", display: "block" }}
+                                            />
+                                            {log.snapshot.stamp && (
+                                              <img
+                                                src={log.snapshot.stamp}
+                                                alt="Stamp"
+                                                style={{
+                                                  position: "absolute",
+                                                  right: "-10px",
+                                                  bottom: "-6px",
+                                                  maxHeight: "40px",
+                                                  maxWidth: "40px",
+                                                  opacity: 0.85,
+                                                  mixBlendMode: "multiply",
+                                                }}
+                                              />
+                                            )}
+                                          </div>
+                                          <div>
+                                            <div
+                                              style={{
+                                                fontSize: "8px",
+                                                color: "green",
+                                                fontFamily: "monospace",
+                                                fontWeight: "bold",
+                                                marginBottom: "2px",
+                                              }}
+                                            >
+                                              [ĐÃ KÝ ĐIỆN TỬ]
+                                            </div>
+                                            {showName && (
+                                              <div style={{ fontSize: "11px", fontWeight: "bold", color: "#1e293b" }}>
+                                                {log.snapshot.signerName || log.user?.fullName}
+                                              </div>
+                                            )}
+                                            {showRole && log.snapshot.signerRole && (
+                                              <div style={{ fontSize: "9px", color: "#64748b" }}>{log.snapshot.signerRole}</div>
+                                            )}
+                                            {showDept && log.snapshot.signerDept && (
+                                              <div style={{ fontSize: "9px", color: "#64748b" }}>{log.snapshot.signerDept}</div>
+                                            )}
+                                            {showTime && log.snapshot.signingTime && (
+                                              <div style={{ fontSize: "8px", color: "#94a3b8", marginTop: "1px" }}>
+                                                {log.snapshot.signingTime}
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      );
+                                    } else {
+                                      return (
+                                        <div
+                                          style={{
+                                            display: "inline-flex",
+                                            flexDirection: "column",
+                                            alignItems: "center",
+                                            textAlign: "center",
+                                            border: "1px solid #e2e8f0",
+                                            padding: "8px",
+                                            borderRadius: "6px",
+                                            backgroundColor: "#fafafa",
+                                            fontFamily: "sans-serif",
+                                            minWidth: "120px",
+                                            lineHeight: "1.3",
+                                          }}
+                                        >
+                                          <div
+                                            style={{
+                                              fontSize: "8px",
+                                              color: "green",
+                                              fontFamily: "monospace",
+                                              fontWeight: "bold",
+                                              marginBottom: "4px",
+                                            }}
+                                          >
+                                            [ĐÃ KÝ ĐIỆN TỬ]
+                                          </div>
+                                          <div
+                                            style={{
+                                              position: "relative",
+                                              height: "44px",
+                                              width: "90px",
+                                              display: "flex",
+                                              alignItems: "center",
+                                              justifyContent: "center",
+                                              background: "#ffffff",
+                                              border: "1px solid #cbd5e1",
+                                              borderRadius: "4px",
+                                              padding: "2px",
+                                              marginBottom: "4px",
+                                              marginLeft: "auto",
+                                              marginRight: "auto",
+                                            }}
+                                          >
+                                            <img
+                                              src={log.snapshot.signature}
+                                              alt="Signature"
+                                              style={{ maxHeight: "38px", maxWidth: "86px", display: "block" }}
+                                            />
+                                            {log.snapshot.stamp && (
+                                              <img
+                                                src={log.snapshot.stamp}
+                                                alt="Stamp"
+                                                style={{
+                                                  position: "absolute",
+                                                  right: "-10px",
+                                                  bottom: "-6px",
+                                                  maxHeight: "40px",
+                                                  maxWidth: "40px",
+                                                  opacity: 0.85,
+                                                  mixBlendMode: "multiply",
+                                                }}
+                                              />
+                                            )}
+                                          </div>
+                                          {showName && (
+                                            <div style={{ fontSize: "11px", fontWeight: "bold", color: "#1e293b" }}>
+                                              {log.snapshot.signerName || log.user?.fullName}
+                                            </div>
+                                          )}
+                                          {showRole && log.snapshot.signerRole && (
+                                            <div style={{ fontSize: "9px", color: "#64748b", marginTop: "1px" }}>
+                                              {log.snapshot.signerRole}
+                                            </div>
+                                          )}
+                                          {showDept && log.snapshot.signerDept && (
+                                            <div style={{ fontSize: "9px", color: "#64748b" }}>{log.snapshot.signerDept}</div>
+                                          )}
+                                          {showTime && log.snapshot.signingTime && (
+                                            <div style={{ fontSize: "8px", color: "#94a3b8", marginTop: "2px" }}>
+                                              {log.snapshot.signingTime}
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    }
+                                  })()
+                                ) : (
+                                  <Tag color="purple">{log.snapshot.signature}</Tag>
+                                )}
                               </div>
                             )}
                           </div>
@@ -1892,6 +2281,132 @@ export default function DashboardPortal() {
           )}
         </Drawer>
       </Layout>
+
+      <Modal
+        title="Duyệt nhanh hàng loạt nhiệm vụ"
+        open={isBatchApproveModalOpen}
+        onCancel={() => setIsBatchApproveModalOpen(false)}
+        onOk={handleBatchApproveSubmit}
+        confirmLoading={isBatchSubmitting}
+        okText="Đồng ý duyệt"
+        cancelText="Hủy"
+        destroyOnClose
+      >
+        <div style={{ marginTop: 12 }}>
+          <Paragraph>
+            Bạn đang thực hiện duyệt nhanh cho <strong>{selectedTaskIds.length}</strong> nhiệm vụ đã chọn cùng lúc.
+          </Paragraph>
+          <Form layout="vertical">
+            <Form.Item label="Ý kiến phê duyệt chung (Comment):" required>
+              <TextArea
+                rows={3}
+                value={batchComment}
+                onChange={(e) => setBatchComment(e.target.value)}
+                placeholder="Nhập nhận xét hoặc ý kiến duyệt chung cho tất cả các nhiệm vụ..."
+              />
+            </Form.Item>
+          </Form>
+        </div>
+      </Modal>
+
+      {selectedTask && sigTransitionId && (
+        <SignatureOtpModal
+          isOpen={isSignatureModalOpen}
+          onClose={() => {
+            setIsSignatureModalOpen(false);
+            setSigTransitionId(null);
+            setNextStepStepId(null);
+          }}
+          onConfirm={(sigData, otp, stamp, layout, sName, sRole, sDept, sTime, nextAssId) => {
+            if (sigTransitionId) {
+              executeWorkflowAction(
+                sigTransitionId,
+                sigActionLabel,
+                sigData,
+                otp,
+                stamp,
+                layout,
+                sName,
+                sRole,
+                sDept,
+                sTime,
+                nextAssId
+              );
+            }
+          }}
+          instanceId={selectedTask.instanceId}
+          transitionId={sigTransitionId}
+          actionLabel={sigActionLabel}
+          confirmLoading={workflowActionMutation.isPending}
+          nextStepStepId={nextStepStepId}
+        />
+      )}
+
+      {/* Modal chọn người duyệt tiếp theo (cho hành động không yêu cầu ký số nhưng bước tiếp theo là động) */}
+      <Modal
+        title={
+          <Space>
+            <UserOutlined style={{ color: "#1890ff" }} />
+            <span>Chọn người duyệt tiếp theo: {activeActionLabel}</span>
+          </Space>
+        }
+        open={isNextAssigneeModalOpen}
+        onCancel={() => {
+          setIsNextAssigneeModalOpen(false);
+          setActiveTransitionId(null);
+          setNextStepStepId(null);
+          setSelectedNextAssigneeId(undefined);
+        }}
+        onOk={async () => {
+          if (!selectedNextAssigneeId) {
+            message.warning("Vui lòng chọn người duyệt tiếp theo.");
+            return;
+          }
+          if (activeTransitionId) {
+            await executeWorkflowAction(
+              activeTransitionId,
+              activeActionLabel,
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              selectedNextAssigneeId
+            );
+            setIsNextAssigneeModalOpen(false);
+            setActiveTransitionId(null);
+            setNextStepStepId(null);
+            setSelectedNextAssigneeId(undefined);
+          }
+        }}
+        confirmLoading={workflowActionMutation.isPending}
+        okText="Xác nhận"
+        cancelText="Hủy"
+        destroyOnClose
+      >
+        <div style={{ marginTop: 12 }}>
+          <Paragraph type="secondary">
+            Bước tiếp theo trong quy trình yêu cầu bạn chọn đích danh người duyệt tiếp theo.
+          </Paragraph>
+          <Form layout="vertical">
+            <Form.Item label="Chọn người duyệt tiếp theo (Bắt buộc):" required>
+              <Select
+                placeholder="Chọn nhân sự duyệt tiếp theo..."
+                style={{ width: "100%" }}
+                value={selectedNextAssigneeId}
+                onChange={setSelectedNextAssigneeId}
+                options={nonSigCandidates.map((c: any) => ({
+                  value: c.id,
+                  label: `${c.fullName} (${c.email})`,
+                }))}
+              />
+            </Form.Item>
+          </Form>
+        </div>
+      </Modal>
     </AntdApp>
   );
 }

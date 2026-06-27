@@ -117,4 +117,40 @@ export class MailerService {
       throw error; // Ném lỗi để BullMQ kích hoạt Retry [1]
     }
   }
+
+  async sendOtpCode(
+    recipientEmail: string,
+    recipientName: string,
+    otpCode: string,
+    actionLabel: string,
+  ) {
+    try {
+      await this.transporter.sendMail({
+        from: `"BOS Platform" <${process.env.MAIL_FROM || 'no-reply@bos.com'}>`,
+        to: recipientEmail,
+        subject: `[BOS] Mã xác thực OTP cho hành động: ${actionLabel}`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; padding: 24px; color: #333;">
+            <h2 style="color: #0050b3; margin-top: 0; border-bottom: 2px solid #0050b3; padding-bottom: 10px;">Xác thực Ký duyệt Hồ sơ</h2>
+            <p>Chào <b>${recipientName}</b>,</p>
+            <p>Hệ thống ghi nhận bạn đang thực hiện hành động phê duyệt <b>"${actionLabel}"</b> yêu cầu chữ ký số điện tử.</p>
+            <p>Mã xác thực OTP của bạn là:</p>
+            <div style="text-align: center; margin: 24px 0;">
+              <span style="font-size: 32px; font-weight: bold; color: #0050b3; letter-spacing: 4px; background-color: #f0f5ff; padding: 10px 24px; border-radius: 4px; border: 1px dashed #adc6ff;">
+                ${otpCode}
+              </span>
+            </div>
+            <p style="color: #ff4d4f; font-size: 13px;"><b>* Lưu ý:</b> Mã xác thực này có hiệu lực trong vòng <b>2 phút</b> và chỉ sử dụng một lần duy nhất. Vui lòng không tiết lộ mã này cho bất kỳ ai.</p>
+            <hr style="border: 0; border-top: 1px solid #f0f0f0; margin: 24px 0;" />
+            <p style="font-size: 11px; color: #8c8c8c; text-align: center; margin-bottom: 0;">Đây là thư tự động gửi từ hệ thống BOS Platform. Vui lòng không trả lời thư này.</p>
+          </div>
+        `,
+      });
+      this.logger.log(`[Email Engine] Đã gửi mã OTP tới: ${recipientEmail}`);
+    } catch (error) {
+      this.logger.error(
+        `[Email Engine] Lỗi khi gửi mã OTP tới ${recipientEmail}: ${error.message}`,
+      );
+    }
+  }
 }

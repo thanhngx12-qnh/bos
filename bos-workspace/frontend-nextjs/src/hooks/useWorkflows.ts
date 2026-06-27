@@ -62,6 +62,21 @@ export function useWorkflowSteps(versionId: number | null) {
   });
 }
 
+// Gọi API lấy danh sách nhân sự ứng viên của một bước [1]
+export function useStepCandidates(stepId: number | null) {
+  return useQuery<any[]>({
+    queryKey: ["stepCandidates", stepId],
+    queryFn: async () => {
+      if (!stepId) return [];
+      const { data } = await api.get(
+        `/api/v1/workflow-pipeline/steps/${stepId}/candidates`,
+      );
+      return data;
+    },
+    enabled: !!stepId,
+  });
+}
+
 // Gọi API cập nhật cấu hình Ma trận Phân quyền của Bước duyệt trực tiếp vào DB [1]
 export function useUpdateStep() {
   const queryClient = useQueryClient();
@@ -270,6 +285,43 @@ export function useDeleteTransition() {
     },
   });
 }
+
+export interface WorkflowProgressStep {
+  id: number;
+  name: string;
+  stepType: string;
+  orderIndex: number;
+  status: "FUTURE" | "PENDING" | "COMPLETED" | "REJECTED";
+  logs: any[];
+  tasks: any[];
+}
+
+export interface WorkflowProgressResponse {
+  hasWorkflow: boolean;
+  instanceId?: number;
+  status?: string;
+  currentStepId?: number;
+  version?: {
+    id: number;
+    version: number;
+  };
+  steps?: WorkflowProgressStep[];
+}
+
+export function useRecordWorkflowProgress(recordId: number | null) {
+  return useQuery<WorkflowProgressResponse>({
+    queryKey: ["recordWorkflowProgress", recordId],
+    queryFn: async () => {
+      if (!recordId) return { hasWorkflow: false };
+      const { data } = await api.get(
+        `/api/v1/workflows/instances/record/${recordId}/progress`
+      );
+      return data;
+    },
+    enabled: !!recordId,
+  });
+}
+
 
 
 

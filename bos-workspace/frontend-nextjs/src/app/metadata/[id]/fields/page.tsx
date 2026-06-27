@@ -73,8 +73,11 @@ import { api } from "@/lib/axios";
 import WorkflowStepsController from "./components/WorkflowStepsController";
 import DragDropCanvas from "./components/DragDropCanvas";
 import ToolboxAndInspector from "./components/ToolboxAndInspector";
+import AutomationRulesManager from "./components/AutomationRulesManager";
+import PrintTemplateManager from "./components/PrintTemplateManager";
 import FormulaBuilder from "./components/FormulaBuilder";
 import VisualWorkflowCanvas from "./components/VisualWorkflowCanvas";
+import VersionHistoryManager from "./components/VersionHistoryManager";
 
 const { Header, Sider, Content } = Layout;
 const { Title, Paragraph, Text } = Typography;
@@ -114,6 +117,9 @@ interface InitValueInputProps {
   userOptions: any[];
   deptTreeData: any[];
   roleOptions: any[];
+  value?: any;
+  checked?: boolean;
+  onChange?: (val: any) => void;
 }
 
 const InitValueInput: React.FC<InitValueInputProps> = ({
@@ -123,6 +129,9 @@ const InitValueInput: React.FC<InitValueInputProps> = ({
   userOptions,
   deptTreeData,
   roleOptions,
+  value,
+  checked,
+  onChange,
 }) => {
   const currentChoices = Form.useWatch(choicesPath, form) || [];
   const choicesOptions = Array.isArray(currentChoices)
@@ -133,25 +142,27 @@ const InitValueInput: React.FC<InitValueInputProps> = ({
     case "TEXT":
     case "EMAIL":
     case "PHONE":
-      return <Input placeholder="Giá trị mặc định..." />;
+      return <Input value={value} onChange={onChange} placeholder="Giá trị mặc định..." />;
     case "TEXTAREA":
-      return <Input.TextArea rows={2} placeholder="Văn bản mặc định..." />;
+      return <Input.TextArea value={value} onChange={onChange} rows={2} placeholder="Văn bản mặc định..." />;
     case "NUMBER":
     case "DECIMAL":
     case "CURRENCY":
     case "PERCENTAGE":
-      return <InputNumber placeholder="Số mặc định..." style={{ width: "100%" }} />;
+      return <InputNumber value={value} onChange={onChange} placeholder="Số mặc định..." style={{ width: "100%" }} />;
     case "DATE":
-      return <DatePicker placeholder="Chọn ngày..." style={{ width: "100%" }} format="DD/MM/YYYY" />;
+      return <DatePicker value={value} onChange={onChange} placeholder="Chọn ngày..." style={{ width: "100%" }} format="DD/MM/YYYY" />;
     case "TIME":
-      return <Input placeholder="Ví dụ: 08:30" />;
+      return <Input value={value} onChange={onChange} placeholder="Ví dụ: 08:30" />;
     case "DATETIME":
-      return <DatePicker showTime placeholder="Chọn ngày & giờ..." style={{ width: "100%" }} format="DD/MM/YYYY HH:mm" />;
+      return <DatePicker showTime value={value} onChange={onChange} placeholder="Chọn ngày & giờ..." style={{ width: "100%" }} format="DD/MM/YYYY HH:mm" />;
     case "MONTH_YEAR":
-      return <DatePicker picker="month" placeholder="Chọn tháng/năm..." style={{ width: "100%" }} format="MM/YYYY" />;
+      return <DatePicker picker="month" value={value} onChange={onChange} placeholder="Chọn tháng/năm..." style={{ width: "100%" }} format="MM/YYYY" />;
     case "SELECT":
       return (
         <Select
+          value={value}
+          onChange={onChange}
           placeholder="Chọn giá trị mặc định..."
           options={choicesOptions}
           allowClear
@@ -161,16 +172,27 @@ const InitValueInput: React.FC<InitValueInputProps> = ({
       return (
         <Select
           mode="multiple"
+          value={value}
+          onChange={onChange}
           placeholder="Chọn các giá trị mặc định..."
           options={choicesOptions}
           allowClear
         />
       );
     case "CHECKBOX":
-      return <Checkbox>Mặc định checked (BẬT)</Checkbox>;
+      return (
+        <Checkbox
+          checked={checked}
+          onChange={(e) => onChange?.(e.target.checked)}
+        >
+          Mặc định checked (BẬT)
+        </Checkbox>
+      );
     case "USER_REF":
       return (
         <Select
+          value={value}
+          onChange={onChange}
           placeholder="Chọn nhân viên mặc định..."
           options={userOptions}
           allowClear
@@ -181,6 +203,8 @@ const InitValueInput: React.FC<InitValueInputProps> = ({
     case "DEPT_REF":
       return (
         <TreeSelect
+          value={value}
+          onChange={onChange}
           placeholder="Chọn phòng ban mặc định..."
           treeData={deptTreeData}
           allowClear
@@ -190,9 +214,13 @@ const InitValueInput: React.FC<InitValueInputProps> = ({
     case "ROLE_REF":
       return (
         <Select
+          value={value}
+          onChange={onChange}
           placeholder="Chọn vai trò mặc định..."
           options={roleOptions}
           allowClear
+          showSearch
+          filterOption={(input, opt) => String(opt?.label ?? "").toLowerCase().includes(input.toLowerCase())}
         />
       );
     default:
@@ -273,13 +301,15 @@ export default function WorkspaceContainerPage({
     onClick: (info: any) => {
       if (info.key === "logout") {
         handleLogout();
+      } else if (info.key === "profile") {
+        router.push("/profile");
       }
     },
   };
 
-  // Trạng thái liên kết đồng bộ 3 phân khu [1]
+  // Trạng thái liên kết đồng bộ 4 phân khu [1]
   const [activeStepId, setActiveStepId] = useState<number | null>(null);
-  const [activeTab, setActiveTab] = useState<"form" | "workflow">("form");
+  const [activeTab, setActiveTab] = useState<"form" | "workflow" | "automations" | "templates" | "history">("form");
   const [selectedField, setSelectedField] = useState<Field | null>(null);
   const [selectedVersionId, setSelectedVersionId] = useState<number | null>(null);
 
@@ -444,7 +474,7 @@ export default function WorkspaceContainerPage({
           : [],
         lookupEntityId: field.config?.options?.lookupEntityId,
         displayField: field.config?.options?.displayField || "",
-        formula: field.config?.options?.formula || "",
+        formula: field.config?.options?.formula || (field.config as any)?.formula || "",
         minLength: field.config?.options?.minLength,
         maxLength: field.config?.options?.maxLength,
         regexPattern: field.config?.options?.regexPattern || "",
@@ -878,6 +908,9 @@ export default function WorkspaceContainerPage({
                 options={[
                   { label: "Thiết kế Biểu mẫu (Form Schema)", value: "form", icon: <BuildOutlined /> },
                   { label: "Sơ đồ Quy trình (Workflow Canvas)", value: "workflow", icon: <PartitionOutlined /> },
+                  { label: "Quy tắc Tự động (Automations)", value: "automations", icon: <SettingOutlined /> },
+                  { label: "Mẫu in (Templates)", value: "templates", icon: <BankOutlined /> },
+                  { label: "Lịch sử Phiên bản (History)", value: "history", icon: <ClockCircleOutlined /> },
                 ]}
                 size="large"
                 style={{ borderRadius: "8px", padding: "4px" }}
@@ -932,7 +965,7 @@ export default function WorkspaceContainerPage({
                   />
                 </Col>
               </Row>
-            ) : (
+            ) : activeTab === "workflow" ? (
               <VisualWorkflowCanvas
                 entityId={entityIdNum}
                 entityName={activeEntity?.name || ""}
@@ -942,6 +975,20 @@ export default function WorkspaceContainerPage({
                 fields={fieldsQuery.data || []}
                 activeStep={activeStep}
                 setActiveStep={setActiveStep}
+              />
+            ) : activeTab === "automations" ? (
+              <AutomationRulesManager
+                entityId={entityIdNum}
+                fields={fieldsQuery.data || []}
+              />
+            ) : activeTab === "templates" ? (
+              <PrintTemplateManager
+                entityId={entityIdNum}
+                fields={fieldsQuery.data || []}
+              />
+            ) : (
+              <VersionHistoryManager
+                entityId={entityIdNum}
               />
             )}
 
@@ -1199,6 +1246,24 @@ export default function WorkspaceContainerPage({
                     rules={[{ required: true, message: "Nhập displayField" }]}
                   >
                     <Input placeholder="Ví dụ: display_name" />
+                  </Form.Item>
+                </Col>
+                <Col span={24}>
+                  <Form.Item
+                    name={["options", "filter", "status"]}
+                    label="Lọc theo trạng thái hồ sơ liên kết"
+                  >
+                    <Select
+                      mode="multiple"
+                      placeholder="Chọn trạng thái lọc (Mặc định: Tất cả)"
+                      allowClear
+                      options={[
+                        { value: "DRAFT", label: "Nháp (DRAFT)" },
+                        { value: "IN_PROGRESS", label: "Đang duyệt (IN_PROGRESS)" },
+                        { value: "COMPLETED", label: "Hoàn thành (COMPLETED)" },
+                        { value: "REJECTED", label: "Bị từ chối (REJECTED)" },
+                      ]}
+                    />
                   </Form.Item>
                 </Col>
               </>
@@ -1666,6 +1731,24 @@ export default function WorkspaceContainerPage({
                     rules={[{ required: true, message: "Nhập displayField" }]}
                   >
                     <Input placeholder="Ví dụ: display_name" />
+                  </Form.Item>
+                </Col>
+                <Col span={24}>
+                  <Form.Item
+                    name={["options", "filter", "status"]}
+                    label="Lọc theo trạng thái hồ sơ liên kết"
+                  >
+                    <Select
+                      mode="multiple"
+                      placeholder="Chọn trạng thái lọc (Mặc định: Tất cả)"
+                      allowClear
+                      options={[
+                        { value: "DRAFT", label: "Nháp (DRAFT)" },
+                        { value: "IN_PROGRESS", label: "Đang duyệt (IN_PROGRESS)" },
+                        { value: "COMPLETED", label: "Hoàn thành (COMPLETED)" },
+                        { value: "REJECTED", label: "Bị từ chối (REJECTED)" },
+                      ]}
+                    />
                   </Form.Item>
                 </Col>
               </>

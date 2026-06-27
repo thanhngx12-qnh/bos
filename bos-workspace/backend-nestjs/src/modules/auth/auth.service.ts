@@ -309,4 +309,20 @@ export class AuthService {
       user: userInfo,
     };
   }
+
+  async getMe(userId: number) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        role: true,
+        department: true,
+        tenant: true,
+      },
+    });
+    if (!user) {
+      throw new NotFoundException('Không tìm thấy tài khoản người dùng.');
+    }
+    const { password, ...userInfo } = user;
+    return userInfo;
+  }
 }

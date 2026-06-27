@@ -14,11 +14,11 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     const checkAuth = () => {
       if (typeof window !== "undefined") {
         const token = localStorage.getItem("bos_token");
-        const isAuthRoute = pathname.startsWith("/auth");
+        const isAuthRoute = pathname ? pathname.startsWith("/auth") : false;
 
         if (!token && !isAuthRoute) {
           setAuthorized(false);
-          router.replace("/auth/login");
+          window.location.replace("/auth/login");
         } else {
           setAuthorized(true);
         }
@@ -26,9 +26,9 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     };
 
     checkAuth();
-  }, [pathname, router]);
+  }, [pathname]);
 
-  const isAuthRoute = pathname.startsWith("/auth");
+  const isAuthRoute = pathname ? pathname.startsWith("/auth") : false;
 
   if (!authorized && !isAuthRoute) {
     return (

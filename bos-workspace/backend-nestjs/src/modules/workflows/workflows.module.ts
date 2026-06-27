@@ -1,18 +1,23 @@
-// File: src/modules/workflows/workflows.module.ts
 import { Module } from '@nestjs/common';
-import { BullModule } from '@nestjs/bullmq'; // <-- IMPORT
+import { BullModule } from '@nestjs/bullmq';
 import { WorkflowsService } from './workflows.service';
 import { WorkflowsController } from './workflows.controller';
-import { WebhookProcessor } from './processors/webhook.processor'; // <-- IMPORT WORKER
+import { WebhookProcessor } from './processors/webhook.processor';
+import { OutboxModule } from '../outbox/outbox.module';
+import { RedisModule } from '../redis/redis.module';
+import { MailerModule } from '../mailer/mailer.module';
 
 @Module({
   imports: [
-    // Đăng ký hàng đợi tên là webhook-queue cho Module này sử dụng
     BullModule.registerQueue({
       name: 'webhook-queue',
     }),
+    OutboxModule,
+    RedisModule,
+    MailerModule,
   ],
   controllers: [WorkflowsController],
-  providers: [WorkflowsService, WebhookProcessor], // Đăng ký Worker vào Providers
+  providers: [WorkflowsService, WebhookProcessor],
+  exports: [WorkflowsService],
 })
 export class WorkflowsModule {}

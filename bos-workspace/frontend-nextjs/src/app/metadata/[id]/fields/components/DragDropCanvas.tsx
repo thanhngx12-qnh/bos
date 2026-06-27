@@ -347,7 +347,7 @@ export default function DragDropCanvas({
             <CalculatorOutlined style={{ color: "#1890ff" }} />{" "}
             <Text type="secondary">
               Tự động tính:{" "}
-              {field.config?.options?.formula || "[Chưa lập công thức]"}
+              {field.config?.options?.formula || (field.config as any)?.formula || "[Chưa lập công thức]"}
             </Text>
           </div>
         );

@@ -99,3 +99,29 @@ export function useDeleteRecord() {
     },
   });
 }
+
+export interface RecordRevision {
+  id: number;
+  tenantId: number;
+  recordId: number;
+  userId: number;
+  patchData: Record<string, { old: any; new: any }>;
+  createdAt: string;
+  user: {
+    fullName: string;
+    email: string;
+  };
+}
+
+export function useRecordRevisions(recordId: number | null) {
+  return useQuery<RecordRevision[]>({
+    queryKey: ["recordRevisions", recordId],
+    queryFn: async () => {
+      if (!recordId) return [];
+      const { data } = await api.get(`/api/v1/records/${recordId}/revisions`);
+      return data || [];
+    },
+    enabled: !!recordId,
+  });
+}
+

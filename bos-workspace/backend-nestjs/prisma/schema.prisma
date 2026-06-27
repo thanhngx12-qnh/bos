@@ -43,6 +43,7 @@ model Tenant {
   departments      Department[]
   departmentClosure DepartmentClosure[]
   recordRevisions  RecordRevision[]
+  signatures       UserSignature[]
 
   @@map("tenants")
 }
@@ -109,6 +110,7 @@ model User {
   systemAuditLogs SystemAuditLog[]
   recordsCreated  Record[] @relation("recordsCreated")
   auditLogsActed  AuditLog[] @relation("auditLogsActed")
+  signatures      UserSignature[]
 
   @@unique([tenantId, id]) 
   @@unique([tenantId, email])
@@ -699,4 +701,22 @@ model Notification {
 
   @@index([userId, isRead])
   @@map("notifications")
+}
+
+model UserSignature {
+  id           Int      @id @default(autoincrement())
+  tenantId     Int      @map("tenant_id")
+  userId       Int      @map("user_id")
+  name         String   // Tên mẫu (e.g. "Chữ ký nháy", "Chữ ký chính", "Dấu Công ty A")
+  type         String   // "DRAW" | "IMAGE" | "STAMP"
+  signatureUrl String   @map("signature_url") // Chuỗi base64 hoặc link tệp ảnh S3/R2
+  isDefault    Boolean  @default(false) @map("is_default")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+  user         User     @relation(fields: [tenantId, userId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, userId, name])
+  @@map("user_signatures")
 }

@@ -34,6 +34,7 @@ import { SearchModule } from './modules/search/search.module';
 import { CoreEnginesModule } from './core/engines/core-engines.module';
 import { TasksModule } from './modules/tasks/tasks.module';
 import { AutomationModule } from './modules/automation/automation.module';
+import { BusinessCalendarModule } from './modules/business-calendar/business-calendar.module';
 
 @Module({
   imports: [
@@ -73,6 +74,7 @@ import { AutomationModule } from './modules/automation/automation.module';
     CoreEnginesModule,
     TasksModule,
     AutomationModule,
+    BusinessCalendarModule,
   ],
   providers: [
     {
