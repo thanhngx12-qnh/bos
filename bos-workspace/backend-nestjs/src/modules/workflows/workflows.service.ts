@@ -489,6 +489,24 @@ export class WorkflowsService {
         await this.redis.del(redisKey);
       }
 
+      // === BẢN VÁ: KIỂM TRA TÀI LIỆU ĐÍNH KÈM BẮT BUỘC (REQUIRED ATTACHMENTS) ===
+      const requiredAttachments = transLogic.requiredAttachments || [];
+      if (Array.isArray(requiredAttachments) && requiredAttachments.length > 0) {
+        const recordAttachments = await tx.attachment.findMany({
+          where: { recordId: instance.recordId } as any,
+        });
+        const attachedFileNames = recordAttachments.map(att => att.fileName.toLowerCase());
+        
+        for (const reqDoc of requiredAttachments) {
+          const matched = attachedFileNames.some(fileName => fileName.includes(reqDoc.toLowerCase()));
+          if (!matched) {
+            throw new BadRequestException(
+              `Hành động '${actionLabel}' yêu cầu bạn phải tải lên đầy đủ tài liệu: '${reqDoc}'. Vui lòng đính kèm file trước khi phê duyệt.`
+            );
+          }
+        }
+      }
+
       // === BẢN VÁ 1: KIỂM TRA ĐIỀU KIỆN CHUYỂN BƯỚC ===
       const isConditionMet = this.conditionEvaluator.evaluate(
         transition.conditionLogic,
