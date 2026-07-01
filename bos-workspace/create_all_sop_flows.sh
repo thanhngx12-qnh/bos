@@ -80,209 +80,140 @@ get_or_create_workflow() {
   echo "$workflow_id"
 }
 
-
 # ==============================================================================
-# 📦 QUY TRÌNH 2: KIỂM SOÁT XE KHU VỰC PA2 (BỆ SANG TẢI)
+# 📦 QUY TRÌNH I: PHIẾU GIAO VIỆC (TASK ASSIGNMENT)
 # ==============================================================================
 echo ""
 echo "============================================="
-echo "🚚 CẤU HÌNH QUY TRÌNH 2: XE BỆ SANG TẢI (PA2)"
+echo "📋 CẤU HÌNH QUY TRÌNH 1: PHIẾU GIAO VIỆC"
 echo "============================================="
 
-PA2_ID=$(get_or_create_entity "xe_ra_vao_pa2" "Xe Bệ Sang Tải (PA2)" "Kiểm soát phương tiện bốc xếp sang tải khu vực bệ PA2" "PA2-{YYYY}-{SEQ:5}" "Xe sang tải {bien_so_vn} / {bien_so_tq} ({RECORD_CODE})")
+GIAO_VIEC_ID=$(get_or_create_entity "phieu_giao_viec" "Phiếu Giao Việc" "Quản lý việc giao nhiệm vụ xuống phòng Lab" "GV-{YYYY}-{SEQ:5}" "Giao việc: {tieu_de_cong_viec} ({RECORD_CODE})")
 
-# Fields
-api_post "fields" "{\"entityId\": $PA2_ID, \"name\": \"Biển số Việt Nam\", \"code\": \"bien_so_vn\", \"type\": \"TEXT\", \"isRequired\": false, \"orderIndex\": 1}" > /dev/null
-api_post "fields" "{\"entityId\": $PA2_ID, \"name\": \"Biển số Trung Quốc\", \"code\": \"bien_so_tq\", \"type\": \"TEXT\", \"isRequired\": false, \"orderIndex\": 2}" > /dev/null
-api_post "fields" "{\"entityId\": $PA2_ID, \"name\": \"Chủ hàng\", \"code\": \"chu_hang\", \"type\": \"TEXT\", \"isRequired\": false, \"orderIndex\": 3}" > /dev/null
-api_post "fields" "{\"entityId\": $PA2_ID, \"name\": \"Loại hàng\", \"code\": \"loai_hang\", \"type\": \"TEXT\", \"isRequired\": false, \"orderIndex\": 4}" > /dev/null
-api_post "fields" "{\"entityId\": $PA2_ID, \"name\": \"Loại hình\", \"code\": \"loai_hinh\", \"type\": \"SELECT\", \"isRequired\": true, \"options\": {\"selectOptions\": [\"Nhập\", \"Xuất\"]}, \"orderIndex\": 5}" > /dev/null
-api_post "fields" "{\"entityId\": $PA2_ID, \"name\": \"Ghi chú\", \"code\": \"ghi_chu\", \"type\": \"TEXT\", \"isRequired\": false, \"orderIndex\": 6}" > /dev/null
-api_post "fields" "{\"entityId\": $PA2_ID, \"name\": \"Giờ vào\", \"code\": \"gio_vao\", \"type\": \"DATE_TIME\", \"isRequired\": true, \"orderIndex\": 7}" > /dev/null
-api_post "fields" "{\"entityId\": $PA2_ID, \"name\": \"Giờ ra\", \"code\": \"gio_ra\", \"type\": \"DATE_TIME\", \"isRequired\": false, \"orderIndex\": 8}" > /dev/null
+# Fields cho Phiếu Giao Việc (Nâng cấp)
+api_post "fields" "{\"entityId\": $GIAO_VIEC_ID, \"name\": \"Tiêu đề công việc\", \"code\": \"tieu_de_cong_viec\", \"type\": \"TEXT\", \"isRequired\": true, \"orderIndex\": 1}" > /dev/null
+api_post "fields" "{\"entityId\": $GIAO_VIEC_ID, \"name\": \"Người nhận việc (Nhiều người)\", \"code\": \"danh_sach_thuc_hien\", \"type\": \"MULTI_SELECT\", \"options\": {\"selectOptions\": [\"Nguyễn Văn A\", \"Trần Thị B\", \"Lê Văn C\", \"Phạm Văn D\"]}, \"isRequired\": true, \"orderIndex\": 2}" > /dev/null
+api_post "fields" "{\"entityId\": $GIAO_VIEC_ID, \"name\": \"Người liên quan (Theo dõi)\", \"code\": \"nguoi_lien_quan\", \"type\": \"MULTI_SELECT\", \"options\": {\"selectOptions\": [\"Trưởng Lab\", \"Ban Giám Đốc\", \"BP Kế hoạch\", \"BP Vật tư\"]}, \"isRequired\": false, \"orderIndex\": 3}" > /dev/null
+api_post "fields" "{\"entityId\": $GIAO_VIEC_ID, \"name\": \"Nội dung chi tiết\", \"code\": \"noi_dung_chi_tiet\", \"type\": \"TEXT\", \"isRequired\": false, \"orderIndex\": 4}" > /dev/null
+api_post "fields" "{\"entityId\": $GIAO_VIEC_ID, \"name\": \"Hạn hoàn thành\", \"code\": \"han_hoan_thanh\", \"type\": \"DATE_TIME\", \"isRequired\": true, \"orderIndex\": 5}" > /dev/null
+api_post "fields" "{\"entityId\": $GIAO_VIEC_ID, \"name\": \"Kết quả thực hiện\", \"code\": \"ket_qua_thuc_hien\", \"type\": \"TEXT\", \"isRequired\": false, \"orderIndex\": 6}" > /dev/null
 
-PA2_WF_ID=$(get_or_create_workflow "$PA2_ID" "Quy trình Bệ Sang Tải (PA2)" "Theo dõi các bước bốc xếp sang tải bệ bãi PA2")
+GV_WF_ID=$(get_or_create_workflow "$GIAO_VIEC_ID" "Quy trình Giao Việc" "Luồng luân chuyển và xác nhận phiếu giao việc")
 
-# Workflow steps
-S2_1=$(api_post "workflows/steps" "{\"workflowId\": $PA2_WF_ID, \"name\": \"Cổng Vào (An Ninh)\", \"type\": \"USER_TASK\", \"orderIndex\": 1, \"permissions\": {\"position\": {\"x\": 100, \"y\": 100}, \"bien_so_vn\": \"WRITE\", \"bien_so_tq\": \"WRITE\", \"chu_hang\": \"WRITE\", \"loai_hang\": \"WRITE\", \"loai_hinh\": \"WRITE\", \"gio_vao\": \"WRITE\", \"ghi_chu\": \"WRITE\"}}")
-S2_1_ID=$(echo "$S2_1" | jq -r '.id // empty' 2>/dev/null || true)
+# Các bước trong quy trình Giao Việc (Nâng cấp)
+S_GV_1=$(api_post "workflows/steps" "{\"workflowId\": $GV_WF_ID, \"name\": \"1. Khởi tạo & Giao việc\", \"type\": \"USER_TASK\", \"orderIndex\": 1, \"permissions\": {\"tieu_de_cong_viec\": \"WRITE\", \"danh_sach_thuc_hien\": \"WRITE\", \"nguoi_lien_quan\": \"WRITE\", \"noi_dung_chi_tiet\": \"WRITE\", \"han_hoan_thanh\": \"WRITE\"}}")
+S_GV_1_ID=$(echo "$S_GV_1" | jq -r '.id // empty' 2>/dev/null || true)
 
-S2_2=$(api_post "workflows/steps" "{\"workflowId\": $PA2_WF_ID, \"name\": \"Bệ Sang Tải (Điều Phối)\", \"type\": \"USER_TASK\", \"orderIndex\": 2, \"permissions\": {\"position\": {\"x\": 100, \"y\": 250}, \"bien_so_vn\": \"READ\", \"bien_so_tq\": \"READ\", \"chu_hang\": \"READ\", \"loai_hang\": \"READ\", \"loai_hinh\": \"READ\", \"gio_vao\": \"READ\", \"ghi_chu\": \"WRITE\"}}")
-S2_2_ID=$(echo "$S2_2" | jq -r '.id // empty' 2>/dev/null || true)
+S_GV_2=$(api_post "workflows/steps" "{\"workflowId\": $GV_WF_ID, \"name\": \"2. Thực hiện nhiệm vụ\", \"type\": \"USER_TASK\", \"orderIndex\": 2, \"permissions\": {\"tieu_de_cong_viec\": \"READ\", \"danh_sach_thuc_hien\": \"READ\", \"nguoi_lien_quan\": \"READ\", \"noi_dung_chi_tiet\": \"READ\", \"han_hoan_thanh\": \"READ\", \"ket_qua_thuc_hien\": \"WRITE\"}}")
+S_GV_2_ID=$(echo "$S_GV_2" | jq -r '.id // empty' 2>/dev/null || true)
 
-S2_3=$(api_post "workflows/steps" "{\"workflowId\": $PA2_WF_ID, \"name\": \"Cổng Ra (An Ninh)\", \"type\": \"USER_TASK\", \"orderIndex\": 3, \"permissions\": {\"position\": {\"x\": 100, \"y\": 400}, \"bien_so_vn\": \"READ\", \"bien_so_tq\": \"READ\", \"chu_hang\": \"READ\", \"loai_hang\": \"READ\", \"loai_hinh\": \"READ\", \"gio_vao\": \"READ\", \"gio_ra\": \"WRITE\", \"ghi_chu\": \"READ\"}}")
-S2_3_ID=$(echo "$S2_3" | jq -r '.id // empty' 2>/dev/null || true)
+S_GV_3=$(api_post "workflows/steps" "{\"workflowId\": $GV_WF_ID, \"name\": \"3. Phê duyệt công việc\", \"type\": \"USER_TASK\", \"orderIndex\": 3, \"permissions\": {\"tieu_de_cong_viec\": \"READ\", \"danh_sach_thuc_hien\": \"READ\", \"nguoi_lien_quan\": \"READ\", \"noi_dung_chi_tiet\": \"READ\", \"han_hoan_thanh\": \"READ\", \"ket_qua_thuc_hien\": \"READ\"}}")
+S_GV_3_ID=$(echo "$S_GV_3" | jq -r '.id // empty' 2>/dev/null || true)
 
-S2_TERM=$(api_post "workflows/steps" "{\"workflowId\": $PA2_WF_ID, \"name\": \"Hoàn tất\", \"type\": \"TERMINAL\", \"orderIndex\": 4, \"permissions\": {\"position\": {\"x\": 100, \"y\": 550}}}")
-S2_TERM_ID=$(echo "$S2_TERM" | jq -r '.id // empty' 2>/dev/null || true)
+S_GV_TERM=$(api_post "workflows/steps" "{\"workflowId\": $GV_WF_ID, \"name\": \"Hoàn tất\", \"type\": \"TERMINAL\", \"orderIndex\": 4}")
+S_GV_TERM_ID=$(echo "$S_GV_TERM" | jq -r '.id // empty' 2>/dev/null || true)
 
-S2_REJ=$(api_post "workflows/steps" "{\"workflowId\": $PA2_WF_ID, \"name\": \"Từ chối\", \"type\": \"REJECTED\", \"orderIndex\": 5, \"permissions\": {\"position\": {\"x\": 350, \"y\": 250}}}")
-S2_REJ_ID=$(echo "$S2_REJ" | jq -r '.id // empty' 2>/dev/null || true)
+S_GV_REJ=$(api_post "workflows/steps" "{\"workflowId\": $GV_WF_ID, \"name\": \"Từ chối/Làm lại\", \"type\": \"REJECTED\", \"orderIndex\": 5}")
+S_GV_REJ_ID=$(echo "$S_GV_REJ" | jq -r '.id // empty' 2>/dev/null || true)
 
-if [ -n "$S2_1_ID" ] && [ -n "$S2_2_ID" ]; then
-  api_post "workflows/transitions" "{\"workflowId\": $PA2_WF_ID, \"fromStepId\": $S2_1_ID, \"toStepId\": $S2_2_ID, \"name\": \"Vào bệ sang tải\"}" > /dev/null
-  api_post "workflows/transitions" "{\"workflowId\": $PA2_WF_ID, \"fromStepId\": $S2_2_ID, \"toStepId\": $S2_3_ID, \"name\": \"Sang tải xong, ra cổng\"}" > /dev/null
-  api_post "workflows/transitions" "{\"workflowId\": $PA2_WF_ID, \"fromStepId\": $S2_3_ID, \"toStepId\": $S2_TERM_ID, \"name\": \"Cho xe xuất bãi\"}" > /dev/null
-  api_post "workflows/transitions" "{\"workflowId\": $PA2_WF_ID, \"fromStepId\": $S2_2_ID, \"toStepId\": $S2_REJ_ID, \"name\": \"Từ chối/Hủy phiếu\"}" > /dev/null
-  api_post "workflows/$PA2_WF_ID/publish" "{\"description\": \"Publish PA2 Workflow\"}" > /dev/null
+if [ -n "$S_GV_1_ID" ] && [ -n "$S_GV_2_ID" ]; then
+  # Trạm 1 -> Trạm 2: Gửi yêu cầu bắt buộc đính kèm "Phiếu giao nhiệm vụ"
+  api_post "workflows/transitions" "{\"workflowId\": $GV_WF_ID, \"fromStepId\": $S_GV_1_ID, \"toStepId\": $S_GV_2_ID, \"name\": \"Gửi yêu cầu\", \"conditionLogic\": {\"actionLabel\": \"Trình giao việc\", \"requiredAttachments\": [\"Phieu giao nhiem vu\"]}}" > /dev/null
+  
+  # Trạm 2 -> Trạm 3: Báo cáo hoàn tất bắt buộc đính kèm "Báo cáo công việc"
+  api_post "workflows/transitions" "{\"workflowId\": $GV_WF_ID, \"fromStepId\": $S_GV_2_ID, \"toStepId\": $S_GV_3_ID, \"name\": \"Yêu cầu phê duyệt\", \"conditionLogic\": {\"actionLabel\": \"Báo cáo hoàn tất\", \"requiredAttachments\": [\"Bao cao cong viec\"]}}" > /dev/null
+  
+  # Trạm 3 -> Hoàn tất: Sếp duyệt kết quả bắt buộc đính kèm "Báo cáo đánh giá của Sếp" (nếu có) hoặc duyệt thường
+  api_post "workflows/transitions" "{\"workflowId\": $GV_WF_ID, \"fromStepId\": $S_GV_3_ID, \"toStepId\": $S_GV_TERM_ID, \"name\": \"Phê duyệt & Đóng việc\", \"conditionLogic\": {\"actionLabel\": \"Đồng ý nghiệm thu\"}}" > /dev/null
+  
+  # Trạm 3 -> Từ chối/Làm lại (nếu báo cáo chưa đạt yêu cầu)
+  api_post "workflows/transitions" "{\"workflowId\": $GV_WF_ID, \"fromStepId\": $S_GV_3_ID, \"toStepId\": $S_GV_REJ_ID, \"name\": \"Từ chối yêu cầu\", \"conditionLogic\": {\"actionLabel\": \"Yêu cầu làm lại\"}}" > /dev/null
+  
+  # Publish Workflow Giao việc
+  api_post "workflows/$GV_WF_ID/publish" "{\"description\": \"Publish Giao Viec Workflow\"}" > /dev/null
 fi
 
 
 # ==============================================================================
-# 📦 QUY TRÌNH 3: KIỂM SOÁT XE KHÁCH / CÔNG VỤ
+# 📦 QUY TRÌNH II: QUY TRÌNH THÍ NGHIỆM LẤY MẪU (6 BƯỚC)
 # ==============================================================================
 echo ""
 echo "============================================="
-echo "🚗 CẤU HÌNH QUY TRÌNH 3: XE KHÁCH / CÔNG VỤ"
+echo "🧪 CẤU HÌNH QUY TRÌNH 2: QUY TRÌNH THÍ NGHIỆM LẤY MẪU"
 echo "============================================="
 
-PA_GUEST_ID=$(get_or_create_entity "xe_khach_cong_vu" "Xe Khách / Công Vụ" "Kiểm soát phương tiện của BGĐ, Khách hàng, Đối tác ra vào" "PA-GUEST-{SEQ:4}" "Xe khách {bien_so_xe} ({RECORD_CODE})")
+THI_NGHIEM_ID=$(get_or_create_entity "quy_trinh_thi_nghiem" "Quy trình Thí nghiệm Lấy mẫu" "Quản lý luồng mẫu thí nghiệm qua 6 trạm dây chuyền" "LAB-{YYYY}-{SEQ:5}" "Hồ sơ mẫu: {ma_mau} ({RECORD_CODE})")
 
-api_post "fields" "{\"entityId\": $PA_GUEST_ID, \"name\": \"Biển số xe\", \"code\": \"bien_so_xe\", \"type\": \"TEXT\", \"isRequired\": true, \"orderIndex\": 1}" > /dev/null
-api_post "fields" "{\"entityId\": $PA_GUEST_ID, \"name\": \"Họ tên lái xe / Khách\", \"code\": \"ten_lai_xe\", \"type\": \"TEXT\", \"isRequired\": false, \"orderIndex\": 2}" > /dev/null
-api_post "fields" "{\"entityId\": $PA_GUEST_ID, \"name\": \"Mục đích vào bãi\", \"code\": \"muc_dich\", \"type\": \"TEXT\", \"isRequired\": false, \"orderIndex\": 3}" > /dev/null
-api_post "fields" "{\"entityId\": $PA_GUEST_ID, \"name\": \"Giờ vào\", \"code\": \"gio_vao\", \"type\": \"DATE_TIME\", \"isRequired\": true, \"orderIndex\": 4}" > /dev/null
-api_post "fields" "{\"entityId\": $PA_GUEST_ID, \"name\": \"Giờ ra\", \"code\": \"gio_ra\", \"type\": \"DATE_TIME\", \"isRequired\": false, \"orderIndex\": 5}" > /dev/null
+# Cấu hình các trường dữ liệu động (Fields)
+api_post "fields" "{\"entityId\": $THI_NGHIEM_ID, \"name\": \"Mã số mẫu thử\", \"code\": \"ma_mau\", \"type\": \"TEXT\", \"isRequired\": true, \"orderIndex\": 1}" > /dev/null
+api_post "fields" "{\"entityId\": $THI_NGHIEM_ID, \"name\": \"Mã hóa chất vật tư\", \"code\": \"hoa_chat_vattu\", \"type\": \"TEXT\", \"isRequired\": false, \"orderIndex\": 2}" > /dev/null
+api_post "fields" "{\"entityId\": $THI_NGHIEM_ID, \"name\": \"Thiết bị chạy mẫu\", \"code\": \"thiet_bi_chay\", \"type\": \"TEXT\", \"isRequired\": false, \"orderIndex\": 3}" > /dev/null
+api_post "fields" "{\"entityId\": $THI_NGHIEM_ID, \"name\": \"Nhân sự chạy mẫu\", \"code\": \"nguoi_chay_mau\", \"type\": \"TEXT\", \"isRequired\": false, \"orderIndex\": 4}" > /dev/null
+api_post "fields" "{\"entityId\": $THI_NGHIEM_ID, \"name\": \"Thời gian bắt đầu\", \"code\": \"thoi_gian_bat_dau\", \"type\": \"DATE_TIME\", \"isRequired\": false, \"orderIndex\": 5}" > /dev/null
+api_post "fields" "{\"entityId\": $THI_NGHIEM_ID, \"name\": \"Thời gian kết thúc\", \"code\": \"thoi_gian_ket_thuc\", \"type\": \"DATE_TIME\", \"isRequired\": false, \"orderIndex\": 6}" > /dev/null
+api_post "fields" "{\"entityId\": $THI_NGHIEM_ID, \"name\": \"Kết luận phân tích\", \"code\": \"ket_luan\", \"type\": \"TEXT\", \"isRequired\": false, \"orderIndex\": 7}" > /dev/null
 
-PA_GUEST_WF_ID=$(get_or_create_workflow "$PA_GUEST_ID" "Quy trình Xe Khách / Công vụ" "Quy trình giám sát xe công vụ/xe khách")
+LAB_WF_ID=$(get_or_create_workflow "$THI_NGHIEM_ID" "Quy trình Thí nghiệm Phòng Lab" "Kiểm soát quy trình dây chuyền 6 trạm của phòng thí nghiệm")
 
-S3_1=$(api_post "workflows/steps" "{\"workflowId\": $PA_GUEST_WF_ID, \"name\": \"Cổng Vào (An Ninh)\", \"type\": \"USER_TASK\", \"orderIndex\": 1, \"permissions\": {\"position\": {\"x\": 100, \"y\": 100}, \"bien_so_xe\": \"WRITE\", \"ten_lai_xe\": \"WRITE\", \"muc_dich\": \"WRITE\", \"gio_vao\": \"WRITE\"}}")
-S3_1_ID=$(echo "$S3_1" | jq -r '.id // empty' 2>/dev/null || true)
+# Cài đặt các bước trong Quy trình Thí nghiệm Phòng Lab
+# Trạm 1: Lấy mẫu
+S_LAB_1=$(api_post "workflows/steps" "{\"workflowId\": $LAB_WF_ID, \"name\": \"1. Lấy mẫu\", \"type\": \"USER_TASK\", \"orderIndex\": 1, \"permissions\": {\"ma_mau\": \"WRITE\"}}")
+S_LAB_1_ID=$(echo "$S_LAB_1" | jq -r '.id // empty' 2>/dev/null || true)
 
-S3_2=$(api_post "workflows/steps" "{\"workflowId\": $PA_GUEST_WF_ID, \"name\": \"Cổng Ra (An Ninh)\", \"type\": \"USER_TASK\", \"orderIndex\": 2, \"permissions\": {\"position\": {\"x\": 100, \"y\": 250}, \"bien_so_xe\": \"READ\", \"ten_lai_xe\": \"READ\", \"muc_dich\": \"READ\", \"gio_vao\": \"READ\", \"gio_ra\": \"WRITE\"}}")
-S3_2_ID=$(echo "$S3_2" | jq -r '.id // empty' 2>/dev/null || true)
+# Trạm 2: Đồng nhất sơ bộ
+S_LAB_2=$(api_post "workflows/steps" "{\"workflowId\": $LAB_WF_ID, \"name\": \"2. Đồng nhất sơ bộ\", \"type\": \"USER_TASK\", \"orderIndex\": 2, \"permissions\": {\"ma_mau\": \"READ\"}}")
+S_LAB_2_ID=$(echo "$S_LAB_2" | jq -r '.id // empty' 2>/dev/null || true)
 
-S3_TERM=$(api_post "workflows/steps" "{\"workflowId\": $PA_GUEST_WF_ID, \"name\": \"Hoàn tất\", \"type\": \"TERMINAL\", \"orderIndex\": 3, \"permissions\": {\"position\": {\"x\": 100, \"y\": 400}}}")
-S3_TERM_ID=$(echo "$S3_TERM" | jq -r '.id // empty' 2>/dev/null || true)
+# Trạm 3: Tách chiết
+S_LAB_3=$(api_post "workflows/steps" "{\"workflowId\": $LAB_WF_ID, \"name\": \"3. Tách chiết\", \"type\": \"USER_TASK\", \"orderIndex\": 3, \"permissions\": {\"ma_mau\": \"READ\", \"hoa_chat_vattu\": \"WRITE\"}}")
+S_LAB_3_ID=$(echo "$S_LAB_3" | jq -r '.id // empty' 2>/dev/null || true)
 
-if [ -n "$S3_1_ID" ] && [ -n "$S3_2_ID" ]; then
-  api_post "workflows/transitions" "{\"workflowId\": $PA_GUEST_WF_ID, \"fromStepId\": $S3_1_ID, \"toStepId\": $S3_2_ID, \"name\": \"Cho xe vào bãi\"}" > /dev/null
-  api_post "workflows/transitions" "{\"workflowId\": $PA_GUEST_WF_ID, \"fromStepId\": $S3_2_ID, \"toStepId\": $S3_TERM_ID, \"name\": \"Cho xe ra bãi\"}" > /dev/null
-  api_post "workflows/$PA_GUEST_WF_ID/publish" "{\"description\": \"Publish Guest Workflow\"}" > /dev/null
+# Trạm 4: Chạy máy
+S_LAB_4=$(api_post "workflows/steps" "{\"workflowId\": $LAB_WF_ID, \"name\": \"4. Chạy máy\", \"type\": \"USER_TASK\", \"orderIndex\": 4, \"permissions\": {\"ma_mau\": \"READ\", \"thiet_bi_chay\": \"WRITE\", \"nguoi_chay_mau\": \"WRITE\", \"thoi_gian_bat_dau\": \"WRITE\", \"thoi_gian_ket_thuc\": \"WRITE\"}}")
+S_LAB_4_ID=$(echo "$S_LAB_4" | jq -r '.id // empty' 2>/dev/null || true)
+
+# Trạm 5: Chất lượng
+S_LAB_5=$(api_post "workflows/steps" "{\"workflowId\": $LAB_WF_ID, \"name\": \"5. Chất lượng\", \"type\": \"USER_TASK\", \"orderIndex\": 5, \"permissions\": {\"ma_mau\": \"READ\", \"ket_luan\": \"WRITE\"}}")
+S_LAB_5_ID=$(echo "$S_LAB_5" | jq -r '.id // empty' 2>/dev/null || true)
+
+# Trạm 6: Lãnh đạo phê duyệt kết quả và in phiếu
+S_LAB_6=$(api_post "workflows/steps" "{\"workflowId\": $LAB_WF_ID, \"name\": \"6. Lãnh đạo phê duyệt\", \"type\": \"USER_TASK\", \"orderIndex\": 6, \"permissions\": {\"ma_mau\": \"READ\", \"ket_luan\": \"READ\"}}")
+S_LAB_6_ID=$(echo "$S_LAB_6" | jq -r '.id // empty' 2>/dev/null || true)
+
+# Trạm Hoàn tất
+S_LAB_TERM=$(api_post "workflows/steps" "{\"workflowId\": $LAB_WF_ID, \"name\": \"Hoàn tất\", \"type\": \"TERMINAL\", \"orderIndex\": 7}")
+S_LAB_TERM_ID=$(echo "$S_LAB_TERM" | jq -r '.id // empty' 2>/dev/null || true)
+
+if [ -n "$S_LAB_1_ID" ] && [ -n "$S_LAB_2_ID" ]; then
+  # 1. Lấy mẫu -> 2. Đồng nhất sơ bộ: Yêu cầu đính kèm "Biên bản lấy mẫu"
+  api_post "workflows/transitions" "{\"workflowId\": $LAB_WF_ID, \"fromStepId\": $S_LAB_1_ID, \"toStepId\": $S_LAB_2_ID, \"name\": \"Chuyển đồng nhất mẫu\", \"conditionLogic\": {\"actionLabel\": \"Xác nhận chuyển\", \"requiredAttachments\": [\"Bien ban lay mau\"]}}" > /dev/null
+  
+  # 2. Đồng nhất sơ bộ -> 3. Tách chiết: Yêu cầu đính kèm "Phiếu giao nhiệm vụ"
+  api_post "workflows/transitions" "{\"workflowId\": $LAB_WF_ID, \"fromStepId\": $S_LAB_2_ID, \"toStepId\": $S_LAB_3_ID, \"name\": \"Chuyển tách chiết\", \"conditionLogic\": {\"actionLabel\": \"Đồng nhất xong\", \"requiredAttachments\": [\"Phieu giao nhiem vu\"]}}" > /dev/null
+  
+  # 3. Tách chiết -> 4. Chạy máy: Yêu cầu đính kèm "Nhật ký thí nghiệm"
+  api_post "workflows/transitions" "{\"workflowId\": $LAB_WF_ID, \"fromStepId\": $S_LAB_3_ID, \"toStepId\": $S_LAB_4_ID, \"name\": \"Chuyển chạy máy\", \"conditionLogic\": {\"actionLabel\": \"Tách chiết xong\", \"requiredAttachments\": [\"Nhat ky thi nghiem\"]}}" > /dev/null
+  
+  # 4. Chạy máy -> 5. Chất lượng: Yêu cầu đính kèm "Hồ sơ quan trắc gốc"
+  api_post "workflows/transitions" "{\"workflowId\": $LAB_WF_ID, \"fromStepId\": $S_LAB_4_ID, \"toStepId\": $S_LAB_5_ID, \"name\": \"Gửi kiểm định chất lượng\", \"conditionLogic\": {\"actionLabel\": \"Hoàn thành chạy máy\", \"requiredAttachments\": [\"Ho so quan trac goc\"]}}" > /dev/null
+  
+  # 5. Chất lượng -> 6. Lãnh đạo phê duyệt: Yêu cầu đính kèm "Dự thảo báo cáo kết quả"
+  api_post "workflows/transitions" "{\"workflowId\": $LAB_WF_ID, \"fromStepId\": $S_LAB_5_ID, \"toStepId\": $S_LAB_6_ID, \"name\": \"Trình lãnh đạo\", \"conditionLogic\": {\"actionLabel\": \"Duyệt chất lượng\", \"requiredAttachments\": [\"Du thao bao cao ket qua\"]}}" > /dev/null
+  
+  # 6. Lãnh đạo phê duyệt -> Hoàn tất: Yêu cầu đính kèm "Báo cáo kết quả đóng dấu"
+  api_post "workflows/transitions" "{\"workflowId\": $LAB_WF_ID, \"fromStepId\": $S_LAB_6_ID, \"toStepId\": $S_LAB_TERM_ID, \"name\": \"Phát hành & In phiếu\", \"conditionLogic\": {\"actionLabel\": \"Ký duyệt & Đóng dấu\", \"requiredAttachments\": [\"Bao cao ket qua dong dau\"]}}" > /dev/null
+  
+  # Publish Workflow Lab
+  api_post "workflows/$LAB_WF_ID/publish" "{\"description\": \"Publish Laboratory Workflow\"}" > /dev/null
 fi
 
-
-# ==============================================================================
-# 📦 QUY TRÌNH 4: QUẢN LÝ KHO XE MỚI (WMS - PA3)
-# ==============================================================================
-echo ""
-echo "============================================="
-echo "🚙 CẤU HÌNH QUY TRÌNH 4: KHO XE MỚI PA3 (WMS)"
-echo "============================================="
-
-# 4.1. Lô Kế Hoạch
-PA3_PLAN_ID=$(get_or_create_entity "pa3_lo_nhap" "Kế hoạch Nhập PA3" "Lô kế hoạch nhập xe mới bãi PA3" "PA3-PLAN-{SEQ:4}" "Kế hoạch Lô {ma_lo} ({RECORD_CODE})")
-
-api_post "fields" "{\"entityId\": $PA3_PLAN_ID, \"name\": \"Mã lô\", \"code\": \"ma_lo\", \"type\": \"TEXT\", \"isRequired\": true, \"orderIndex\": 1}" > /dev/null
-api_post "fields" "{\"entityId\": $PA3_PLAN_ID, \"name\": \"Chủ hàng\", \"code\": \"chu_hang\", \"type\": \"TEXT\", \"isRequired\": true, \"orderIndex\": 2}" > /dev/null
-api_post "fields" "{\"entityId\": $PA3_PLAN_ID, \"name\": \"Loại xe\", \"code\": \"loai_xe\", \"type\": \"SELECT\", \"isRequired\": true, \"options\": {\"selectOptions\": [\"Sát xi\", \"Đầu kéo\"]}, \"orderIndex\": 3}" > /dev/null
-api_post "fields" "{\"entityId\": $PA3_PLAN_ID, \"name\": \"Kế hoạch nhập\", \"code\": \"ke_hoach_nhap\", \"type\": \"NUMBER\", \"isRequired\": true, \"orderIndex\": 4}" > /dev/null
-api_post "fields" "{\"entityId\": $PA3_PLAN_ID, \"name\": \"Ngày dự kiến\", \"code\": \"ngay_du_kien\", \"type\": \"DATE_TIME\", \"isRequired\": true, \"orderIndex\": 5}" > /dev/null
-
-# 4.2. Chi Tiết Nhập/Xuất Thực Tế (Cross-Table Validation)
-PA3_ACTUAL_ID=$(get_or_create_entity "pa3_chi_tiet_kho" "Nhật ký Kho PA3" "Ghi nhận Nhập/Xuất kho thực tế bãi PA3 đối chiếu Kế hoạch" "PA3-LOG-{SEQ:5}" "Nhật ký {ten_chuyen} ({RECORD_CODE})")
-
-api_post "fields" "{\"entityId\": $PA3_ACTUAL_ID, \"name\": \"Tên chuyến\", \"code\": \"ten_chuyen\", \"type\": \"TEXT\", \"isRequired\": true, \"orderIndex\": 1}" > /dev/null
-api_post "fields" "{\"entityId\": $PA3_ACTUAL_ID, \"name\": \"Liên kết lô kế hoạch\", \"code\": \"ma_lo_lk\", \"type\": \"NUMBER\", \"isRequired\": true, \"orderIndex\": 2}" > /dev/null
-
-# Ràng buộc số lượng nhập thực tế không được vượt quá số lượng lô kế hoạch
-VAL_CONFIG='{
-  "crossTableValidation": {
-    "lookupFieldCode": "ma_lo_lk",
-    "targetSumFieldCode": "ke_hoach_nhap",
-    "actualSumFieldCode": "sl_nhap",
-    "errorMessage": "Tổng số lượng nhập kho thực tế vượt quá định mức Kế hoạch nhập của Lô này!"
-  }
-}'
-api_post "fields" "{
-  \"entityId\": $PA3_ACTUAL_ID,
-  \"name\": \"Số lượng nhập\",
-  \"code\": \"sl_nhap\",
-  \"type\": \"NUMBER\",
-  \"isRequired\": false,
-  \"options\": $(echo "$VAL_CONFIG" | jq -c .),
-  \"orderIndex\": 3
-}" > /dev/null
-
-api_post "fields" "{\"entityId\": $PA3_ACTUAL_ID, \"name\": \"Số lượng xuất\", \"code\": \"sl_xuat\", \"type\": \"NUMBER\", \"isRequired\": false, \"orderIndex\": 4}" > /dev/null
-api_post "fields" "{\"entityId\": $PA3_ACTUAL_ID, \"name\": \"Ngày ghi nhận\", \"code\": \"ngay_ghi_nhan\", \"type\": \"DATE_TIME\", \"isRequired\": true, \"orderIndex\": 5}" > /dev/null
-
-
-# ==============================================================================
-# 🔌 ĐỐI SOÁT DỊCH VỤ CẮM ĐIỆN CONTAINER LẠNH (PA2/PA1)
-# ==============================================================================
-echo ""
-echo "============================================="
-echo "🔌 CẤU HÌNH QUY TRÌNH: DỊCH VỤ CẮM ĐIỆN CONT LẠNH"
-echo "============================================="
-
-CAM_DIEN_ID=$(get_or_create_entity "cam_dien_cont_lanh" "Cắm Điện Cont Lạnh" "Quản lý thời gian cắm/rút điện và tự động tính tiền cho container lạnh" "COLD-{YYYY}-{SEQ:5}" "Cắm cont {so_container} - Xe {bien_so_xe} ({RECORD_CODE})")
-
-api_post "fields" "{\"entityId\": $CAM_DIEN_ID, \"name\": \"Số container\", \"code\": \"so_container\", \"type\": \"TEXT\", \"isRequired\": true, \"orderIndex\": 1}" > /dev/null
-api_post "fields" "{\"entityId\": $CAM_DIEN_ID, \"name\": \"Biển số xe\", \"code\": \"bien_so_xe\", \"type\": \"TEXT\", \"isRequired\": true, \"orderIndex\": 2}" > /dev/null
-api_post "fields" "{\"entityId\": $CAM_DIEN_ID, \"name\": \"Chủ hàng\", \"code\": \"chu_hang\", \"type\": \"TEXT\", \"isRequired\": false, \"orderIndex\": 3}" > /dev/null
-api_post "fields" "{\"entityId\": $CAM_DIEN_ID, \"name\": \"Thời gian cắm\", \"code\": \"thoi_gian_cam\", \"type\": \"DATE_TIME\", \"isRequired\": true, \"orderIndex\": 4}" > /dev/null
-api_post "fields" "{\"entityId\": $CAM_DIEN_ID, \"name\": \"Thời gian rút\", \"code\": \"thoi_gian_rut\", \"type\": \"DATE_TIME\", \"isRequired\": false, \"orderIndex\": 5}" > /dev/null
-api_post "fields" "{\"entityId\": $CAM_DIEN_ID, \"name\": \"Đơn giá giờ\", \"code\": \"don_gia_gio\", \"type\": \"NUMBER\", \"isRequired\": false, \"options\": {\"defaultValue\": 100000}, \"orderIndex\": 6}" > /dev/null
-
-# Số giờ cắm điện = (thoi_gian_rut - thoi_gian_cam) / 3600000
-api_post "fields" "{
-  \"entityId\": $CAM_DIEN_ID,
-  \"name\": \"Số giờ cắm điện\",
-  \"code\": \"so_gio_cam\",
-  \"type\": \"FORMULA\",
-  \"isRequired\": false,
-  \"options\": {
-    \"formula\": \"(thoi_gian_rut - thoi_gian_cam) / 3600000\"
-  },
-  \"orderIndex\": 7
-}" > /dev/null
-
-# Thành tiền = so_gio_cam * don_gia_gio
-api_post "fields" "{
-  \"entityId\": $CAM_DIEN_ID,
-  \"name\": \"Thành tiền cắm cont\",
-  \"code\": \"thanh_tien\",
-  \"type\": \"FORMULA\",
-  \"isRequired\": false,
-  \"options\": {
-    \"formula\": \"so_gio_cam * don_gia_gio\"
-  },
-  \"orderIndex\": 8
-}" > /dev/null
-
-api_post "fields" "{\"entityId\": $CAM_DIEN_ID, \"name\": \"Hình thức thu\", \"code\": \"hinh_thuc_thu\", \"type\": \"SELECT\", \"isRequired\": false, \"options\": {\"selectOptions\": [\"Tiền mặt\", \"Chuyển khoản\"]}, \"orderIndex\": 9}" > /dev/null
-api_post "fields" "{\"entityId\": $CAM_DIEN_ID, \"name\": \"Tên lái xe\", \"code\": \"ten_lai_xe\", \"type\": \"TEXT\", \"isRequired\": false, \"orderIndex\": 10}" > /dev/null
-api_post "fields" "{\"entityId\": $CAM_DIEN_ID, \"name\": \"CCCD hoặc Mã số thuế\", \"code\": \"cccd_mst\", \"type\": \"TEXT\", \"isRequired\": false, \"orderIndex\": 11}" > /dev/null
-api_post "fields" "{\"entityId\": $CAM_DIEN_ID, \"name\": \"Địa chỉ\", \"code\": \"dia_chi\", \"type\": \"TEXT\", \"isRequired\": false, \"orderIndex\": 12}" > /dev/null
-
-
-CAM_DIEN_WF_ID=$(get_or_create_workflow "$CAM_DIEN_ID" "Quy trình Cắm điện Cont Lạnh" "Quy trình dịch vụ cắm điện container lạnh")
-
-S4_1=$(api_post "workflows/steps" "{\"workflowId\": $CAM_DIEN_WF_ID, \"name\": \"Chờ Cắm Điện\", \"type\": \"USER_TASK\", \"orderIndex\": 1, \"permissions\": {\"position\": {\"x\": 100, \"y\": 100}, \"so_container\": \"WRITE\", \"bien_so_xe\": \"WRITE\", \"chu_hang\": \"WRITE\", \"ten_lai_xe\": \"WRITE\", \"cccd_mst\": \"WRITE\", \"dia_chi\": \"WRITE\"}}")
-S4_1_ID=$(echo "$S4_1" | jq -r '.id // empty' 2>/dev/null || true)
-
-S4_2=$(api_post "workflows/steps" "{\"workflowId\": $CAM_DIEN_WF_ID, \"name\": \"Đang Cắm Điện\", \"type\": \"USER_TASK\", \"orderIndex\": 2, \"permissions\": {\"position\": {\"x\": 100, \"y\": 250}, \"so_container\": \"READ\", \"bien_so_xe\": \"READ\", \"chu_hang\": \"READ\", \"thoi_gian_cam\": \"WRITE\", \"don_gia_gio\": \"WRITE\"}}")
-S4_2_ID=$(echo "$S4_2" | jq -r '.id // empty' 2>/dev/null || true)
-
-S4_3=$(api_post "workflows/steps" "{\"workflowId\": $CAM_DIEN_WF_ID, \"name\": \"Chờ Rút Điện / Rút Điện\", \"type\": \"USER_TASK\", \"orderIndex\": 3, \"permissions\": {\"position\": {\"x\": 100, \"y\": 400}, \"so_container\": \"READ\", \"bien_so_xe\": \"READ\", \"thoi_gian_cam\": \"READ\", \"thoi_gian_rut\": \"WRITE\", \"so_gio_cam\": \"READ\", \"thanh_tien\": \"READ\"}}")
-S4_3_ID=$(echo "$S4_3" | jq -r '.id // empty' 2>/dev/null || true)
-
-S4_4=$(api_post "workflows/steps" "{\"workflowId\": $CAM_DIEN_WF_ID, \"name\": \"Thu Tiền / Xuất Bãi\", \"type\": \"USER_TASK\", \"orderIndex\": 4, \"permissions\": {\"position\": {\"x\": 100, \"y\": 550}, \"so_container\": \"READ\", \"bien_so_xe\": \"READ\", \"so_gio_cam\": \"READ\", \"thanh_tien\": \"READ\", \"hinh_thuc_thu\": \"WRITE\"}}")
-S4_4_ID=$(echo "$S4_4" | jq -r '.id // empty' 2>/dev/null || true)
-
-S4_TERM=$(api_post "workflows/steps" "{\"workflowId\": $CAM_DIEN_WF_ID, \"name\": \"Hoàn tất\", \"type\": \"TERMINAL\", \"orderIndex\": 5, \"permissions\": {\"position\": {\"x\": 100, \"y\": 700}}}")
-S4_TERM_ID=$(echo "$S4_TERM" | jq -r '.id // empty' 2>/dev/null || true)
-
-if [ -n "$S4_1_ID" ] && [ -n "$S4_2_ID" ]; then
-  api_post "workflows/transitions" "{\"workflowId\": $CAM_DIEN_WF_ID, \"fromStepId\": $S4_1_ID, \"toStepId\": $S4_2_ID, \"name\": \"Xác nhận cắm điện\"}" > /dev/null
-  api_post "workflows/transitions" "{\"workflowId\": $CAM_DIEN_WF_ID, \"fromStepId\": $S4_2_ID, \"toStepId\": $S4_3_ID, \"name\": \"Báo cáo hoàn tất cắm\"}" > /dev/null
-  api_post "workflows/transitions" "{\"workflowId\": $CAM_DIEN_WF_ID, \"fromStepId\": $S4_3_ID, \"toStepId\": $S4_4_ID, \"name\": \"Xác nhận rút điện\"}" > /dev/null
-  api_post "workflows/transitions" "{\"workflowId\": $CAM_DIEN_WF_ID, \"fromStepId\": $S4_4_ID, \"toStepId\": $S4_TERM_ID, \"name\": \"Xác nhận thu tiền\"}" > /dev/null
-  api_post "workflows/$CAM_DIEN_WF_ID/publish" "{\"description\": \"Publish Cold Container Workflow\"}" > /dev/null
-fi
-
-echo ""
-echo "============================================="
-echo "🎉 TẤT CẢ CÁC LUỒNG VẬN HÀNH SOP PHÚ ANH ĐÃ ĐƯỢC TẠO HOÀN CHỈNH BẰNG CURL!"
-echo "============================================="
+echo "🎉 THIẾT LẬP THÀNH CÔNG HAI QUY TRÌNH CHUYÊN NGHIỆP TRÊN DATABASE!"
+echo "--------------------------------------------------------------------------"
+echo "👉 CÁC TÀI LIỆU BẮT BUỘC RÀNG BUỘC KHI CHUYỂN BƯỚC DUYỆT:"
+echo "   - Bước 1 -> 2: Cần upload File có tên chứa cụm từ 'Bien ban lay mau'"
+echo "   - Bước 2 -> 3: Cần upload File có tên chứa cụm từ 'Phieu giao nhiem vu'"
+echo "   - Bước 3 -> 4: Cần upload File có tên chứa cụm từ 'Nhat ky thi nghiem'"
+echo "   - Bước 4 -> 5: Cần upload File có tên chứa cụm từ 'Ho so quan trac goc'"
+echo "   - Bước 5 -> 6: Cần upload File có tên chứa cụm từ 'Du thao bao cao ket qua'"
+echo "   - Bước 6 -> Hoàn tất: Cần upload File có tên chứa cụm từ 'Bao cao ket qua dong dau'"
+echo "--------------------------------------------------------------------------"
