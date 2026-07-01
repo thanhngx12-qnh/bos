@@ -49,10 +49,12 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   createSubscriptionObservable(channel: string): Observable<string> {
     return new Observable<string>((observer) => {
       // Mỗi kết nối SSE mở ra sẽ tạo riêng 1 subClient độc lập để an toàn dữ liệu
-      const subClient = new Redis({
-        host: process.env.REDIS_HOST || 'localhost',
-        port: Number(process.env.REDIS_PORT) || 6379,
-      });
+      const subClient = process.env.REDIS_URL
+        ? new Redis(process.env.REDIS_URL)
+        : new Redis({
+            host: process.env.REDIS_HOST || 'localhost',
+            port: Number(process.env.REDIS_PORT) || 6379,
+          });
 
       subClient.subscribe(channel);
 
