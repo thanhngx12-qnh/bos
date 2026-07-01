@@ -345,24 +345,43 @@ export class WorkflowsService {
     });
 
     // Bổ sung: Tự động chuyển bước nếu bước đầu tiên là SYSTEM_TASK
+    let currentStepForNotify = firstStep;
     if (firstStep.stepType === 'SYSTEM_TASK') {
       const autoTransition = await this.prisma.workflowTransition.findFirst({
         where: { fromStepId: firstStep.id } as any,
       });
       if (autoTransition) {
-        await this.handleSystemAutoTransition(
-          instance.id,
-          autoTransition.id,
-          'Tự động khởi tạo',
-          'Hệ thống tự động xử lý bước khởi tạo và chuyển sang bước tiếp theo.',
-        );
+        try {
+          await this.handleSystemAutoTransition(
+            instance.id,
+            autoTransition.id,
+            'Tự động khởi tạo',
+            'Hệ thống tự động xử lý bước khởi tạo và chuyển sang bước tiếp theo.',
+          );
+          // Tải lại instance để lấy currentStepId mới nhất
+          const refreshed = await this.prisma.workflowInstance.findFirst({
+            where: { id: instance.id } as any,
+          });
+          if (refreshed) {
+            instance.currentStepId = refreshed.currentStepId;
+          }
+          const currentStep = version.steps.find(
+            (s) => s.id === instance.currentStepId,
+          );
+          if (currentStep) {
+            currentStepForNotify = currentStep;
+          }
+        } catch (err) {
+          console.error(`[Workflow] Auto-transition SYSTEM_TASK thất bại:`, err);
+        }
       }
     }
 
+    // Lấy danh sách người được giao việc ở bước hiện tại (sau auto-transition)
     const actualTasks = await this.prisma.task.findMany({
       where: {
         instanceId: instance.id,
-        stepId: firstStep.id,
+        stepId: instance.currentStepId,
         status: 'PENDING',
       } as any,
     });
@@ -382,14 +401,14 @@ export class WorkflowsService {
       await this.notificationsService.createNotification(
         candidateId,
         'Yêu cầu phê duyệt mới',
-        `Phiếu đề xuất ${recordCode} vừa được trình ký bởi ${initiatorName} đang chờ bạn phê duyệt tại bước: ${firstStep.name}.`,
+        `Phiếu đề xuất ${recordCode} vừa được trình ký bởi ${initiatorName} đang chờ bạn phê duyệt tại bước: ${currentStepForNotify.name}.`,
         {
           emailJobName: 'send-new-approval-request',
           emailPayload: {
             recipientName: recipient?.fullName || 'Thành viên',
             recordCode,
             initiatorName,
-            stepName: firstStep.name,
+            stepName: currentStepForNotify.name,
           },
         },
       );
@@ -399,7 +418,7 @@ export class WorkflowsService {
       record.id,
       recordCode,
       'Theo dõi hồ sơ mới',
-      `Bạn được gắn thẻ là người liên quan trong hồ sơ ${recordCode} khởi tạo bởi ${initiatorName}. Trạng thái hiện tại: Chờ duyệt tại bước: ${firstStep.name}.`,
+      `Bạn được gắn thẻ là người liên quan trong hồ sơ ${recordCode} khởi tạo bởi ${initiatorName}. Trạng thái hiện tại: Chờ duyệt tại bước: ${currentStepForNotify.name}.`,
       candidateUsers,
     );
 
