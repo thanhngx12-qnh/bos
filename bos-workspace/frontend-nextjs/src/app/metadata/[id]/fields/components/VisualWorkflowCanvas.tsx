@@ -606,6 +606,7 @@ export default function VisualWorkflowCanvas({
         list.push({
           ...t,
           fromStepName: step.name,
+          fromStepType: step.stepType,
           toStepName: steps.find((s) => s.id === t.toStepId)?.name || `Bước #${t.toStepId}`,
         });
       });
@@ -620,10 +621,12 @@ export default function VisualWorkflowCanvas({
 
     const logic = transition.conditionLogic || {};
     const hasRules = Array.isArray(logic.rules) && logic.rules.length > 0;
+    const fromStep = steps.find((s) => s.id === transition.fromStepId);
+    const isSystemSrc = fromStep?.stepType === "SYSTEM_TASK";
     
     // Default form configuration
     transForm.setFieldsValue({
-      autoSkip: transition.autoSkip || false,
+      autoSkip: isSystemSrc ? true : (transition.autoSkip || false),
       operator: logic.operator || "AND",
       rules: hasRules ? logic.rules : (logic.field ? [logic] : []),
       actionLabel: logic.actionLabel || "",
@@ -637,11 +640,19 @@ export default function VisualWorkflowCanvas({
   const handleTransitionFormSubmit = (values: any) => {
     if (!selectedTransition || !versionId) return;
 
+    const fromStep = steps.find((s) => s.id === selectedTransition.fromStepId);
+    const isSystemSrc = fromStep?.stepType === "SYSTEM_TASK";
+
     let conditionLogic: any = {};
     const rules = (values.rules || []).filter((r: any) => r && r.field);
 
-    if (rules.length === 1) {
-      // Single leaf condition logic
+    if (isSystemSrc) {
+      conditionLogic = rules.length > 0
+        ? (rules.length === 1
+            ? { field: rules[0].field, operator: rules[0].operator, value: rules[0].value }
+            : { operator: values.operator || "AND", rules: rules.map((r: any) => ({ field: r.field, operator: r.operator, value: r.value })) })
+        : {};
+    } else if (rules.length === 1) {
       conditionLogic = {
         field: rules[0].field,
         operator: rules[0].operator,
@@ -650,7 +661,6 @@ export default function VisualWorkflowCanvas({
         requiresSignature: !!values.requiresSignature,
       };
     } else if (rules.length > 1) {
-      // Multiple nested logic rules
       conditionLogic = {
         operator: values.operator || "AND",
         rules: rules.map((r: any) => ({
@@ -662,7 +672,6 @@ export default function VisualWorkflowCanvas({
         requiresSignature: !!values.requiresSignature,
       };
     } else {
-      // No condition rules, just action label and signature config
       conditionLogic = {
         actionLabel: values.actionLabel || "",
         requiresSignature: !!values.requiresSignature,
@@ -674,7 +683,7 @@ export default function VisualWorkflowCanvas({
         id: selectedTransition.id,
         versionId,
         payload: {
-          autoSkip: values.autoSkip || false,
+          autoSkip: isSystemSrc ? true : (values.autoSkip || false),
           conditionLogic,
         },
       },
@@ -1171,7 +1180,11 @@ export default function VisualWorkflowCanvas({
         destroyOnClose
         width={550}
       >
-        {selectedTransition && (
+        {selectedTransition && (() => {
+          const fromStep = steps.find((s) => s.id === selectedTransition.fromStepId);
+          const isSystemSrc = fromStep?.stepType === "SYSTEM_TASK";
+          
+          return (
           <Form
             form={transForm}
             layout="vertical"
@@ -1183,6 +1196,9 @@ export default function VisualWorkflowCanvas({
               <div>
                 <span style={{ color: "#64748b" }}>Bước đi: </span>
                 <span style={{ fontWeight: 600, color: "#1e293b" }}>{selectedTransition.fromStepName}</span>
+                {isSystemSrc && (
+                  <Tag color="geekblue" style={{ marginLeft: 8, fontSize: 10 }}>SYSTEM_TASK</Tag>
+                )}
               </div>
               <div style={{ color: "#3b82f6", fontWeight: "bold" }}>➔</div>
               <div>
@@ -1191,29 +1207,40 @@ export default function VisualWorkflowCanvas({
               </div>
             </div>
 
+            {isSystemSrc && (
+              <div style={{ padding: "8px 12px", backgroundColor: "#f0f5ff", border: "1px solid #d6e4ff", borderRadius: 6, marginBottom: 16, fontSize: 13, color: "#1d39c4" }}>
+                <InfoCircleOutlined style={{ marginRight: 6 }} />
+                Bước nguồn là <strong>SYSTEM_TASK</strong> — luôn tự động chuyển tiếp. Không cần nhãn nút, chữ ký, hay người duyệt.
+              </div>
+            )}
+
             <Form.Item name="autoSkip" valuePropName="checked" style={{ marginBottom: "16px" }}>
-              <Checkbox>
+              <Checkbox disabled={isSystemSrc}>
                 Tự động bỏ qua bước này (Auto Skip) nếu thỏa mãn điều kiện logic bên dưới
               </Checkbox>
             </Form.Item>
 
-            <Form.Item
-              name="actionLabel"
-              label="Nhãn của nút bấm (Tên hành động)"
-              extra="Tên nút bấm hiển thị cho người duyệt (ví dụ: 'Phê duyệt', 'Đồng ý', 'Chuyển kế toán'). Để trống mặc định là 'Phê duyệt'."
-            >
-              <Input placeholder="Ví dụ: Đồng ý, Xác nhận..." />
-            </Form.Item>
+            {!isSystemSrc && (
+              <>
+                <Form.Item
+                  name="actionLabel"
+                  label="Nhãn của nút bấm (Tên hành động)"
+                  extra="Tên nút bấm hiển thị cho người duyệt (ví dụ: 'Phê duyệt', 'Đồng ý', 'Chuyển kế toán'). Để trống mặc định là 'Phê duyệt'."
+                >
+                  <Input placeholder="Ví dụ: Đồng ý, Xác nhận..." />
+                </Form.Item>
 
-            <Form.Item
-              name="requiresSignature"
-              valuePropName="checked"
-              style={{ marginBottom: "16px" }}
-            >
-              <Checkbox>
-                Yêu cầu Chữ ký số / Chữ ký điện tử (OTP & Vẽ chữ ký) khi bấm nút này
-              </Checkbox>
-            </Form.Item>
+                <Form.Item
+                  name="requiresSignature"
+                  valuePropName="checked"
+                  style={{ marginBottom: "16px" }}
+                >
+                  <Checkbox>
+                    Yêu cầu Chữ ký số / Chữ ký điện tử (OTP & Vẽ chữ ký) khi bấm nút này
+                  </Checkbox>
+                </Form.Item>
+              </>
+            )}
 
             <Divider style={{ margin: "12px 0" }}>Điều kiện kích hoạt nhánh</Divider>
 
@@ -1344,7 +1371,8 @@ export default function VisualWorkflowCanvas({
               </Space>
             </div>
           </Form>
-        )}
+        );
+      })()}
       </Modal>
 
       {/* Modal Thêm mới / Cập nhật Bước duyệt */}
