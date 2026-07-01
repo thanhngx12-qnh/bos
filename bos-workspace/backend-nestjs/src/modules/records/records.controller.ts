@@ -155,8 +155,8 @@ export class RecordsController {
 
   @Delete(':id')
   @ApiOperation({ summary: 'Xóa bản ghi' })
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.recordsService.remove(id);
+  remove(@Request() req, @Param('id', ParseIntPipe) id: number) {
+    return this.recordsService.remove(id, req.user?.userType);
   }
 
   @Get(':id/revisions')

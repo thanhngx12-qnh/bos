@@ -610,18 +610,25 @@ export class RecordsService {
     });
   }
 
-  async remove(id: number) {
+  async remove(id: number, userType?: string) {
     const currentRecord = await this.findOne(id);
     const activeInstance = await this.prisma.workflowInstance.findFirst({
       where: { recordId: id, status: 'IN_PROGRESS' } as any,
     });
-    if (activeInstance) {
+    if (activeInstance && userType !== 'SUPER_ADMIN') {
       throw new BadRequestException(
         'Không thể xóa bản ghi vì nó đang trong một luồng quy trình đang chạy.',
       );
     }
 
     return this.prisma.$transaction(async (tx) => {
+      if (activeInstance && userType === 'SUPER_ADMIN') {
+        await tx.task.deleteMany({ where: { instanceId: activeInstance.id } as any });
+        await tx.workflowLog.deleteMany({ where: { instanceId: activeInstance.id } as any });
+        await tx.workflowParticipant.deleteMany({ where: { instanceId: activeInstance.id } as any });
+        await tx.workflowInstance.delete({ where: { id: activeInstance.id } as any });
+      }
+
       const deletedRecord = await tx.record.delete({ where: { id } as any });
       const store = tenantContext.getStore();
       const tenantId = store?.tenantId || currentRecord?.tenantId || 0;

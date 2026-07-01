@@ -84,16 +84,20 @@ export class EntitiesService {
     return updated;
   }
 
-  async remove(id: number) {
+  async remove(id: number, userType?: string) {
     await this.findOne(id);
 
     const hasRecords = await this.prisma.record.findFirst({
       where: { entityId: id } as any,
     });
-    if (hasRecords) {
+    if (hasRecords && userType !== 'SUPER_ADMIN') {
       throw new BadRequestException(
         'Không thể xóa: Thực thể đã phát sinh dữ liệu.',
       );
+    }
+
+    if (hasRecords && userType === 'SUPER_ADMIN') {
+      await this.clearEntityData(id);
     }
 
     const deleted = await this.prisma.entity.delete({ where: { id } as any });
@@ -101,6 +105,92 @@ export class EntitiesService {
     const cacheKey = this.getCacheKey(id);
     await this.redis.del(cacheKey);
     return deleted;
+  }
+
+  private async clearEntityData(entityId: number) {
+    return this.prisma.$transaction(async (tx) => {
+      const records = await tx.record.findMany({
+        where: { entityId } as any,
+        select: { id: true },
+      });
+      const recordIds = records.map((r: any) => r.id);
+
+      if (recordIds.length > 0) {
+        const instances = await tx.workflowInstance.findMany({
+          where: { recordId: { in: recordIds } } as any,
+          select: { id: true },
+        });
+        const instanceIds = instances.map((i: any) => i.id);
+
+        if (instanceIds.length > 0) {
+          await tx.workflowLog.deleteMany({ where: { instanceId: { in: instanceIds } } as any });
+          await tx.workflowParticipant.deleteMany({ where: { instanceId: { in: instanceIds } } as any });
+          await tx.workflowInstance.deleteMany({ where: { id: { in: instanceIds } } as any });
+        }
+
+        await tx.recordRelation.deleteMany({ where: { sourceRecordId: { in: recordIds } } as any });
+        await tx.recordRelation.deleteMany({ where: { targetRecordId: { in: recordIds } } as any });
+        await tx.record.deleteMany({ where: { id: { in: recordIds } } as any });
+      }
+
+      const workflows = await tx.workflow.findMany({
+        where: { entityId } as any,
+        select: { id: true },
+      });
+      const workflowIds = workflows.map((w: any) => w.id);
+      if (workflowIds.length > 0) {
+        const versionIds = (
+          await tx.workflowVersion.findMany({
+            where: { workflowId: { in: workflowIds } } as any,
+            select: { id: true },
+          })
+        ).map((v: any) => v.id);
+        if (versionIds.length > 0) {
+          const stepIds = (
+            await tx.workflowStep.findMany({
+              where: { versionId: { in: versionIds } } as any,
+              select: { id: true },
+            })
+          ).map((s: any) => s.id);
+          if (stepIds.length > 0) {
+            await tx.workflowTransition.deleteMany({
+              where: { OR: [{ fromStepId: { in: stepIds } }, { toStepId: { in: stepIds } }] } as any,
+            });
+          }
+        }
+        await tx.workflow.deleteMany({ where: { id: { in: workflowIds } } as any });
+      }
+
+      await tx.webhookEndpoint.deleteMany({ where: { entityId } } as any);
+      await tx.printTemplate.deleteMany({ where: { entityId } } as any);
+      await tx.relationDefinition.deleteMany({
+        where: { OR: [{ sourceEntityId: entityId }, { targetEntityId: entityId }] } as any,
+      });
+      await tx.entityVersion.deleteMany({ where: { entityId } } as any);
+    });
+  }
+
+  async clearAllData() {
+    const entities = await this.prisma.entity.findMany({
+      select: { id: true },
+    });
+    const entityIds = entities.map((e: any) => e.id);
+    if (entityIds.length === 0) return { deleted: 0 };
+
+    for (const id of entityIds) {
+      await this.clearEntityData(id);
+    }
+
+    const store = tenantContext.getStore();
+    const tenantId = store?.tenantId;
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.fieldRegistry.deleteMany({ where: { tenantId } } as any);
+      await tx.entity.deleteMany({ where: { id: { in: entityIds } } as any });
+      await tx.sequenceCounter.deleteMany({ where: { tenantId } } as any);
+    });
+
+    return { deleted: entityIds.length };
   }
 
   async findVersions(tenantId: number, entityId: number) {
