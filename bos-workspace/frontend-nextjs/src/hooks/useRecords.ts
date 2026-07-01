@@ -127,3 +127,15 @@ export function useRecordRevisions(recordId: number | null) {
   });
 }
 
+export function useRecordDetail(id: number | null) {
+  return useQuery<RecordData>({
+    queryKey: ["recordDetail", id],
+    queryFn: async () => {
+      if (!id) throw new Error("ID không hợp lệ");
+      const { data } = await api.get<RecordData>(`/api/v1/records/${id}`);
+      return data;
+    },
+    enabled: !!id,
+  });
+}
+

@@ -7,7 +7,7 @@ export interface UserSignature {
   tenantId: number;
   userId: number;
   name: string;
-  type: "DRAW" | "IMAGE" | "STAMP";
+  type: "DRAW" | "IMAGE" | "STAMP" | "TEXT";
   signatureUrl: string;
   isDefault: boolean;
   createdAt: string;
@@ -16,7 +16,7 @@ export interface UserSignature {
 
 export interface CreateSignaturePayload {
   name: string;
-  type: "DRAW" | "IMAGE" | "STAMP";
+  type: "DRAW" | "IMAGE" | "STAMP" | "TEXT";
   signatureUrl: string; // Base64 representation
 }
 

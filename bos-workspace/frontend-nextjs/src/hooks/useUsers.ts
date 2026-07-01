@@ -66,3 +66,12 @@ export function useDeleteUser() {
     },
   });
 }
+
+export function useResetUserPassword() {
+  return useMutation({
+    mutationFn: async ({ id, password }: { id: number; password: string }) => {
+      const { data } = await api.patch(`/api/v1/users/${id}/reset-password`, { password });
+      return data;
+    },
+  });
+}

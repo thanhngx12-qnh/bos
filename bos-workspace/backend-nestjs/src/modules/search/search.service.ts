@@ -59,4 +59,57 @@ export class SearchService {
       );
     }
   }
+
+  async search(tenantId: number, query: string, limit = 10): Promise<any[]> {
+    if (!query || !query.trim()) return [];
+
+    const formattedQuery = query
+      .trim()
+      .split(/\s+/)
+      .filter((q) => q.length > 0)
+      .map((q) => `${q}:*`)
+      .join(' & ');
+
+    if (!formattedQuery) return [];
+
+    try {
+      const results: any[] = await this.prisma.$queryRawUnsafe(
+        `SELECT 
+          sd.id,
+          sd.record_id as "recordId",
+          sd.entity_id as "entityId",
+          sd.title,
+          sd.search_data as "searchData",
+          ts_rank(sd.search_vector, to_tsquery('simple', $1)) as rank
+        FROM search_documents sd
+        WHERE sd.tenant_id = $2
+          AND sd.search_vector @@ to_tsquery('simple', $1)
+        ORDER BY rank DESC
+        LIMIT $3`,
+        formattedQuery,
+        tenantId,
+        limit,
+      );
+      return results;
+    } catch (err) {
+      this.logger.error(`[Search Service] Full-text search error`, err);
+      return this.prisma.searchDocument.findMany({
+        where: {
+          tenantId,
+          OR: [
+            { title: { contains: query, mode: 'insensitive' } },
+            { content: { contains: query, mode: 'insensitive' } },
+          ],
+        },
+        select: {
+          id: true,
+          recordId: true,
+          entityId: true,
+          title: true,
+          searchData: true,
+        },
+        take: limit,
+      });
+    }
+  }
 }

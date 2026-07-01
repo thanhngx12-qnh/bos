@@ -65,6 +65,15 @@ export class UsersController {
     return this.usersService.update(id, dto);
   }
 
+  @Patch(':id/reset-password')
+  @ApiOperation({ summary: 'Đặt lại mật khẩu cho thành viên' })
+  resetPassword(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { password: string },
+  ) {
+    return this.usersService.resetPassword(id, body.password);
+  }
+
   @Delete(':id')
   @ApiOperation({ summary: 'Xóa tài khoản' })
   remove(@Param('id', ParseIntPipe) id: number) {

@@ -54,6 +54,7 @@ import { Entity } from "@/hooks/useEntities";
 import { useDepartmentTree } from "@/hooks/useDepartments";
 import { useUsers } from "@/hooks/useUsers";
 import { useRoles } from "@/hooks/useRoles";
+import { useWorkflows, useWorkflowSteps } from "@/hooks/useWorkflows";
 import FormulaBuilder from "./FormulaBuilder";
 
 const { Text, Paragraph } = Typography;
@@ -201,6 +202,14 @@ export default function ToolboxAndInspector({
   const watchedType = Form.useWatch("type", form);
   const watchedLookupEntityId = Form.useWatch(["options", "lookupEntityId"], form);
   const { data: lookupFieldsData = [] } = useFields(watchedLookupEntityId || null);
+
+  // Truy vấn lấy danh sách các bước duyệt của thực thể liên kết phục vụ cho việc lọc
+  const workflowsQuery = useWorkflows(watchedLookupEntityId || null);
+  const activeWorkflow = workflowsQuery.data?.data?.[0];
+  const activeVersionId = activeWorkflow?.versions?.find((v: any) => v.status === "PUBLISHED")?.id || activeWorkflow?.versions?.[0]?.id || null;
+  const workflowStepsQuery = useWorkflowSteps(activeVersionId);
+  const workflowSteps = workflowStepsQuery.data || [];
+
   const [activeTab, setActiveTab] = React.useState("toolbox");
 
   // Gọi các API hooks phục vụ cho việc nhập và hiển thị dropdown tham chiếu/cơ cấu tổ chức
@@ -251,7 +260,11 @@ export default function ToolboxAndInspector({
             ? selectedField.config.options.choices.split(",").map((s: string) => s.trim()).filter(Boolean)
             : [],
           lookupEntityId: selectedField.config?.options?.lookupEntityId,
-          displayField: selectedField.config?.options?.displayField || "",
+          displayField: Array.isArray(selectedField.config?.options?.displayField)
+            ? selectedField.config.options.displayField
+            : typeof selectedField.config?.options?.displayField === "string" && selectedField.config.options.displayField
+            ? selectedField.config.options.displayField.split(",").map((s: string) => s.trim()).filter(Boolean)
+            : [],
           formula: selectedField.config?.options?.formula || "",
           minLength: selectedField.config?.options?.minLength,
           maxLength: selectedField.config?.options?.maxLength,
@@ -676,11 +689,12 @@ export default function ToolboxAndInspector({
                     </Form.Item>
                     <Form.Item
                       name={["options", "displayField"]}
-                      label="Cột hiển thị nhãn"
-                      rules={[{ required: true, message: "Chọn trường hiển thị" }]}
+                      label="Cột hiển thị nhãn (Chọn và ghép nhiều cột)"
+                      rules={[{ required: true, message: "Chọn ít nhất một trường hiển thị" }]}
                     >
                       <Select
-                        placeholder="Chọn trường hiển thị..."
+                        mode="multiple"
+                        placeholder="Chọn các trường hiển thị..."
                         showSearch
                         filterOption={(input, opt) => String(opt?.label ?? "").toLowerCase().includes(input.toLowerCase())}
                         options={[
@@ -707,6 +721,20 @@ export default function ToolboxAndInspector({
                           { value: "COMPLETED", label: "Hoàn thành (COMPLETED)" },
                           { value: "REJECTED", label: "Bị từ chối (REJECTED)" },
                         ]}
+                      />
+                    </Form.Item>
+                    <Form.Item
+                      name={["options", "filter", "currentStepId"]}
+                      label="Lọc theo bước quy trình hiện tại"
+                    >
+                      <Select
+                        placeholder="Chọn bước quy trình để lọc (Mặc định: Tất cả)"
+                        allowClear
+                        loading={workflowStepsQuery.isLoading}
+                        options={workflowSteps.map((step) => ({
+                          value: step.id,
+                          label: `${step.name} (${step.stepType})`,
+                        }))}
                       />
                     </Form.Item>
                   </>

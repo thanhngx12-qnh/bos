@@ -7,23 +7,36 @@ import { CreateSignatureDto } from './dto/create-signature.dto';
 export class UserSignaturesService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private async getActualTenantId(userId: number): Promise<number> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { tenantId: true },
+    });
+    if (!user) {
+      throw new NotFoundException('Không tìm thấy người dùng.');
+    }
+    return user.tenantId;
+  }
+
   async findAll(tenantId: number, userId: number) {
+    const actualTenantId = await this.getActualTenantId(userId);
     return this.prisma.userSignature.findMany({
-      where: { tenantId, userId } as any,
+      where: { tenantId: actualTenantId, userId } as any,
       orderBy: { id: 'asc' } as any,
     });
   }
 
   async create(tenantId: number, userId: number, dto: CreateSignatureDto) {
+    const actualTenantId = await this.getActualTenantId(userId);
     const existing = await this.prisma.userSignature.findFirst({
-      where: { tenantId, userId, name: dto.name } as any,
+      where: { tenantId: actualTenantId, userId, name: dto.name } as any,
     });
     if (existing) {
       throw new ConflictException(`Mẫu chữ ký/con dấu với tên "${dto.name}" đã tồn tại.`);
     }
 
     const count = await this.prisma.userSignature.count({
-      where: { tenantId, userId } as any,
+      where: { tenantId: actualTenantId, userId } as any,
     });
 
     // If first signature, make it default
@@ -31,7 +44,7 @@ export class UserSignaturesService {
 
     return this.prisma.userSignature.create({
       data: {
-        tenantId,
+        tenantId: actualTenantId,
         userId,
         name: dto.name,
         type: dto.type,
@@ -42,8 +55,9 @@ export class UserSignaturesService {
   }
 
   async setDefault(tenantId: number, userId: number, signatureId: number) {
+    const actualTenantId = await this.getActualTenantId(userId);
     const signature = await this.prisma.userSignature.findFirst({
-      where: { id: signatureId, tenantId, userId } as any,
+      where: { id: signatureId, tenantId: actualTenantId, userId } as any,
     });
     if (!signature) {
       throw new NotFoundException('Không tìm thấy mẫu chữ ký yêu cầu.');
@@ -52,7 +66,7 @@ export class UserSignaturesService {
     return this.prisma.$transaction(async (tx) => {
       // Set all other signatures to non-default
       await tx.userSignature.updateMany({
-        where: { tenantId, userId, id: { not: signatureId } } as any,
+        where: { tenantId: actualTenantId, userId, id: { not: signatureId } } as any,
         data: { isDefault: false } as any,
       });
 
@@ -65,8 +79,9 @@ export class UserSignaturesService {
   }
 
   async remove(tenantId: number, userId: number, signatureId: number) {
+    const actualTenantId = await this.getActualTenantId(userId);
     const signature = await this.prisma.userSignature.findFirst({
-      where: { id: signatureId, tenantId, userId } as any,
+      where: { id: signatureId, tenantId: actualTenantId, userId } as any,
     });
     if (!signature) {
       throw new NotFoundException('Không tìm thấy mẫu chữ ký yêu cầu.');
@@ -80,7 +95,7 @@ export class UserSignaturesService {
       // If we deleted the default one, set another one as default if exists
       if (signature.isDefault) {
         const nextSig = await tx.userSignature.findFirst({
-          where: { tenantId, userId } as any,
+          where: { tenantId: actualTenantId, userId } as any,
           orderBy: { id: 'asc' } as any,
         });
         if (nextSig) {

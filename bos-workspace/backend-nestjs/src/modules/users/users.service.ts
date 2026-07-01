@@ -111,6 +111,26 @@ export class UsersService {
     return result;
   }
 
+  async resetPassword(id: number, newPassword: string) {
+    const user = await this.prisma.user.findFirst({
+      where: { id } as any,
+    });
+    if (!user) {
+      throw new NotFoundException('Không tìm thấy người dùng.');
+    }
+
+    const saltRounds = 10;
+    const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
+
+    // Đồng bộ mật khẩu trên toàn bộ các doanh nghiệp liên kết với email này
+    await this.prisma.user.updateMany({
+      where: { email: user.email },
+      data: { password: hashedPassword },
+    });
+
+    return { message: 'Đổi mật khẩu thành công!' };
+  }
+
   async findByEmailForAuth(email: string) {
     return this.prisma.user.findFirst({
       where: { email },

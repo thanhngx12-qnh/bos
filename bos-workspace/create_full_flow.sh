@@ -258,6 +258,20 @@ api_post "fields" "{
   \"orderIndex\": 9
 }" > /dev/null
 
+# 3.10. Phân loại đề xuất (SELECT, isRequired: true)
+echo "   -> Phân loại đề xuất"
+api_post "fields" "{
+  \"entityId\": $ENTITY_ID,
+  \"name\": \"Phân loại đề xuất\",
+  \"code\": \"proposal_type\",
+  \"type\": \"SELECT\",
+  \"isRequired\": true,
+  \"options\": {
+    \"selectOptions\": [\"Công cụ dụng cụ\", \"Tiêu hao\", \"Sửa chữa cải tạo lớn\", \"Khác\"]
+  },
+  \"orderIndex\": 10
+}" > /dev/null
+
 echo "✅ Đã cấu hình xong tất cả các trường dữ liệu động!"
 
 echo ""
@@ -268,7 +282,7 @@ echo "============================================="
 WORKFLOW_DATA="{
   \"entityId\": $ENTITY_ID,
   \"name\": \"Quy trình Phê duyệt Thanh toán\",
-  \"description\": \"Tự động định tuyến hồ sơ dựa trên Tổng tiền đề xuất (>50M duyệt 3 cấp, <=50M duyệt 2 cấp).\"
+  \"description\": \"Tự động định tuyến hồ sơ dựa trên Tổng tiền & Phân loại đề xuất (Công cụ dụng cụ/Tiêu hao kết thúc ở PTGD, Sửa chữa cải tạo lớn đi tiếp lên TGĐ).\"
 }"
 
 WORKFLOW_RESPONSE=$(api_post "workflows" "$WORKFLOW_DATA")
@@ -312,27 +326,37 @@ echo "📍 Tạo Trạm: Trưởng phòng Tài chính phê duyệt"
 STEP2_RESP=$(create_step "Trưởng phòng Tài chính phê duyệt" "USER_TASK" 2 "{\"candidateUsers\": [$USER_ID]}")
 STEP2_ID=$(echo "$STEP2_RESP" | jq '.id')
 
-# 5.3. Bước Router: Cổng định tuyến (USER_TASK với Auto-Skip)
-echo "📍 Tạo Trạm: Cổng định tuyến (Auto Route Gate)"
-STEP_ROUTER_RESP=$(create_step "Cổng định tuyến" "USER_TASK" 3 "{\"candidateUsers\": [$USER_ID]}")
-STEP_ROUTER_ID=$(echo "$STEP_ROUTER_RESP" | jq '.id')
+# 5.3. Bước Router 1: Cổng định tuyến 1 (USER_TASK với Auto-Skip)
+echo "📍 Tạo Trạm: Cổng định tuyến 1 (Auto Route 1)"
+STEP_ROUTER1_RESP=$(create_step "Cổng định tuyến 1" "USER_TASK" 3 "{\"candidateUsers\": [$USER_ID]}")
+STEP_ROUTER1_ID=$(echo "$STEP_ROUTER1_RESP" | jq '.id')
 
-# 5.4. Bước 3: Giám đốc phê duyệt (USER_TASK)
-echo "📍 Tạo Trạm: Giám đốc phê duyệt"
-STEP3_RESP=$(create_step "Giám đốc phê duyệt" "USER_TASK" 4 "{\"candidateUsers\": [$USER_ID]}")
-STEP3_ID=$(echo "$STEP3_RESP" | jq '.id')
+# 5.4. Bước 3: Phó Tổng Giám đốc phê duyệt (USER_TASK)
+echo "📍 Tạo Trạm: Phó Tổng Giám đốc phê duyệt"
+STEP_PTGD_RESP=$(create_step "Phó Tổng Giám đốc phê duyệt" "USER_TASK" 4 "{\"candidateUsers\": [$USER_ID]}")
+STEP_PTGD_ID=$(echo "$STEP_PTGD_RESP" | jq '.id')
 
-# 5.5. Bước 4: Hoàn tất (SYSTEM_TASK)
+# 5.5. Bước Router PTGD: Cổng định tuyến PTGD (USER_TASK với Auto-Skip)
+echo "📍 Tạo Trạm: Cổng định tuyến PTGD (Auto Route PTGD)"
+STEP_ROUTER_PTGD_RESP=$(create_step "Cổng định tuyến PTGD" "USER_TASK" 5 "{\"candidateUsers\": [$USER_ID]}")
+STEP_ROUTER_PTGD_ID=$(echo "$STEP_ROUTER_PTGD_RESP" | jq '.id')
+
+# 5.6. Bước 4: Tổng Giám đốc phê duyệt (USER_TASK)
+echo "📍 Tạo Trạm: Tổng Giám đốc phê duyệt"
+STEP_TGD_RESP=$(create_step "Tổng Giám đốc phê duyệt" "USER_TASK" 6 "{\"candidateUsers\": [$USER_ID]}")
+STEP_TGD_ID=$(echo "$STEP_TGD_RESP" | jq '.id')
+
+# 5.7. Bước 5: Hoàn tất (SYSTEM_TASK)
 echo "📍 Tạo Trạm: Hoàn tất (Terminal)"
-STEP4_RESP=$(create_step "Hoàn tất" "SYSTEM_TASK" 5 "{}")
-STEP4_ID=$(echo "$STEP4_RESP" | jq '.id')
+STEP_COMPLETE_RESP=$(create_step "Hoàn tất" "SYSTEM_TASK" 7 "{}")
+STEP_COMPLETE_ID=$(echo "$STEP_COMPLETE_RESP" | jq '.id')
 
-# 5.6. Bước 5: Từ chối hồ sơ (SYSTEM_TASK)
+# 5.8. Bước 6: Từ chối hồ sơ (SYSTEM_TASK)
 echo "📍 Tạo Trạm: Từ chối hồ sơ (Terminal Rejection)"
-STEP5_RESP=$(create_step "Từ chối hồ sơ" "SYSTEM_TASK" 6 "{}")
-STEP5_ID=$(echo "$STEP5_RESP" | jq '.id')
+STEP_REJECT_RESP=$(create_step "Từ chối hồ sơ" "SYSTEM_TASK" 8 "{}")
+STEP_REJECT_ID=$(echo "$STEP_REJECT_RESP" | jq '.id')
 
-echo "✅ Đã tạo xong tất cả 6 bước duyệt."
+echo "✅ Đã tạo xong tất cả các bước duyệt."
 
 echo ""
 echo "============================================="
@@ -357,38 +381,90 @@ echo "🔗 Liên kết: Soát xét -> Trưởng phòng"
 create_transition "$STEP1_ID" "$STEP2_ID" false '{"actionLabel": "Soát xét OK"}' > /dev/null
 
 echo "🔗 Liên kết: Soát xét -> Từ chối"
-create_transition "$STEP1_ID" "$STEP5_ID" false '{"actionLabel": "Không phê duyệt (Từ chối)"}' > /dev/null
+create_transition "$STEP1_ID" "$STEP_REJECT_ID" false '{"actionLabel": "Không phê duyệt (Từ chối)"}' > /dev/null
 
 # --- NHÁNH 2: Trưởng phòng (Step 2) ---
-echo "🔗 Liên kết: Trưởng phòng -> Cổng định tuyến"
-create_transition "$STEP2_ID" "$STEP_ROUTER_ID" false '{"actionLabel": "Trưởng phòng duyệt"}' > /dev/null
+echo "🔗 Liên kết: Trưởng phòng -> Cổng định tuyến 1"
+create_transition "$STEP2_ID" "$STEP_ROUTER1_ID" false '{"actionLabel": "Trưởng phòng duyệt"}' > /dev/null
 
 echo "🔗 Liên kết: Trưởng phòng -> Từ chối"
-create_transition "$STEP2_ID" "$STEP5_ID" false '{"actionLabel": "Trưởng phòng từ chối"}' > /dev/null
+create_transition "$STEP2_ID" "$STEP_REJECT_ID" false '{"actionLabel": "Trưởng phòng từ chối"}' > /dev/null
 
-# --- NHÁNH 3: Cổng định tuyến Auto Route (Step Router) ---
-echo "🔗 Cấu hình rẽ nhánh thông minh: Cổng định tuyến -> Giám đốc (>50M)"
-create_transition "$STEP_ROUTER_ID" "$STEP3_ID" true '{
-  "actionLabel": "Chuyển tiếp Giám đốc (>50M)",
-  "field": "total_payment",
-  "operator": ">",
-  "value": 50000000
+# --- NHÁNH 3: Cổng định tuyến 1 ---
+echo "🔗 Cổng định tuyến 1 -> PTGD (Nếu là Sửa chữa cải tạo lớn)"
+create_transition "$STEP_ROUTER1_ID" "$STEP_PTGD_ID" true '{
+  "actionLabel": "PTGD duyệt (Cải tạo lớn)",
+  "rules": {
+    "field": "proposal_type",
+    "operator": "==",
+    "value": "Sửa chữa cải tạo lớn"
+  }
 }' > /dev/null
 
-echo "🔗 Cấu hình rẽ nhánh thông minh: Cổng định tuyến -> Hoàn tất (<=50M)"
-create_transition "$STEP_ROUTER_ID" "$STEP4_ID" true '{
-  "actionLabel": "Tự động hoàn tất (<=50M)",
-  "field": "total_payment",
-  "operator": "<=",
-  "value": 50000000
+echo "🔗 Cổng định tuyến 1 -> PTGD (Nếu > 50M)"
+create_transition "$STEP_ROUTER1_ID" "$STEP_PTGD_ID" true '{
+  "actionLabel": "PTGD duyệt (>50M)",
+  "rules": {
+    "field": "total_payment",
+    "operator": ">",
+    "value": 50000000
+  }
 }' > /dev/null
 
-# --- NHÁNH 4: Giám đốc (Step 3) ---
-echo "🔗 Liên kết: Giám đốc -> Hoàn tất"
-create_transition "$STEP3_ID" "$STEP4_ID" false '{"actionLabel": "Giám đốc Phê duyệt"}' > /dev/null
+echo "🔗 Cổng định tuyến 1 -> Hoàn tất (Nếu <= 50M và không phải cải tạo lớn)"
+create_transition "$STEP_ROUTER1_ID" "$STEP_COMPLETE_ID" true '{
+  "actionLabel": "Hoàn tất (<=50M)",
+  "rules": {
+    "field": "total_payment",
+    "operator": "<=",
+    "value": 50000000
+  }
+}' > /dev/null
 
-echo "🔗 Liên kết: Giám đốc -> Từ chối"
-create_transition "$STEP3_ID" "$STEP5_ID" false '{"actionLabel": "Giám đốc từ chối"}' > /dev/null
+# --- NHÁNH 4: Phó Tổng Giám đốc (PTGD) ---
+echo "🔗 Liên kết: PTGD -> Cổng định tuyến PTGD"
+create_transition "$STEP_PTGD_ID" "$STEP_ROUTER_PTGD_ID" false '{"actionLabel": "PTGD phê duyệt"}' > /dev/null
+
+echo "🔗 Liên kết: PTGD -> Từ chối"
+create_transition "$STEP_PTGD_ID" "$STEP_REJECT_ID" false '{"actionLabel": "PTGD từ chối"}' > /dev/null
+
+# --- NHÁNH 5: Cổng định tuyến PTGD ---
+echo "🔗 Cổng định tuyến PTGD -> Hoàn tất (Nếu là Công cụ dụng cụ)"
+create_transition "$STEP_ROUTER_PTGD_ID" "$STEP_COMPLETE_ID" true '{
+  "actionLabel": "Kết thúc tại PTGD (CCDC)",
+  "rules": {
+    "field": "proposal_type",
+    "operator": "==",
+    "value": "Công cụ dụng cụ"
+  }
+}' > /dev/null
+
+echo "🔗 Cổng định tuyến PTGD -> Hoàn tất (Nếu là Tiêu hao)"
+create_transition "$STEP_ROUTER_PTGD_ID" "$STEP_COMPLETE_ID" true '{
+  "actionLabel": "Kết thúc tại PTGD (Tiêu hao)",
+  "rules": {
+    "field": "proposal_type",
+    "operator": "==",
+    "value": "Tiêu hao"
+  }
+}' > /dev/null
+
+echo "🔗 Cổng định tuyến PTGD -> TGĐ (Mặc định cho các trường hợp khác)"
+create_transition "$STEP_ROUTER_PTGD_ID" "$STEP_TGD_ID" true '{
+  "actionLabel": "Chuyển tiếp TGĐ",
+  "rules": {
+    "field": "total_payment",
+    "operator": ">=",
+    "value": 0
+  }
+}' > /dev/null
+
+# --- NHÁNH 6: Tổng Giám đốc (TGĐ) ---
+echo "🔗 Liên kết: TGĐ -> Hoàn tất"
+create_transition "$STEP_TGD_ID" "$STEP_COMPLETE_ID" false '{"actionLabel": "TGĐ Phê duyệt"}' > /dev/null
+
+echo "🔗 Liên kết: TGĐ -> Từ chối"
+create_transition "$STEP_TGD_ID" "$STEP_REJECT_ID" false '{"actionLabel": "TGĐ từ chối"}' > /dev/null
 
 echo "✅ Đã tạo các đường dẫn định tuyến và rẽ nhánh thông minh thành công."
 
@@ -405,7 +481,10 @@ echo "👉 Hướng dẫn test trực quan:"
 echo "1. Mở trang: http://localhost:3002/records"
 echo "2. Chọn biểu mẫu: 'Đề xuất Thanh toán Đơn hàng'"
 echo "3. Nhấn 'Nộp hồ sơ mới'."
-echo "4. Test các tính năng:"
+echo "4. Phân loại đề xuất:"
+echo "   - Chọn 'Công cụ dụng cụ' hoặc 'Tiêu hao' -> Duyệt tới cấp PTGD là tự động hoàn tất."
+echo "   - Chọn 'Sửa chữa cải tạo lớn' -> Luôn chuyển tiếp lên cấp TGĐ phê duyệt."
+echo "5. Test các tính năng:"
 echo "   - Chọn 'Chuyển khoản' -> Sẽ hiện ra 2 ô 'Số tài khoản' và 'Ngân hàng'."
 echo "   - Tích chọn 'Có hợp đồng đính kèm' -> Sẽ bắt buộc phải nhập 'Số hợp đồng'."
 echo "   - Ở bảng Danh sách sản phẩm, nhấn '+' để thêm dòng:"

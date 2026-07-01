@@ -153,4 +153,35 @@ export class MailerService {
       );
     }
   }
+
+  async sendForgotPasswordOtp(recipientEmail: string, otpCode: string) {
+    try {
+      await this.transporter.sendMail({
+        from: `"BOS Platform" <${process.env.MAIL_FROM || 'no-reply@bos.com'}>`,
+        to: recipientEmail,
+        subject: `[BOS] Khôi phục mật khẩu tài khoản`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; padding: 24px; color: #333;">
+            <h2 style="color: #0050b3; margin-top: 0; border-bottom: 2px solid #0050b3; padding-bottom: 10px;">Khôi phục Mật khẩu Tài khoản</h2>
+            <p>Xin chào,</p>
+            <p>Hệ thống ghi nhận yêu cầu khôi phục mật khẩu cho tài khoản liên kết với địa chỉ email này.</p>
+            <p>Mã OTP xác thực khôi phục mật khẩu của bạn là:</p>
+            <div style="text-align: center; margin: 24px 0;">
+              <span style="font-size: 32px; font-weight: bold; color: #0050b3; letter-spacing: 4px; background-color: #f0f5ff; padding: 10px 24px; border-radius: 4px; border: 1px dashed #adc6ff;">
+                ${otpCode}
+              </span>
+            </div>
+            <p style="color: #ff4d4f; font-size: 13px;"><b>* Lưu ý:</b> Mã OTP này có hiệu lực trong vòng <b>5 phút</b>. Nếu bạn không gửi yêu cầu này, vui lòng bỏ qua email hoặc liên hệ với quản trị viên.</p>
+            <hr style="border: 0; border-top: 1px solid #f0f0f0; margin: 24px 0;" />
+            <p style="font-size: 11px; color: #8c8c8c; text-align: center; margin-bottom: 0;">Đây là thư tự động gửi từ hệ thống BOS Platform. Vui lòng không trả lời thư này.</p>
+          </div>
+        `,
+      });
+      this.logger.log(`[Email Engine] Đã gửi mã OTP quên mật khẩu tới: ${recipientEmail}`);
+    } catch (error) {
+      this.logger.error(
+        `[Email Engine] Lỗi khi gửi mã OTP quên mật khẩu tới ${recipientEmail}: ${error.message}`,
+      );
+    }
+  }
 }

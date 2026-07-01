@@ -4,13 +4,17 @@ import {
   UnauthorizedException,
   ConflictException,
   NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
 import { UsersService } from '../users/users.service';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../prisma/prisma.service';
+import { RedisService } from '../redis/redis.service';
+import { MailerService } from '../mailer/mailer.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterTenantDto } from './dto/register-tenant.dto';
 import { SelectTenantDto } from './dto/select-tenant.dto';
+import { ForgotPasswordResetDto } from './dto/forgot-password.dto';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
@@ -19,6 +23,8 @@ export class AuthService {
     private usersService: UsersService,
     private jwtService: JwtService,
     private prisma: PrismaService,
+    private redisService: RedisService,
+    private mailerService: MailerService,
   ) {}
 
   async registerTenant(dto: RegisterTenantDto) {
@@ -324,5 +330,43 @@ export class AuthService {
     }
     const { password, ...userInfo } = user;
     return userInfo;
+  }
+
+  async sendForgotPasswordOtp(email: string) {
+    const user = await this.prisma.user.findFirst({
+      where: { email, status: 'ACTIVE' },
+    });
+    if (!user) {
+      throw new NotFoundException('Không tìm thấy tài khoản với email này.');
+    }
+
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const redisKey = `forgot-password-otp:${email}`;
+    await this.redisService.set(redisKey, otpCode, 300);
+
+    await this.mailerService.sendForgotPasswordOtp(email, otpCode);
+
+    return { message: 'Đã gửi mã OTP khôi phục mật khẩu tới email của bạn.' };
+  }
+
+  async resetPasswordWithOtp(dto: ForgotPasswordResetDto) {
+    const redisKey = `forgot-password-otp:${dto.email}`;
+    const cachedOtp = await this.redisService.get(redisKey);
+
+    if (!cachedOtp || cachedOtp !== dto.otpCode) {
+      throw new BadRequestException('Mã OTP không chính xác hoặc đã hết hạn.');
+    }
+
+    const saltRounds = 10;
+    const hashedPassword = await bcrypt.hash(dto.newPassword, saltRounds);
+
+    await this.prisma.user.updateMany({
+      where: { email: dto.email },
+      data: { password: hashedPassword },
+    });
+
+    await this.redisService.del(redisKey);
+
+    return { message: 'Đặt lại mật khẩu thành công. Vui lòng đăng nhập lại.' };
   }
 }

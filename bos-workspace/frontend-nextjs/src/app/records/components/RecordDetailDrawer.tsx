@@ -25,6 +25,7 @@ import {
   Avatar,
 } from "antd";
 import { api } from "@/lib/axios";
+import { safeEvaluate } from "@/lib/formula-evaluator";
 import {
   CheckCircleOutlined,
   CloseCircleOutlined,
@@ -63,29 +64,7 @@ function evaluateFormulaString(
   context: Record<string, any>,
 ): number {
   try {
-    let expression = formula;
-    // Replace {field_code} with actual values
-    expression = expression.replace(/\{([^}]+)\}/g, (_, code) => {
-      const val = context[code];
-      return val !== undefined && val !== null ? String(Number(val) || 0) : "0";
-    });
-    // Replace raw field names (words)
-    const words = expression.match(/[a-zA-Z_][a-zA-Z0-9_]*/g) || [];
-    const sortedWords = [...new Set(words)].sort((a, b) => b.length - a.length);
-    for (const word of sortedWords) {
-      if (["SUM", "AVG", "COUNT"].includes(word.toUpperCase())) continue;
-      if (context[word] !== undefined && context[word] !== null) {
-        const val = context[word];
-        const numVal =
-          typeof val === "boolean" ? (val ? 1 : 0) : Number(val) || 0;
-        const regex = new RegExp(`\\b${word}\\b`, "g");
-        expression = expression.replace(regex, String(numVal));
-      }
-    }
-    // Simple math eval
-    expression = expression.replace(/[^0-9+\-*/().\s]/g, "");
-    if (!expression || expression.trim() === "") return 0;
-    const result = new Function(`"use strict"; return (${expression});`)();
+    const result = safeEvaluate(formula, context);
     return typeof result === "number" && isFinite(result)
       ? parseFloat(result.toFixed(4))
       : 0;
@@ -172,13 +151,7 @@ function evaluateTableFormula(
   rowData: Record<string, any>,
 ): number {
   try {
-    let expression = formula.replace(/\{([^}]+)\}/g, (_, code) => {
-      const val = rowData[code];
-      return val !== undefined && val !== null ? String(Number(val) || 0) : "0";
-    });
-    expression = expression.replace(/[^0-9+\-*/().]/g, "");
-    if (!expression || expression.trim() === "") return 0;
-    const result = new Function(`"use strict"; return (${expression});`)();
+    const result = safeEvaluate(formula, rowData);
     return typeof result === "number" && isFinite(result)
       ? parseFloat(result.toFixed(4))
       : 0;
@@ -338,6 +311,44 @@ function ImagePreview({ file, recordId }: { file: any; recordId?: number }) {
   );
 }
 
+function LookupDetailLink({ recordId }: { recordId: number }) {
+  const [label, setLabel] = useState<string>(`Hồ sơ #${recordId}`);
+  const [isSubDrawerOpen, setIsSubDrawerOpen] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    api.get(`/api/v1/records/${recordId}`)
+      .then(({ data }) => {
+        if (active) {
+          setLabel(data.title || data.businessCode || `Hồ sơ #${recordId}`);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [recordId]);
+
+  return (
+    <>
+      <Button
+        type="link"
+        onClick={() => setIsSubDrawerOpen(true)}
+        style={{ padding: 0, height: "auto", textAlign: "left" }}
+      >
+        {label}
+      </Button>
+      {isSubDrawerOpen && (
+        <RecordDetailDrawer
+          open={isSubDrawerOpen}
+          recordId={recordId}
+          onClose={() => setIsSubDrawerOpen(false)}
+        />
+      )}
+    </>
+  );
+}
+
 function renderFieldValue(
   field: Field,
   val: any,
@@ -352,6 +363,13 @@ function renderFieldValue(
         —
       </Text>
     );
+  }
+
+  if (field.type === "LOOKUP") {
+    const lookupId = Number(val);
+    if (!isNaN(lookupId)) {
+      return <LookupDetailLink recordId={lookupId} />;
+    }
   }
 
   if (field.type === "DEPT_REF") {
@@ -675,22 +693,56 @@ function renderFieldValue(
 }
 
 interface RecordDetailDrawerProps {
-  record: RecordData | null;
+  record?: RecordData | null;
+  recordId?: number | null;
   open: boolean;
   onClose: () => void;
 }
 
 export default function RecordDetailDrawer({
-  record,
+  record: recordProp,
+  recordId,
   open,
   onClose,
 }: RecordDetailDrawerProps) {
+  const [fetchedRecord, setFetchedRecord] = useState<RecordData | null>(null);
+  const [loadingRecord, setLoadingRecord] = useState(false);
+
+  useEffect(() => {
+    if (open && recordId) {
+      setLoadingRecord(true);
+      api.get(`/api/v1/records/${recordId}`)
+        .then(({ data }) => {
+          setFetchedRecord(data);
+        })
+        .catch(() => {
+          message.error("Không thể tải thông tin hồ sơ");
+        })
+        .finally(() => {
+          setLoadingRecord(false);
+        });
+    } else {
+      setFetchedRecord(null);
+    }
+  }, [open, recordId]);
+
+  const record = recordProp || fetchedRecord;
   const [fullscreen, setFullscreen] = useState(false);
 
   const handleClose = () => {
     setFullscreen(false);
     onClose();
   };
+
+  if (loadingRecord || (recordId && !record)) {
+    return (
+      <Drawer open={open} onClose={handleClose} width={fullscreen ? "100vw" : 720}>
+        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100%" }}>
+          <Spin size="large" tip="Đang tải dữ liệu hồ sơ..." />
+        </div>
+      </Drawer>
+    );
+  }
 
   const { data: fields = [], isLoading: isFieldsLoading } = useFields(
     record?.entityId || null,
@@ -988,7 +1040,7 @@ export default function RecordDetailDrawer({
                 </span>
               ),
               children: (
-                <Space direction="vertical" size="large" className="w-full" style={{ marginTop: "16px" }}>
+                <Space direction="vertical" size="large" style={{ width: "100%", marginTop: "16px" }}>
                   {/* Metadata */}
                   <Card
                     size="small"
@@ -1285,6 +1337,11 @@ export default function RecordDetailDrawer({
                                         const showDept = log.snapshot.showSignerDept !== false;
                                         const showTime = log.snapshot.showSigningTime !== false;
 
+                                        const fontFam = log.snapshot.fontFamily || "sans-serif";
+                                        const fontSz = log.snapshot.fontSize !== undefined ? Number(log.snapshot.fontSize) : 11;
+                                        const fontBld = log.snapshot.fontBold === true;
+                                        const fontItal = log.snapshot.fontItalic === true;
+
                                         if (isHorizontal) {
                                           return (
                                             <div
@@ -1292,11 +1349,8 @@ export default function RecordDetailDrawer({
                                                 display: "inline-flex",
                                                 alignItems: "center",
                                                 gap: "12px",
-                                                border: "1px solid #e2e8f0",
                                                 padding: "8px",
-                                                borderRadius: "6px",
-                                                backgroundColor: "#fafafa",
-                                                fontFamily: "sans-serif",
+                                                fontFamily: `"${fontFam}", sans-serif`,
                                                 textAlign: "left",
                                                 lineHeight: "1.3",
                                               }}
@@ -1309,9 +1363,7 @@ export default function RecordDetailDrawer({
                                                   display: "flex",
                                                   alignItems: "center",
                                                   justifyContent: "center",
-                                                  background: "#ffffff",
-                                                  border: "1px solid #cbd5e1",
-                                                  borderRadius: "4px",
+                                                  background: "transparent",
                                                   padding: "2px",
                                                 }}
                                               >
@@ -1349,18 +1401,51 @@ export default function RecordDetailDrawer({
                                                   [ĐÃ KÝ ĐIỆN TỬ]
                                                 </div>
                                                 {showName && (
-                                                  <div style={{ fontSize: "11px", fontWeight: "bold", color: "#1e293b" }}>
+                                                  <div
+                                                    style={{
+                                                      fontSize: `${fontSz}px`,
+                                                      fontWeight: fontBld ? "bold" : "normal",
+                                                      fontStyle: fontItal ? "italic" : "normal",
+                                                      color: "#1e293b",
+                                                    }}
+                                                  >
                                                     {log.snapshot.signerName || log.user?.fullName}
                                                   </div>
                                                 )}
                                                 {showRole && log.snapshot.signerRole && (
-                                                  <div style={{ fontSize: "9px", color: "#64748b" }}>{log.snapshot.signerRole}</div>
+                                                  <div
+                                                    style={{
+                                                      fontSize: `${Math.max(8, fontSz - 2)}px`,
+                                                      fontWeight: fontBld ? "bold" : "normal",
+                                                      fontStyle: fontItal ? "italic" : "normal",
+                                                      color: "#64748b",
+                                                    }}
+                                                  >
+                                                    {log.snapshot.signerRole}
+                                                  </div>
                                                 )}
                                                 {showDept && log.snapshot.signerDept && (
-                                                  <div style={{ fontSize: "9px", color: "#64748b" }}>{log.snapshot.signerDept}</div>
+                                                  <div
+                                                    style={{
+                                                      fontSize: `${Math.max(8, fontSz - 2)}px`,
+                                                      fontWeight: fontBld ? "bold" : "normal",
+                                                      fontStyle: fontItal ? "italic" : "normal",
+                                                      color: "#64748b",
+                                                    }}
+                                                  >
+                                                    {log.snapshot.signerDept}
+                                                  </div>
                                                 )}
                                                 {showTime && log.snapshot.signingTime && (
-                                                  <div style={{ fontSize: "8px", color: "#94a3b8", marginTop: "1px" }}>
+                                                  <div
+                                                    style={{
+                                                      fontSize: `${Math.max(8, fontSz - 3)}px`,
+                                                      fontWeight: fontBld ? "bold" : "normal",
+                                                      fontStyle: fontItal ? "italic" : "normal",
+                                                      color: "#94a3b8",
+                                                      marginTop: "1px",
+                                                    }}
+                                                  >
                                                     {log.snapshot.signingTime}
                                                   </div>
                                                 )}
@@ -1375,11 +1460,8 @@ export default function RecordDetailDrawer({
                                                 flexDirection: "column",
                                                 alignItems: "center",
                                                 textAlign: "center",
-                                                border: "1px solid #e2e8f0",
                                                 padding: "8px",
-                                                borderRadius: "6px",
-                                                backgroundColor: "#fafafa",
-                                                fontFamily: "sans-serif",
+                                                fontFamily: `"${fontFam}", sans-serif`,
                                                 minWidth: "120px",
                                                 lineHeight: "1.3",
                                               }}
@@ -1403,9 +1485,7 @@ export default function RecordDetailDrawer({
                                                   display: "flex",
                                                   alignItems: "center",
                                                   justifyContent: "center",
-                                                  background: "#ffffff",
-                                                  border: "1px solid #cbd5e1",
-                                                  borderRadius: "4px",
+                                                  background: "transparent",
                                                   padding: "2px",
                                                   marginBottom: "4px",
                                                   marginLeft: "auto",
@@ -1434,20 +1514,52 @@ export default function RecordDetailDrawer({
                                                 )}
                                               </div>
                                               {showName && (
-                                                <div style={{ fontSize: "11px", fontWeight: "bold", color: "#1e293b" }}>
+                                                <div
+                                                  style={{
+                                                    fontSize: `${fontSz}px`,
+                                                    fontWeight: fontBld ? "bold" : "normal",
+                                                    fontStyle: fontItal ? "italic" : "normal",
+                                                    color: "#1e293b",
+                                                  }}
+                                                >
                                                   {log.snapshot.signerName || log.user?.fullName}
                                                 </div>
                                               )}
                                               {showRole && log.snapshot.signerRole && (
-                                                <div style={{ fontSize: "9px", color: "#64748b", marginTop: "1px" }}>
+                                                <div
+                                                  style={{
+                                                    fontSize: `${Math.max(8, fontSz - 2)}px`,
+                                                    fontWeight: fontBld ? "bold" : "normal",
+                                                    fontStyle: fontItal ? "italic" : "normal",
+                                                    color: "#64748b",
+                                                    marginTop: "1px",
+                                                  }}
+                                                >
                                                   {log.snapshot.signerRole}
                                                 </div>
                                               )}
                                               {showDept && log.snapshot.signerDept && (
-                                                <div style={{ fontSize: "9px", color: "#64748b" }}>{log.snapshot.signerDept}</div>
+                                                <div
+                                                  style={{
+                                                    fontSize: `${Math.max(8, fontSz - 2)}px`,
+                                                    fontWeight: fontBld ? "bold" : "normal",
+                                                    fontStyle: fontItal ? "italic" : "normal",
+                                                    color: "#64748b",
+                                                  }}
+                                                >
+                                                  {log.snapshot.signerDept}
+                                                </div>
                                               )}
                                               {showTime && log.snapshot.signingTime && (
-                                                <div style={{ fontSize: "8px", color: "#94a3b8", marginTop: "2px" }}>
+                                                <div
+                                                  style={{
+                                                    fontSize: `${Math.max(8, fontSz - 3)}px`,
+                                                    fontWeight: fontBld ? "bold" : "normal",
+                                                    fontStyle: fontItal ? "italic" : "normal",
+                                                    color: "#94a3b8",
+                                                    marginTop: "2px",
+                                                  }}
+                                                >
                                                   {log.snapshot.signingTime}
                                                 </div>
                                               )}

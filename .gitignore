@@ -1,33 +1,33 @@
 # =========================
 # Dependencies
 # =========================
-node_modules/
+**/node_modules/
 
 # =========================
 # Build outputs
 # =========================
-dist/
-build/
-.next/
-out/
+**/dist/
+**/build/
+**/.next/
+**/out/
 
 # TypeScript
-*.tsbuildinfo
+**/*.tsbuildinfo
 
 # Prisma generated files
-generated/prisma/
+**/generated/prisma/
 
 # =========================
 # Environment variables
 # =========================
-.env
-.env.*
+**/.env
+**/.env.*
 !.env.example
 
 # =========================
 # Logs
 # =========================
-*.log
+**/*.log
 logs/
 
 # =========================

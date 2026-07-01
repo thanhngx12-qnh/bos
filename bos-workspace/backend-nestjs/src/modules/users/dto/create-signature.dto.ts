@@ -13,11 +13,11 @@ export class CreateSignatureDto {
 
   @ApiProperty({
     description: 'Kiểu mẫu chữ ký',
-    enum: ['DRAW', 'IMAGE', 'STAMP'],
+    enum: ['DRAW', 'IMAGE', 'STAMP', 'TEXT'],
     example: 'DRAW',
   })
   @IsString()
-  @IsIn(['DRAW', 'IMAGE', 'STAMP'])
+  @IsIn(['DRAW', 'IMAGE', 'STAMP', 'TEXT'])
   type: string;
 
   @ApiProperty({

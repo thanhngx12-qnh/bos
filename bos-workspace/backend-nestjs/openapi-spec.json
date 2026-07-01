@@ -549,6 +549,35 @@
         ]
       }
     },
+    "/api/v1/users/{id}/reset-password": {
+      "patch": {
+        "operationId": "UsersController_resetPassword",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Đặt lại mật khẩu cho thành viên",
+        "tags": [
+          "Users (Người dùng)"
+        ]
+      }
+    },
     "/api/v1/signatures": {
       "get": {
         "operationId": "UserSignaturesController_findAll",
@@ -652,6 +681,160 @@
         "summary": "Xóa một mẫu chữ ký",
         "tags": [
           "User Signatures (Mẫu chữ ký & Con dấu cá nhân)"
+        ]
+      }
+    },
+    "/api/v1/delegations": {
+      "get": {
+        "operationId": "UserDelegationsController_findAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lấy tất cả các cấu hình ủy quyền phê duyệt của tôi",
+        "tags": [
+          "Approval Delegations (Ủy quyền Phê duyệt)"
+        ]
+      },
+      "post": {
+        "operationId": "UserDelegationsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDelegationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Thiết lập quy tắc ủy quyền phê duyệt mới",
+        "tags": [
+          "Approval Delegations (Ủy quyền Phê duyệt)"
+        ]
+      }
+    },
+    "/api/v1/delegations/{id}": {
+      "patch": {
+        "operationId": "UserDelegationsController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Bật/Tắt trạng thái kích hoạt của quy tắc ủy quyền",
+        "tags": [
+          "Approval Delegations (Ủy quyền Phê duyệt)"
+        ]
+      },
+      "delete": {
+        "operationId": "UserDelegationsController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Xóa một quy tắc ủy quyền phê duyệt",
+        "tags": [
+          "Approval Delegations (Ủy quyền Phê duyệt)"
+        ]
+      }
+    },
+    "/api/v1/auth/forgot-password": {
+      "post": {
+        "operationId": "AuthController_forgotPassword",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForgotPasswordRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Gửi mã OTP quên mật khẩu về email",
+        "tags": [
+          "Auth (Xác thực)"
+        ]
+      }
+    },
+    "/api/v1/auth/reset-password-otp": {
+      "post": {
+        "operationId": "AuthController_resetPasswordWithOtp",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForgotPasswordResetDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Đặt lại mật khẩu bằng mã OTP",
+        "tags": [
+          "Auth (Xác thực)"
         ]
       }
     },
@@ -1346,6 +1529,64 @@
           }
         ],
         "summary": "Lấy danh sách dữ liệu tra cứu liên kết động chéo biểu mẫu",
+        "tags": [
+          "Metadata - Records (Dữ liệu bản ghi)"
+        ]
+      }
+    },
+    "/api/v1/records/lookup-last-trip": {
+      "get": {
+        "operationId": "RecordsController_lookupLastTrip",
+        "parameters": [
+          {
+            "name": "licensePlate",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Tìm kiếm lượt đi gần nhất của xe để tự điền thông tin",
+        "tags": [
+          "Metadata - Records (Dữ liệu bản ghi)"
+        ]
+      }
+    },
+    "/api/v1/records/power-plug-report": {
+      "get": {
+        "operationId": "RecordsController_getPowerPlugReport",
+        "parameters": [
+          {
+            "name": "date",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Xuất báo cáo cắm điện container lạnh dạng CSV (Excel)",
         "tags": [
           "Metadata - Records (Dữ liệu bản ghi)"
         ]
@@ -2577,6 +2818,26 @@
         ]
       }
     },
+    "/api/v1/notifications/unread-count": {
+      "get": {
+        "operationId": "NotificationsController_getUnreadCount",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lấy số lượng thông báo chưa đọc",
+        "tags": [
+          "Notifications (Hộp thư thông báo)"
+        ]
+      }
+    },
     "/api/v1/notifications": {
       "get": {
         "operationId": "NotificationsController_findAllForUser",
@@ -2902,6 +3163,45 @@
         "summary": "Xóa vĩnh viễn doanh nghiệp & toàn bộ dữ liệu liên đới (Cascade Delete)",
         "tags": [
           "Tenants (Quản lý Doanh nghiệp SaaS - Chỉ Super Admin)"
+        ]
+      }
+    },
+    "/api/v1/search": {
+      "get": {
+        "operationId": "SearchController_search",
+        "parameters": [
+          {
+            "name": "q",
+            "required": true,
+            "in": "query",
+            "description": "Từ khóa tìm kiếm",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": 10,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Tìm kiếm hồ sơ toàn cục trong doanh nghiệp",
+        "tags": [
+          "Search (Tìm kiếm toàn cục)"
         ]
       }
     },
@@ -3500,7 +3800,8 @@
             "enum": [
               "DRAW",
               "IMAGE",
-              "STAMP"
+              "STAMP",
+              "TEXT"
             ],
             "example": "DRAW"
           },
@@ -3514,6 +3815,65 @@
           "name",
           "type",
           "signatureUrl"
+        ]
+      },
+      "CreateDelegationDto": {
+        "type": "object",
+        "properties": {
+          "toUserId": {
+            "type": "number",
+            "description": "ID của nhân sự nhận ủy quyền phê duyệt thay thế",
+            "example": 2
+          },
+          "startDate": {
+            "type": "string",
+            "description": "Ngày bắt đầu hiệu lực ủy quyền (ISO string hoặc YYYY-MM-DD)",
+            "example": "2026-06-20"
+          },
+          "endDate": {
+            "type": "string",
+            "description": "Ngày kết thúc hiệu lực ủy quyền (ISO string hoặc YYYY-MM-DD)",
+            "example": "2026-06-21"
+          }
+        },
+        "required": [
+          "toUserId",
+          "startDate",
+          "endDate"
+        ]
+      },
+      "ForgotPasswordRequestDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "it@talunglogistics.com"
+          }
+        },
+        "required": [
+          "email"
+        ]
+      },
+      "ForgotPasswordResetDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "it@talunglogistics.com"
+          },
+          "otpCode": {
+            "type": "string",
+            "example": "123456"
+          },
+          "newPassword": {
+            "type": "string",
+            "example": "NewPassword123"
+          }
+        },
+        "required": [
+          "email",
+          "otpCode",
+          "newPassword"
         ]
       },
       "LoginDto": {
@@ -3951,6 +4311,26 @@
             "type": "number",
             "description": "ID của người duyệt tiếp theo được chọn động",
             "example": 101
+          },
+          "fontFamily": {
+            "type": "string",
+            "description": "Font chữ của thông tin đi kèm",
+            "example": "sans-serif"
+          },
+          "fontSize": {
+            "type": "number",
+            "description": "Cỡ chữ của thông tin đi kèm",
+            "example": 11
+          },
+          "fontBold": {
+            "type": "boolean",
+            "description": "In đậm thông tin đi kèm",
+            "example": false
+          },
+          "fontItalic": {
+            "type": "boolean",
+            "description": "In nghiêng thông tin đi kèm",
+            "example": false
           }
         },
         "required": [

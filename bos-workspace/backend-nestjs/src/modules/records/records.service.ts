@@ -242,6 +242,9 @@ export class RecordsService {
 
     const finalData = this.formulaEngine.calculate(entityFields as any, cleanData);
 
+    // Bổ sung: Ràng buộc dữ liệu liên bảng chéo thực thể (Cross-Table Validation)
+    await this.validateCrossTable(tenantId, entityFields, finalData);
+
     // 2. Chạy transaction nguyên tử
     return this.prisma.$transaction(async (tx) => {
       let recordCode: string | null = null;
@@ -534,6 +537,9 @@ export class RecordsService {
 
       dataToSave = this.formulaEngine.calculate(entityFields as any, cleanData);
 
+      // Bổ sung: Ràng buộc dữ liệu liên bảng chéo thực thể (Cross-Table Validation)
+      await this.validateCrossTable(tenantId, entityFields, dataToSave, id);
+
       patchData = this.calculateDiff(currentRecord.data, dataToSave);
       isDataChanged = Object.keys(patchData).length > 0;
     }
@@ -668,13 +674,17 @@ export class RecordsService {
       FROM records r
     `;
 
-    if (filterConfig.activeWorkflowOnly) {
+    const needsWorkflowJoin = filterConfig.activeWorkflowOnly || (filterConfig.currentStepId !== undefined && filterConfig.currentStepId !== null);
+    if (needsWorkflowJoin) {
       sqlQuery += `
         INNER JOIN workflow_instances wi ON r.id = wi.record_id
-        WHERE wi.status = 'IN_PROGRESS'
       `;
-    } else {
-      sqlQuery += ` WHERE 1=1 `;
+    }
+
+    sqlQuery += ` WHERE 1=1 `;
+
+    if (filterConfig.activeWorkflowOnly) {
+      sqlQuery += ` AND wi.status = 'IN_PROGRESS' `;
     }
 
     sqlQuery += `
@@ -684,6 +694,12 @@ export class RecordsService {
 
     const queryParams: any[] = [lookupEntityId, tenantId];
     let paramIndex = 3;
+
+    if (filterConfig.currentStepId !== undefined && filterConfig.currentStepId !== null) {
+      sqlQuery += ` AND wi.current_step_id = $${paramIndex}`;
+      queryParams.push(Number(filterConfig.currentStepId));
+      paramIndex += 1;
+    }
 
     if (filterConfig.status) {
       if (Array.isArray(filterConfig.status)) {
@@ -719,8 +735,24 @@ export class RecordsService {
       const recordData = r.data as any;
       const codePrefix = r.business_code ? `[${r.business_code}] ` : '';
 
-      let labelValue = recordData[displayField];
-      if (!labelValue && displayField === 'id') {
+      let labelValue = '';
+      if (Array.isArray(displayField)) {
+        labelValue = displayField
+          .map((f) => recordData[f] || '')
+          .filter(Boolean)
+          .join(' - ');
+      } else if (typeof displayField === 'string' && displayField.includes(',')) {
+        labelValue = displayField
+          .split(',')
+          .map((f) => f.trim())
+          .map((f) => recordData[f] || '')
+          .filter(Boolean)
+          .join(' - ');
+      } else if (displayField) {
+        labelValue = recordData[displayField];
+      }
+
+      if (!labelValue) {
         labelValue = r.title ? r.title : `#${r.id}`;
       }
 
@@ -729,5 +761,159 @@ export class RecordsService {
         label: `${codePrefix}${labelValue}`,
       };
     });
+  }
+
+  async lookupLastTrip(tenantId: number, licensePlate: string) {
+    if (!licensePlate) {
+      throw new BadRequestException('Biển số xe không được để trống.');
+    }
+    const cleanPlate = licensePlate.trim();
+    const query = `
+      SELECT id, business_code as "businessCode", data 
+      FROM records 
+      WHERE tenant_id = $1 
+        AND deleted_at IS NULL 
+        AND (
+          LOWER(data->>'BIEN_SO_XE') = LOWER($2)
+          OR LOWER(data->>'bien_so_xe') = LOWER($2)
+        )
+      ORDER BY created_at DESC 
+      LIMIT 1
+    `;
+    const results = await this.prisma.$queryRawUnsafe<any[]>(
+      query,
+      tenantId,
+      cleanPlate,
+    );
+
+    if (results.length === 0) {
+      return { found: false };
+    }
+
+    const record = results[0];
+    return {
+      found: true,
+      recordId: record.id,
+      businessCode: record.businessCode,
+      data: record.data,
+    };
+  }
+
+  async getPowerPlugReport(tenantId: number, dateStr?: string) {
+    const sqlQuery = `
+      SELECT id, business_code as "businessCode", data, created_at as "createdAt"
+      FROM records
+      WHERE tenant_id = $1
+        AND deleted_at IS NULL
+        AND (
+          data->>'SO_CONTAINER' IS NOT NULL 
+          OR data->>'so_container' IS NOT NULL
+        )
+      ORDER BY created_at DESC
+    `;
+    const results = await this.prisma.$queryRawUnsafe<any[]>(sqlQuery, tenantId);
+
+    const reportData = results.map((r) => {
+      const d = r.data as any;
+      const bienSo = d.BIEN_SO_XE || d.bien_so_xe || d.BIEN_SO || '';
+      const soCont = d.SO_CONTAINER || d.so_container || '';
+      const chuHang = d.CHU_HANG || d.chu_hang || '';
+      const loaiHinh = d.LOAI_HINH || d.loai_hinh || '';
+      const thoiGianCam = d.THOI_GIAN_CAM || d.thoi_gian_cam || '';
+      const thoiGianRut = d.THOI_GIAN_RUT || d.thoi_gian_rut || '';
+
+      let durationHours = 0;
+      if (thoiGianCam) {
+        const camTime = new Date(thoiGianCam).getTime();
+        const rutTime = thoiGianRut ? new Date(thoiGianRut).getTime() : Date.now();
+        if (!isNaN(camTime) && !isNaN(rutTime) && rutTime > camTime) {
+          durationHours = parseFloat(((rutTime - camTime) / 3600000).toFixed(2));
+        }
+      }
+
+      return {
+        id: r.id,
+        businessCode: r.businessCode,
+        bienSo,
+        soCont,
+        chuHang,
+        loaiHinh,
+        thoiGianCam,
+        thoiGianRut,
+        durationHours,
+        status: thoiGianRut ? 'Đã rút' : 'Đang cắm',
+      };
+    });
+
+    if (dateStr) {
+      const filterDate = dateStr.trim();
+      return reportData.filter((row) => {
+        const rowDate = row.thoiGianCam ? row.thoiGianCam.substring(0, 10) : '';
+        return rowDate === filterDate;
+      });
+    }
+
+    return reportData;
+  }
+
+  private async validateCrossTable(
+    tenantId: number,
+    entityFields: any[],
+    data: any,
+    recordId?: number,
+  ): Promise<void> {
+    for (const field of entityFields) {
+      const config: any = field.config || {};
+      const options: any = config.options || {};
+      const validation = options.crossTableValidation;
+      if (!validation) continue;
+
+      const {
+        lookupFieldCode,
+        targetSumFieldCode,
+        actualSumFieldCode,
+        errorMessage,
+      } = validation;
+
+      if (!lookupFieldCode || !targetSumFieldCode || !actualSumFieldCode) continue;
+
+      const lookupId = Number(data[lookupFieldCode]);
+      if (!lookupId || isNaN(lookupId)) continue;
+
+      const planRecord = await this.prisma.record.findFirst({
+        where: { id: lookupId, tenantId, deletedAt: null },
+      });
+      if (!planRecord) continue;
+
+      const planData = planRecord.data as any;
+      const planLimit = Number(planData[targetSumFieldCode]) || 0;
+
+      const otherRecords = await this.prisma.record.findMany({
+        where: {
+          entityId: config.entityId,
+          tenantId,
+          deletedAt: null,
+          id: recordId ? { not: recordId } : undefined,
+        },
+      });
+
+      let currentSum = 0;
+      for (const r of otherRecords) {
+        const rData = r.data as any;
+        if (Number(rData[lookupFieldCode]) === lookupId) {
+          currentSum += Number(rData[actualSumFieldCode]) || 0;
+        }
+      }
+
+      const newActualValue = Number(data[actualSumFieldCode]) || 0;
+      const totalActual = currentSum + newActualValue;
+
+      if (totalActual > planLimit) {
+        throw new BadRequestException(
+          errorMessage ||
+            `Lỗi ràng buộc: Tổng lượng thực tế (${totalActual}) vượt quá định mức kế hoạch (${planLimit}).`,
+        );
+      }
+    }
   }
 }

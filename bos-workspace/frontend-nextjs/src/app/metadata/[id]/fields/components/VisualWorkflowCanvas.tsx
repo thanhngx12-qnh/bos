@@ -69,7 +69,7 @@ export default function VisualWorkflowCanvas({
   activeStep,
   setActiveStep,
 }: VisualWorkflowCanvasProps) {
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const { data: rolesData } = useRoles(1, 100);
   const roles = rolesData?.data || [];
 
@@ -81,6 +81,58 @@ export default function VisualWorkflowCanvas({
   const createTransitionMutation = useCreateTransition();
   const updateTransitionMutation = useUpdateTransition();
   const deleteTransitionMutation = useDeleteTransition();
+
+  // Tự động liên kết bước mới vào chuỗi quy trình theo orderIndex
+  const autoLinkStep = (newStep: any) => {
+    if (!versionId || !steps || steps.length === 0) return;
+
+    // Tìm bước liền trước (có orderIndex lớn nhất nhưng nhỏ hơn newStep)
+    const sortedPrev = [...steps]
+      .filter((s) => s.orderIndex < newStep.orderIndex)
+      .sort((a, b) => b.orderIndex - a.orderIndex);
+    const prevStep = sortedPrev[0];
+
+    // Tìm bước liền sau (có orderIndex nhỏ nhất nhưng lớn hơn newStep)
+    const sortedNext = [...steps]
+      .filter((s) => s.orderIndex > newStep.orderIndex)
+      .sort((a, b) => a.orderIndex - b.orderIndex);
+    const nextStep = sortedNext[0];
+
+    // 1. Tạo liên kết từ bước liền trước tới bước mới
+    if (prevStep) {
+      createTransitionMutation.mutate({
+        versionId,
+        fromStepId: prevStep.id,
+        toStepId: newStep.id,
+        conditionLogic: {},
+        autoSkip: false,
+      });
+
+      // Nếu có liên kết trực tiếp cũ giữa bước liền trước và bước liền sau, tiến hành xóa
+      if (nextStep) {
+        const existingTrans = prevStep.transitionsOut?.find(
+          (t: any) => t.toStepId === nextStep.id
+        );
+        if (existingTrans) {
+          deleteTransitionMutation.mutate({
+            id: existingTrans.id,
+            versionId,
+          });
+        }
+      }
+    }
+
+    // 2. Tạo liên kết từ bước mới tới bước liền sau
+    if (nextStep) {
+      createTransitionMutation.mutate({
+        versionId,
+        fromStepId: newStep.id,
+        toStepId: nextStep.id,
+        conditionLogic: {},
+        autoSkip: false,
+      });
+    }
+  };
 
   // Canvas Pan & Zoom states
   const [zoom, setZoom] = useState<number>(1);
@@ -264,9 +316,10 @@ export default function VisualWorkflowCanvas({
           permissions: updatedPermissions,
         },
         {
-          onSuccess: () => {
+          onSuccess: (newStep: any) => {
             message.success(`Tạo bước duyệt "${values.name}" thành công!`);
             setIsStepModalOpen(false);
+            autoLinkStep(newStep);
           },
           onError: (err: any) => {
             message.error(err?.response?.data?.message || "Lỗi khi tạo bước duyệt.");
@@ -658,9 +711,162 @@ export default function VisualWorkflowCanvas({
   };
 
   return (
-    <div className="w-full flex flex-col bg-white border border-gray-100 rounded-xl shadow-sm overflow-hidden" style={{ height: "650px" }}>
+    <div className="workflow-canvas-container">
+      <style>{`
+        .workflow-canvas-container {
+          width: 100%;
+          display: flex;
+          flex-direction: column;
+          background-color: #ffffff;
+          border: 1px solid #f1f5f9;
+          border-radius: 12px;
+          box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+          overflow: hidden;
+          height: 650px;
+        }
+        .workflow-canvas-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 16px 24px;
+          background-color: #f8fafc;
+          border-bottom: 1px solid #e2e8f0;
+        }
+        .workflow-canvas-area {
+          flex: 1;
+          position: relative;
+          overflow: hidden;
+          user-select: none;
+          cursor: grab;
+        }
+        .workflow-canvas-area:active {
+          cursor: grabbing;
+        }
+        .workflow-node {
+          position: absolute;
+          display: flex;
+          flex-direction: column;
+          background-color: #ffffff;
+          border: 1px solid #e2e8f0;
+          border-radius: 12px;
+          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+          cursor: grab;
+          user-select: none;
+          transition: box-shadow 0.25s, border-color 0.25s;
+          z-index: 10;
+        }
+        .workflow-node:active {
+          cursor: grabbing;
+        }
+        .workflow-node.is-active {
+          border-color: #1890ff;
+          box-shadow: 0 10px 15px -3px rgba(24, 144, 255, 0.25), 0 4px 6px -2px rgba(24, 144, 255, 0.15);
+          z-index: 50;
+        }
+        .node-port-handle {
+          position: absolute;
+          background-color: #ffffff;
+          border-width: 2px;
+          border-style: solid;
+          border-radius: 9999px;
+          cursor: crosshair;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 12px;
+          height: 12px;
+          z-index: 30;
+          transition: background-color 0.2s, border-color 0.2s;
+        }
+        .node-port-handle-in {
+          border-color: #3b82f6;
+          top: -6px;
+          left: 50%;
+          transform: translateX(-50%);
+        }
+        .node-port-handle-in:hover {
+          background-color: #eff6ff;
+        }
+        .node-port-handle-out {
+          border-color: #f97316;
+          bottom: -6px;
+          left: 50%;
+          transform: translateX(-50%);
+        }
+        .node-port-handle-out:hover {
+          background-color: #fff7ed;
+        }
+        .workflow-node-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 8px 16px;
+          border-bottom: 1px solid #e2e8f0;
+          border-top-left-radius: 11px;
+          border-top-right-radius: 11px;
+          background-color: #f8fafc;
+          transition: background-color 0.2s, border-color 0.2s;
+        }
+        .workflow-node.is-active .workflow-node-header {
+          background-color: #e6f7ff;
+          border-color: #91d5ff;
+        }
+        .workflow-node-actions {
+          display: flex;
+          gap: 4px;
+          opacity: 0;
+          transition: opacity 0.2s;
+        }
+        .workflow-node:hover .workflow-node-actions {
+          opacity: 1;
+        }
+        .workflow-node-body {
+          flex: 1;
+          padding: 12px;
+          display: flex;
+          flex-direction: column;
+          justify-content: space-between;
+        }
+        .workflow-transition-line {
+          cursor: pointer;
+          transition: stroke 0.2s, stroke-width 0.2s;
+        }
+        .workflow-transition-line:hover {
+          stroke: #fa8c16 !important;
+          stroke-width: 3.5px !important;
+        }
+        .workflow-transition-label {
+          position: absolute;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 4px;
+          box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+          padding: 4px 8px;
+          border-radius: 4px;
+          border: 1px solid;
+          font-size: 10px;
+          font-weight: 600;
+          max-width: 180px;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          cursor: pointer;
+          z-index: 20;
+          transition: transform 0.1s, box-shadow 0.2s;
+        }
+        .workflow-transition-label:hover {
+          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        .truncate {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+      `}</style>
+
       {/* Canvas Tool Header bar */}
-      <div className="flex justify-between items-center px-6 py-4 bg-slate-50 border-b border-gray-100">
+      <div className="workflow-canvas-header">
         <Space size={16}>
           <PartitionOutlined style={{ color: "#1890ff", fontSize: 18 }} />
           <div>
@@ -702,7 +908,7 @@ export default function VisualWorkflowCanvas({
       {/* Main Graph Canvas Area */}
       <div
         ref={canvasRef}
-        className="flex-1 relative overflow-hidden select-none cursor-grab"
+        className="workflow-canvas-area"
         style={{
           background: `radial-gradient(circle, #e2e8f0 1.2px, transparent 1.2px)`,
           backgroundSize: "24px 24px",
@@ -723,7 +929,7 @@ export default function VisualWorkflowCanvas({
             height: "5000px",
             top: 0,
             left: 0,
-            pointerEvents: "none", // let events bubble through to grid canvas
+            pointerEvents: "none",
           }}
         >
           {/* Dynamic SVG Connection Overlay */}
@@ -779,7 +985,7 @@ export default function VisualWorkflowCanvas({
                     stroke={strokeColor}
                     strokeWidth="2.5"
                     markerEnd={`url(#arrowhead)`}
-                    className="cursor-pointer hover:stroke-amber-500 transition-colors"
+                    className="workflow-transition-line"
                   />
                   {/* Subtle invisible thicker curve line for easier click hover trigger */}
                   <path
@@ -787,7 +993,7 @@ export default function VisualWorkflowCanvas({
                     fill="none"
                     stroke="transparent"
                     strokeWidth="10"
-                    className="cursor-pointer"
+                    style={{ cursor: "pointer" }}
                     onClick={(e) => handleOpenTransitionModal(e, t)}
                   />
                 </g>
@@ -836,7 +1042,7 @@ export default function VisualWorkflowCanvas({
             return (
               <div
                 key={`lbl-${t.id}`}
-                className="transition-label absolute flex items-center justify-between gap-1 shadow-sm px-2 py-1 rounded border"
+                className="workflow-transition-label"
                 style={{
                   left: `${midX}px`,
                   top: `${midY}px`,
@@ -871,80 +1077,49 @@ export default function VisualWorkflowCanvas({
             return (
               <div
                 key={step.id}
-                className={`canvas-node absolute flex flex-col bg-white border rounded-xl shadow-md cursor-grab transition-shadow select-none group`}
+                className={`workflow-node ${isActive ? "is-active" : ""}`}
                 style={{
                   left: `${pos.x}px`,
                   top: `${pos.y}px`,
                   width: `${nodeWidth}px`,
                   height: `${nodeHeight}px`,
                   pointerEvents: "all",
-                  borderColor: isActive ? "#1890ff" : "#e2e8f0",
-                  boxShadow: isActive
-                    ? "0 10px 15px -3px rgba(24, 144, 255, 0.25), 0 4px 6px -2px rgba(24, 144, 255, 0.15)"
-                    : "0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03)",
-                  zIndex: isActive ? 50 : 10,
                 }}
                 onMouseDown={(e) => handleNodeMouseDown(e, step.id)}
               >
                 {/* Node connection port markers */}
                 {/* Input Neo: Top */}
                 <div
-                  className="node-handle absolute bg-white border-2 border-blue-500 rounded-full cursor-crosshair flex items-center justify-center hover:bg-blue-50"
-                  style={{
-                    top: "-6px",
-                    left: "50%",
-                    transform: "translateX(-50%)",
-                    width: "12px",
-                    height: "12px",
-                    zIndex: 30,
-                    borderColor: "#3b82f6",
-                  }}
+                  className="node-port-handle node-port-handle-in"
                   onMouseUp={(e) => handlePortMouseUp(e, step.id)}
                 />
 
                 {/* Output Neo: Bottom */}
                 <div
-                  className="node-handle absolute bg-white border-2 border-orange-500 rounded-full cursor-crosshair flex items-center justify-center hover:bg-orange-50"
-                  style={{
-                    bottom: "-6px",
-                    left: "50%",
-                    transform: "translateX(-50%)",
-                    width: "12px",
-                    height: "12px",
-                    zIndex: 30,
-                    borderColor: "#f97316",
-                  }}
+                  className="node-port-handle node-port-handle-out"
                   onMouseDown={(e) => handlePortMouseDown(e, step.id)}
                 />
 
                 {/* Node Header */}
-                <div
-                  className={`flex justify-between items-center px-4 py-2 border-b rounded-t-xl`}
-                  style={{
-                    backgroundColor: isActive ? "#e6f7ff" : "#f8fafc",
-                    borderColor: isActive ? "#91d5ff" : "#e2e8f0",
-                  }}
-                >
+                <div className="workflow-node-header">
                   <Text strong style={{ fontSize: "12px", color: isActive ? "#0050b3" : "#334155" }} className="truncate">
                     {step.orderIndex}. {step.name}
                   </Text>
                   
                   {/* Operations */}
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="workflow-node-actions">
                     <EditOutlined
-                      className="cursor-pointer text-blue-500 hover:text-blue-700"
-                      style={{ fontSize: "11px", padding: "2px" }}
+                      style={{ fontSize: "11px", padding: "2px", color: "#1890ff", cursor: "pointer" }}
                       onClick={(e) => {
                         e.stopPropagation();
                         handleOpenEditStepModal(step);
                       }}
                     />
                     <DeleteOutlined
-                      className="cursor-pointer text-red-500 hover:text-red-700"
-                      style={{ fontSize: "11px", padding: "2px", marginLeft: "4px" }}
+                      style={{ fontSize: "11px", padding: "2px", marginLeft: "4px", color: "#ff4d4f", cursor: "pointer" }}
                       onClick={(e) => {
                         e.stopPropagation();
-                        Modal.confirm({
+                        modal.confirm({
                           title: `Xóa bước duyệt "${step.name}"?`,
                           content: "Các phân quyền của trường và rẽ nhánh liên quan sẽ bị xóa vĩnh viễn.",
                           okText: "Xóa",
@@ -958,14 +1133,14 @@ export default function VisualWorkflowCanvas({
                 </div>
 
                 {/* Node Body Details */}
-                <div className="flex-1 p-3 flex flex-col justify-between">
-                  <div className="flex justify-between items-center">
+                <div className="workflow-node-body">
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <span style={{ fontSize: "10px", color: "#64748b" }}>Loại tác vụ</span>
                     <Tag color={step.stepType === "USER_TASK" ? "processing" : "default"} style={{ fontSize: "9px", margin: 0 }}>
                       {step.stepType}
                     </Tag>
                   </div>
-                  <div className="flex flex-col mt-1">
+                  <div style={{ display: "flex", flexDirection: "column", marginTop: "4px" }}>
                     <span style={{ fontSize: "10px", color: "#64748b" }}>Người phê duyệt</span>
                     <Text strong style={{ fontSize: "11px", color: "#1e293b" }} className="truncate">
                       {getAssigneeSummary(step)}
@@ -1004,15 +1179,15 @@ export default function VisualWorkflowCanvas({
             style={{ marginTop: "16px" }}
           >
             {/* Info header block */}
-            <div className="p-3 bg-slate-50 border border-slate-100 rounded-lg mb-4 flex justify-between items-center text-xs">
+            <div style={{ padding: "12px", backgroundColor: "#f8fafc", border: "1px solid #f1f5f9", borderRadius: "8px", marginBottom: "16px", display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "12px" }}>
               <div>
-                <span className="text-gray-500">Bước đi: </span>
-                <span className="font-semibold text-gray-800">{selectedTransition.fromStepName}</span>
+                <span style={{ color: "#64748b" }}>Bước đi: </span>
+                <span style={{ fontWeight: 600, color: "#1e293b" }}>{selectedTransition.fromStepName}</span>
               </div>
-              <div className="text-blue-500 font-bold">➔</div>
+              <div style={{ color: "#3b82f6", fontWeight: "bold" }}>➔</div>
               <div>
-                <span className="text-gray-500">Bước đến: </span>
-                <span className="font-semibold text-gray-800">{selectedTransition.toStepName}</span>
+                <span style={{ color: "#64748b" }}>Bước đến: </span>
+                <span style={{ fontWeight: 600, color: "#1e293b" }}>{selectedTransition.toStepName}</span>
               </div>
             </div>
 
@@ -1057,7 +1232,7 @@ export default function VisualWorkflowCanvas({
 
             <Form.List name="rules">
               {(fieldsFormList, { add, remove }) => (
-                <div className="flex flex-col gap-2">
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                   {fieldsFormList.map(({ key, name, ...restField }) => (
                     <Space key={key} style={{ display: "flex", marginBottom: 8 }} align="baseline">
                       <Form.Item
@@ -1133,7 +1308,7 @@ export default function VisualWorkflowCanvas({
 
             <Divider style={{ margin: "24px 0 12px 0" }} />
 
-            <div className="flex justify-between items-center">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <Button
                 type="primary"
                 danger
@@ -1141,7 +1316,7 @@ export default function VisualWorkflowCanvas({
                 icon={<DeleteOutlined />}
                 loading={deleteTransitionMutation.isPending}
                 onClick={() => {
-                  Modal.confirm({
+                  modal.confirm({
                     title: "Xóa đường nối chuyển tiếp này?",
                     content: "Bản ghi liên kết này sẽ bị xóa khỏi cơ sở dữ liệu.",
                     okText: "Xóa",

@@ -1,7 +1,7 @@
 // File: src/app/settings/page.tsx
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Layout,
   Menu,
@@ -54,9 +54,13 @@ import {
   FileTextOutlined,
   BranchesOutlined,
   CalendarOutlined,
+  KeyOutlined,
+  FileSearchOutlined,
 } from "@ant-design/icons";
 import { useRouter } from "next/navigation";
 import BusinessCalendarManager from "./components/BusinessCalendarManager";
+import { useAuditLogs } from "@/hooks/useAuditLogs";
+import dayjs from "dayjs";
 import { useDepartmentTree, DepartmentNode } from "@/hooks/useDepartments";
 import {
   useRoles,
@@ -70,6 +74,7 @@ import {
   useCreateUser,
   useUpdateUser,
   useDeleteUser,
+  useResetUserPassword,
   User,
 } from "@/hooks/useUsers";
 import {
@@ -81,54 +86,203 @@ import {
   TenantDetail,
 } from "@/hooks/useTenant";
 import { useMyTenants, useSwitchTenant } from "@/hooks/useAuth";
+import AppShell, { useAppAuth } from "@/components/AppShell";
 
 const { Header, Sider, Content } = Layout;
 const { Title, Paragraph, Text } = Typography;
 
-export default function SystemSettingsPage() {
+function AuditLogViewer() {
+  const [page, setPage] = useState(1);
+  const [searchText, setSearchText] = useState("");
+  const [filterAction, setFilterAction] = useState<string | undefined>(undefined);
+  const { data: logData, isLoading } = useAuditLogs(page, 20);
+
+  // Filter logs locally based on search text and action select
+  const filteredLogs = useMemo(() => {
+    const rawLogs = logData?.data || [];
+    return rawLogs.filter((log: any) => {
+      const matchSearch =
+        searchText === "" ||
+        (log.user?.fullName || "").toLowerCase().includes(searchText.toLowerCase()) ||
+        (log.user?.email || "").toLowerCase().includes(searchText.toLowerCase()) ||
+        (log.resource || "").toLowerCase().includes(searchText.toLowerCase()) ||
+        (log.action || "").toLowerCase().includes(searchText.toLowerCase());
+
+      const matchAction = !filterAction || log.action.includes(filterAction);
+
+      return matchSearch && matchAction;
+    });
+  }, [logData, searchText, filterAction]);
+
+  const columns: any[] = [
+    {
+      title: "Thời gian",
+      dataIndex: "createdAt",
+      key: "createdAt",
+      width: 180,
+      sorter: (a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+      defaultSortOrder: "descend" as const,
+      render: (val: string) => (
+        <span style={{ fontSize: 13, fontFamily: "monospace", color: "#334155" }}>
+          {dayjs(val).format("DD/MM/YYYY HH:mm:ss")}
+        </span>
+      ),
+    },
+    {
+      title: "Người thực hiện",
+      dataIndex: ["user", "fullName"],
+      key: "user",
+      width: 200,
+      render: (_: any, record: any) => (
+        <div>
+          <div style={{ fontWeight: 600, fontSize: 13, color: "#1e293b" }}>{record.user?.fullName || "Hệ thống"}</div>
+          <div style={{ fontSize: 11, color: "#94a3b8" }}>{record.user?.email || ""}</div>
+        </div>
+      ),
+    },
+    {
+      title: "Hành động",
+      dataIndex: "action",
+      key: "action",
+      width: 160,
+      render: (val: string) => {
+        let color = "processing";
+        let label = val;
+        if (val.includes("CREATE") || val.includes("POST")) { color = "success"; label = val.replace("_", " "); }
+        else if (val.includes("UPDATE") || val.includes("PATCH") || val.includes("PUT")) { color = "warning"; label = val.replace("_", " "); }
+        else if (val.includes("DELETE") || val.includes("REMOVE")) { color = "error"; label = val.replace("_", " "); }
+        return <Tag color={color} style={{ fontSize: 11, fontWeight: 500 }}>{label}</Tag>;
+      },
+    },
+    {
+      title: "Tài nguyên",
+      dataIndex: "resource",
+      key: "resource",
+      render: (val: string) => <span style={{ fontSize: 13 }}>{val || "-"}</span>,
+    },
+    {
+      title: "Resource ID",
+      dataIndex: "resourceId",
+      key: "resourceId",
+      width: 100,
+      align: "center" as const,
+      sorter: (a: any, b: any) => (a.resourceId || 0) - (b.resourceId || 0),
+      render: (val: any) => val ? <Tag>{val}</Tag> : <span style={{ color: "#cbd5e1" }}>—</span>,
+    },
+    {
+      title: "IP Address",
+      dataIndex: "ipAddress",
+      key: "ipAddress",
+      width: 130,
+      render: (val: any) => (
+        <span style={{ fontSize: 12, fontFamily: "monospace", color: "#64748b" }}>
+          {val || "—"}
+        </span>
+      ),
+    },
+  ];
+
+  return (
+    <Card
+      bordered={false}
+      title={
+        <Row gutter={16} align="middle" style={{ width: "100%", padding: "8px 0" }}>
+          <Col xs={24} md={6}>
+            <Title level={4} style={{ margin: 0 }}>Nhật ký Hệ thống</Title>
+          </Col>
+          <Col xs={24} md={18} style={{ display: "flex", justifyContent: "flex-end", gap: "10px", flexWrap: "wrap" }}>
+            <Input
+              placeholder="Tìm theo người thực hiện, tài nguyên..."
+              prefix={<SearchOutlined style={{ color: "#bfbfbf" }} />}
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+              style={{ width: 280 }}
+              allowClear
+            />
+            <Select
+              placeholder="Lọc theo Hành động"
+              value={filterAction}
+              onChange={setFilterAction}
+              style={{ width: 200 }}
+              allowClear
+              options={[
+                { value: "CREATE", label: "Tạo mới (CREATE)" },
+                { value: "POST", label: "Tạo mới (POST)" },
+                { value: "UPDATE", label: "Cập nhật (UPDATE)" },
+                { value: "PATCH", label: "Chỉnh sửa (PATCH)" },
+                { value: "DELETE", label: "Xóa (DELETE)" },
+              ]}
+            />
+            {(searchText || filterAction) && (
+              <Button
+                onClick={() => {
+                  setSearchText("");
+                  setFilterAction(undefined);
+                }}
+              >
+                Xóa bộ lọc
+              </Button>
+            )}
+          </Col>
+        </Row>
+      }
+    >
+      <Table
+        dataSource={filteredLogs}
+        columns={columns}
+        rowKey="id"
+        loading={isLoading}
+        scroll={{ x: "max-content" }}
+        size="middle"
+        expandable={{
+          expandedRowRender: (record: any) => (
+            <div style={{ padding: "12px 16px", background: "#f8fafc", borderRadius: 6, border: "1px solid #e2e8f0" }}>
+              <Text strong style={{ fontSize: 13, display: "block", marginBottom: 8 }}>Chi tiết Payload:</Text>
+              <pre style={{
+                margin: 0,
+                fontSize: 12,
+                backgroundColor: "#0f172a",
+                color: "#e2e8f0",
+                padding: 16,
+                borderRadius: 6,
+                overflowX: "auto",
+                maxHeight: 300,
+                lineHeight: 1.6,
+              }}>
+                {JSON.stringify(record.payload, null, 2)}
+              </pre>
+            </div>
+          ),
+          rowExpandable: (record: any) => !!record.payload && Object.keys(record.payload).length > 0,
+        }}
+        pagination={{
+          current: page,
+          pageSize: 20,
+          total: logData?.meta?.total || 0,
+          onChange: (p) => setPage(p),
+          showSizeChanger: false,
+          showTotal: (total) => `Tổng cộng ${total} nhật ký`,
+        }}
+      />
+    </Card>
+  );
+}
+
+function SettingsContent() {
   const router = useRouter();
-  const {
-    token: { colorBgContainer },
-  } = theme.useToken();
-
   const { modal, message } = App.useApp();
+  const { isSuperAdmin, userPermissions, permissionsLoaded } = useAppAuth();
 
-  const [collapsed, setCollapsed] = useState(false);
   const [tenantId, setTenantId] = useState<number | null>(null);
-  const [userName, setUserName] = useState<string>("Thành viên BOS");
-  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
-  const [userPermissions, setUserPermissions] = useState<Record<string, string[]>>({});
-  const [permissionsLoaded, setPermissionsLoaded] = useState(false);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const token = localStorage.getItem("bos_token");
-      if (!token) {
-        router.push("/auth/login");
-        return;
-      }
       const storedTenantId = localStorage.getItem("bos_tenant_id");
-      const storedUserName = localStorage.getItem("bos_user_name");
-      const storedUserType = localStorage.getItem("bos_user_type");
-      setIsSuperAdmin(storedUserType === "SUPER_ADMIN");
-
       if (storedTenantId) {
         setTenantId(Number(storedTenantId));
       }
-      if (storedUserName) {
-        setUserName(storedUserName);
-      }
-      const storedPermissions = localStorage.getItem("bos_user_permissions");
-      if (storedPermissions) {
-        try {
-          setUserPermissions(JSON.parse(storedPermissions));
-        } catch (e) {
-          console.error(e);
-        }
-      }
-      setPermissionsLoaded(true);
     }
-  }, [router]);
+  }, []);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -139,95 +293,6 @@ export default function SystemSettingsPage() {
       }
     }
   }, []);
-
-  const tenantQuery = useTenantDetail(tenantId);
-  const activeTenantName = tenantId === null
-    ? "Quản trị Hệ thống (Super Admin)"
-    : tenantQuery.data
-    ? `${tenantQuery.data.name} (${tenantQuery.data.code})`
-    : "Đang tải thông tin doanh nghiệp...";
-
-  const { data: myTenants = [] } = useMyTenants();
-  const switchTenantMutation = useSwitchTenant();
-
-  const handleSwitchTenant = (targetTenantId: number | null) => {
-    switchTenantMutation.mutate({ tenantId: targetTenantId as any }, {
-      onSuccess: (res) => {
-        message.success("Chuyển doanh nghiệp thành công!");
-        localStorage.setItem("bos_token", res.accessToken);
-        localStorage.setItem("bos_user_name", res.user.fullName);
-        localStorage.setItem("bos_user_permissions", JSON.stringify((res.user as any).role?.permissions || {}));
-        localStorage.setItem("bos_user_type", (res.user as any).userType);
-        if (res.user.tenantId === null || res.user.tenantId === undefined) {
-          localStorage.removeItem("bos_tenant_id");
-        } else {
-          localStorage.setItem("bos_tenant_id", String(res.user.tenantId));
-        }
-        window.location.reload();
-      },
-      onError: (err: any) => {
-        message.error("Không thể chuyển đổi doanh nghiệp.");
-      }
-    });
-  };
-
-  const tenantMenu = {
-    items: [
-      ...(isSuperAdmin ? [{
-        key: "root",
-        label: "Quản trị Hệ thống (Super Admin)",
-        icon: <SettingOutlined />,
-        disabled: tenantId === null,
-      }] : []),
-      ...myTenants.map((t) => ({
-        key: String(t.id),
-        label: t.name,
-        icon: <BankOutlined />,
-        disabled: t.id === tenantId,
-      }))
-    ],
-    onClick: (info: any) => {
-      if (info.key === "root") {
-        handleSwitchTenant(null);
-      } else {
-        handleSwitchTenant(Number(info.key));
-      }
-    }
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem("bos_token");
-    localStorage.removeItem("bos_tenant_id");
-    localStorage.removeItem("bos_user_name");
-    localStorage.removeItem("bos_user_permissions");
-    localStorage.removeItem("bos_user_type");
-    router.push("/auth/login");
-  };
-
-  const userMenu = {
-    items: [
-      { key: "profile", label: "Thông tin cá nhân" },
-      { key: "security", label: "Thiết lập bảo mật" },
-      { type: "divider" as const },
-      { key: "logout", label: "Đăng xuất hệ thống", danger: true },
-    ],
-    onClick: (info: any) => {
-      if (info.key === "logout") {
-        handleLogout();
-      } else if (info.key === "profile") {
-        router.push("/profile");
-      }
-    },
-  };
-
-  const handleMenuClick = (e: { key: string }) => {
-    if (e.key === "dashboard") router.push("/");
-    if (e.key === "organization") router.push("/organization");
-    if (e.key === "metadata") router.push("/metadata");
-    if (e.key === "workflow") router.push("/metadata");
-    if (e.key === "records") router.push("/records");
-    if (e.key === "settings") router.push("/settings");
-  };
 
   const [activeTab, setActiveTab] = useState("users_list");
 
@@ -241,6 +306,7 @@ export default function SystemSettingsPage() {
   const createUser = useCreateUser();
   const updateUser = useUpdateUser();
   const deleteUser = useDeleteUser();
+  const resetUserPassword = useResetUserPassword();
 
   const createRole = useCreateRole();
   const updateRole = useUpdateRole();
@@ -253,7 +319,9 @@ export default function SystemSettingsPage() {
   // Modals state
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [isUserEditOpen, setIsUserEditOpen] = useState(false);
+  const [isResetPasswordModalOpen, setIsResetPasswordModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [selectedResetUser, setSelectedResetUser] = useState<User | null>(null);
 
   const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
   const [isPermissionMatrixOpen, setIsPermissionMatrixOpen] = useState(false);
@@ -267,6 +335,7 @@ export default function SystemSettingsPage() {
   // Forms
   const [userForm] = Form.useForm();
   const [userEditForm] = Form.useForm();
+  const [resetPasswordForm] = Form.useForm();
   const [roleForm] = Form.useForm();
   const [tenantForm] = Form.useForm();
   const [tenantEditForm] = Form.useForm();
@@ -417,7 +486,7 @@ export default function SystemSettingsPage() {
 
   if (permissionsLoaded && !isSuperAdmin && !userPermissions.users?.includes("READ") && !userPermissions.roles?.includes("READ")) {
     return (
-      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100vh", background: "#f8fafc" }}>
+      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "80vh" }}>
         <Result
           status="403"
           title="403"
@@ -428,85 +497,10 @@ export default function SystemSettingsPage() {
     );
   }
 
-  const sidebarItems = [
-    { key: "dashboard", icon: <DashboardOutlined />, label: "Bảng tổng quan" },
-  ];
-
-  if (isSuperAdmin || userPermissions.departments?.includes("READ")) {
-    sidebarItems.push({ key: "organization", icon: <PartitionOutlined />, label: "Cơ cấu Tổ chức" });
-  }
-  if (isSuperAdmin || userPermissions.entities?.includes("READ")) {
-    sidebarItems.push({ key: "metadata", icon: <BuildOutlined />, label: "Biểu mẫu Động" });
-  }
-  if (isSuperAdmin || userPermissions.workflows?.includes("READ")) {
-    sidebarItems.push({ key: "workflow", icon: <DeploymentUnitOutlined />, label: "Luồng Quy trình" });
-  }
-  if (isSuperAdmin || userPermissions.records?.includes("READ")) {
-    sidebarItems.push({ key: "records", icon: <FormOutlined />, label: "Hồ sơ & Biểu mẫu" });
-  }
-  if (isSuperAdmin || userPermissions.users?.includes("READ") || userPermissions.roles?.includes("READ")) {
-    sidebarItems.push({ key: "settings", icon: <SettingOutlined />, label: "Cài đặt Hệ thống" });
-  }
-
   return (
-    <Layout style={{ minHeight: "100vh" }}>
-      <Sider
-        collapsible
-        collapsed={collapsed}
-        onCollapse={setCollapsed}
-        theme="light"
-        style={{ borderRight: "1px solid #f0f0f0" }}
-      >
-        <div
-          className="flex items-center justify-center py-4 border-b border-gray-100"
-          style={{ minHeight: "64px" }}
-        >
-          <Title level={4} style={{ margin: 0, color: "#0050b3" }}>
-            {collapsed ? "BOS" : "BOS Platform"}
-          </Title>
-        </div>
-        <Menu
-          theme="light"
-          selectedKeys={["settings"]}
-          mode="inline"
-          onClick={handleMenuClick}
-          items={sidebarItems}
-        />
-      </Sider>
-
-      <Layout>
-        <Header
-          style={{
-            padding: "0 24px",
-            background: colorBgContainer,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            borderBottom: "1px solid #f0f0f0",
-          }}
-        >
-          <Dropdown menu={tenantMenu} trigger={['click']} placement="bottomLeft">
-            <Button icon={<GlobalOutlined />} loading={tenantQuery.isLoading || switchTenantMutation.isPending}>
-              <Text strong>{activeTenantName}</Text>
-            </Button>
-          </Dropdown>
-          <Space size="large">
-            <Badge count={3} dot>
-              <Button type="text" shape="circle" icon={<BellOutlined />} />
-            </Badge>
-            <Dropdown menu={userMenu} placement="bottomRight">
-              <Space style={{ cursor: "pointer" }}>
-                <Avatar icon={<UserOutlined />} style={{ backgroundColor: "#0050b3" }} />
-                <Text strong className="hidden md:block">
-                  {userName}
-                </Text>
-              </Space>
-            </Dropdown>
-          </Space>
-        </Header>
-
-        <Content style={{ margin: "24px" }}>
-          <Space direction="vertical" size="large" className="w-full">
+    <>
+      <div className="bos-page-content">
+        <div style={{ display: "flex", flexDirection: "column", gap: 24, width: "100%" }}>
             <div className="bg-white p-6 rounded-lg border border-gray-100 shadow-sm">
               <Breadcrumb items={[{ title: "Trang chủ" }, { title: "Cài đặt Hệ thống" }]} />
               <Title level={2} style={{ margin: "8px 0 0 0" }}>
@@ -522,6 +516,7 @@ export default function SystemSettingsPage() {
               onChange={setActiveTab}
               type="line"
               size="large"
+              style={{ width: "100%" }}
               items={[
                 // TAB 1: THÀNH VIÊN
                 {
@@ -663,6 +658,17 @@ export default function SystemSettingsPage() {
                                   onClick={() => handleEditUser(user)}
                                 >
                                   Sửa
+                                </Button>
+                                <Button
+                                  type="link"
+                                  icon={<KeyOutlined />}
+                                  onClick={() => {
+                                    setSelectedResetUser(user);
+                                    resetPasswordForm.resetFields();
+                                    setIsResetPasswordModalOpen(true);
+                                  }}
+                                >
+                                  Đặt lại MK
                                 </Button>
                                 <Popconfirm
                                   title="Xóa tài khoản này?"
@@ -958,11 +964,19 @@ export default function SystemSettingsPage() {
                       },
                     ]
                   : []),
+                {
+                  key: "audit_logs",
+                  label: (
+                    <span>
+                      <FileSearchOutlined /> Nhật ký Hệ thống
+                    </span>
+                  ),
+                  children: <AuditLogViewer />,
+                },
               ]}
             />
-          </Space>
-        </Content>
-      </Layout>
+          </div>
+        </div>
 
 
       <Modal
@@ -1167,6 +1181,66 @@ export default function SystemSettingsPage() {
         </Form>
       </Modal>
 
+      {/* Modal Đặt lại mật khẩu thành viên */}
+      <Modal
+        title={
+          <Space>
+            <KeyOutlined style={{ color: "#faad14" }} />
+            <span>Đặt lại mật khẩu cho: {selectedResetUser?.fullName}</span>
+          </Space>
+        }
+        open={isResetPasswordModalOpen}
+        onCancel={() => {
+          setIsResetPasswordModalOpen(false);
+          setSelectedResetUser(null);
+        }}
+        onOk={() => resetPasswordForm.submit()}
+        confirmLoading={resetUserPassword.isPending}
+        okText="Đặt lại mật khẩu"
+        cancelText="Hủy"
+        destroyOnClose
+      >
+        {selectedResetUser && (
+          <div style={{ marginTop: 12 }}>
+            <div style={{ background: "#fffbe6", border: "1px solid #ffe58f", padding: "8px 12px", borderRadius: "6px", marginBottom: "16px", fontSize: "13px" }}>
+              Lưu ý: Mật khẩu mới sẽ tự động đồng bộ cho tất cả các tài khoản đa doanh nghiệp sử dụng địa chỉ email <strong>{selectedResetUser.email}</strong>.
+            </div>
+            <Form
+              form={resetPasswordForm}
+              layout="vertical"
+              onFinish={(vals) => {
+                if (selectedResetUser) {
+                  resetUserPassword.mutate(
+                    { id: selectedResetUser.id, password: vals.password },
+                    {
+                      onSuccess: () => {
+                        message.success("Đặt lại mật khẩu thành công!");
+                        setIsResetPasswordModalOpen(false);
+                        setSelectedResetUser(null);
+                      },
+                      onError: (err: any) => {
+                        message.error(err?.response?.data?.message || "Đã xảy ra lỗi khi đặt lại mật khẩu.");
+                      }
+                    }
+                  );
+                }
+              }}
+            >
+              <Form.Item
+                name="password"
+                label="Mật khẩu mới"
+                rules={[
+                  { required: true, message: "Vui lòng nhập mật khẩu mới" },
+                  { min: 6, message: "Mật khẩu tối thiểu phải từ 6 ký tự" }
+                ]}
+              >
+                <Input.Password placeholder="Nhập mật khẩu mới..." size="large" />
+              </Form.Item>
+            </Form>
+          </div>
+        )}
+      </Modal>
+
       {/* --- CÁC MODAL VAI TRÒ --- */}
       <Modal
         title="Tạo Vai trò mới"
@@ -1362,6 +1436,14 @@ export default function SystemSettingsPage() {
           </Form.Item>
         </Form>
       </Modal>
-    </Layout>
+    </>
+  );
+}
+
+export default function SystemSettingsPage() {
+  return (
+    <AppShell>
+      <SettingsContent />
+    </AppShell>
   );
 }

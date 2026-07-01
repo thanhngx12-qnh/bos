@@ -19,8 +19,8 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     const request = context.switchToHttp().getRequest();
     const user = request.user; // User giải mã từ JWT Token
 
-    // 2. Lấy Tenant ID từ Header
-    const tenantIdHeader = request.headers['x-tenant-id'];
+    // 2. Lấy Tenant ID từ Header hoặc Query Parameter
+    const tenantIdHeader = request.headers['x-tenant-id'] || request.query['tenantId'];
     const headerTenantId = tenantIdHeader ? Number(tenantIdHeader) : undefined;
 
     // 3. === BẢN VÁ BẢO MẬT: SO KHỚP TENANT CONTEXT ===

@@ -25,6 +25,10 @@ import {
   UndoOutlined,
   LayoutOutlined,
   SafetyCertificateOutlined,
+  BoldOutlined,
+  ItalicOutlined,
+  PlusOutlined,
+  DeleteOutlined,
 } from "@ant-design/icons";
 import { api } from "@/lib/axios";
 import { useSignatures } from "@/hooks/useSignatures";
@@ -44,7 +48,11 @@ interface SignatureOtpModalProps {
     showSignerRole?: boolean,
     showSignerDept?: boolean,
     showSigningTime?: boolean,
-    nextAssigneeId?: number
+    nextAssigneeId?: number,
+    fontFamily?: string,
+    fontSize?: number,
+    fontBold?: boolean,
+    fontItalic?: boolean
   ) => void;
   instanceId: number;
   transitionId: number;
@@ -82,6 +90,29 @@ export default function SignatureOtpModal({
   const [showDept, setShowDept] = useState(true);
   const [showTime, setShowTime] = useState(true);
 
+  // Styling states for accompanying text
+  const [textFont, setTextFont] = useState("sans-serif");
+  const [textSize, setTextSize] = useState(11);
+  const [textBold, setTextBold] = useState(false);
+  const [textItalic, setTextItalic] = useState(false);
+
+  // Preset states & Interface
+  interface SignaturePreset {
+    name: string;
+    layout: "vertical" | "horizontal";
+    showName: boolean;
+    showRole: boolean;
+    showDept: boolean;
+    showTime: boolean;
+    textFont: string;
+    textSize: number;
+    textBold: boolean;
+    textItalic: boolean;
+  }
+  const [presets, setPresets] = useState<SignaturePreset[]>([]);
+  const [selectedPresetIndex, setSelectedPresetIndex] = useState<number | undefined>(undefined);
+  const [newPresetName, setNewPresetName] = useState("");
+
   // Canvas states
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -108,8 +139,47 @@ export default function SignatureOtpModal({
       if (typeof window !== "undefined") {
         const storedName = localStorage.getItem("bos_user_name");
         if (storedName) setUserName(storedName);
+
+        const storedPresets = localStorage.getItem("bos_signature_presets");
+        if (storedPresets) {
+          try {
+            setPresets(JSON.parse(storedPresets));
+          } catch (e) {
+            console.error("Failed to parse presets", e);
+          }
+        } else {
+          const defaults: SignaturePreset[] = [
+            {
+              name: "Chữ ký Ngang - Chỉ tên (Times New Roman 13px)",
+              layout: "horizontal",
+              showName: true,
+              showRole: false,
+              showDept: false,
+              showTime: false,
+              textFont: "Times New Roman",
+              textSize: 13,
+              textBold: true,
+              textItalic: false,
+            },
+            {
+              name: "Chữ ký Dọc - Đầy đủ thông tin (Nghiêng)",
+              layout: "vertical",
+              showName: true,
+              showRole: true,
+              showDept: true,
+              showTime: true,
+              textFont: "sans-serif",
+              textSize: 11,
+              textBold: false,
+              textItalic: true,
+            }
+          ];
+          setPresets(defaults);
+          localStorage.setItem("bos_signature_presets", JSON.stringify(defaults));
+        }
       }
 
+      setSelectedPresetIndex(undefined);
       setOtpCode("");
       setIsOtpSent(false);
       setMockOtpCode(null);
@@ -119,7 +189,7 @@ export default function SignatureOtpModal({
       setNextAssigneeId(undefined);
 
       // Separate templates
-      const sigs = signatures.filter((s) => s.type === "DRAW" || s.type === "IMAGE");
+      const sigs = signatures.filter((s) => s.type === "DRAW" || s.type === "IMAGE" || s.type === "TEXT");
       const defaultSig = sigs.find((s) => s.isDefault);
       const fallbackSig = sigs[0];
 
@@ -283,7 +353,11 @@ export default function SignatureOtpModal({
       showRole,
       showDept,
       showTime,
-      nextAssigneeId
+      nextAssigneeId,
+      textFont,
+      textSize,
+      textBold,
+      textItalic
     );
   };
 
@@ -360,10 +434,10 @@ export default function SignatureOtpModal({
                     value={selectedSigId}
                     onChange={setSelectedSigId}
                     options={signatures
-                      .filter((s) => s.type === "DRAW" || s.type === "IMAGE")
+                      .filter((s) => s.type === "DRAW" || s.type === "IMAGE" || s.type === "TEXT")
                       .map((s) => ({
                         value: s.id,
-                        label: `${s.name} (${s.type === "DRAW" ? "Chữ ký tay" : "Ảnh chữ ký"})`,
+                        label: `${s.name} (${s.type === "DRAW" ? "Chữ ký tay" : s.type === "TEXT" ? "Chữ ký chữ" : "Ảnh chữ ký"})`,
                       }))}
                   />
                 </div>
@@ -465,6 +539,99 @@ export default function SignatureOtpModal({
               </Radio.Group>
             </div>
 
+            <div style={{ marginBottom: "16px", border: "1px solid #f0f0f0", padding: "10px", borderRadius: "6px", background: "#fafafa" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                <Text strong style={{ fontSize: "13px" }}>Mẫu cấu hình nhanh:</Text>
+              </div>
+              <Row gutter={8} align="middle">
+                <Col span={18}>
+                  <Select
+                    placeholder="Chọn mẫu nhanh..."
+                    style={{ width: "100%" }}
+                    value={selectedPresetIndex}
+                    onChange={(idx) => {
+                      setSelectedPresetIndex(idx);
+                      const p = presets[idx];
+                      if (p) {
+                        setLayout(p.layout);
+                        setShowName(p.showName);
+                        setShowRole(p.showRole);
+                        setShowDept(p.showDept);
+                        setShowTime(p.showTime);
+                        setTextFont(p.textFont);
+                        setTextSize(p.textSize);
+                        setTextBold(p.textBold);
+                        setTextItalic(p.textItalic);
+                      }
+                    }}
+                    options={presets.map((p, idx) => ({
+                      value: idx,
+                      label: p.name,
+                    }))}
+                    size="small"
+                  />
+                </Col>
+                <Col span={6} style={{ display: "flex", justifyContent: "flex-end" }}>
+                  <Button
+                    danger
+                    icon={<DeleteOutlined />}
+                    size="small"
+                    disabled={selectedPresetIndex === undefined}
+                    onClick={() => {
+                      if (selectedPresetIndex !== undefined) {
+                        const nextPresets = presets.filter((_, idx) => idx !== selectedPresetIndex);
+                        setPresets(nextPresets);
+                        localStorage.setItem("bos_signature_presets", JSON.stringify(nextPresets));
+                        setSelectedPresetIndex(undefined);
+                        message.success("Đã xóa mẫu cấu hình.");
+                      }
+                    }}
+                    title="Xóa mẫu cấu hình này"
+                  />
+                </Col>
+              </Row>
+
+              <div style={{ display: "flex", marginTop: "8px", gap: "6px" }}>
+                <Input
+                  placeholder="Đặt tên mẫu hiện tại..."
+                  size="small"
+                  value={newPresetName}
+                  onChange={(e) => setNewPresetName(e.target.value)}
+                />
+                <Button
+                  type="primary"
+                  icon={<PlusOutlined />}
+                  size="small"
+                  onClick={() => {
+                    if (!newPresetName.trim()) {
+                      message.warning("Vui lòng nhập tên cho mẫu cấu hình.");
+                      return;
+                    }
+                    const newPreset: SignaturePreset = {
+                      name: newPresetName.trim(),
+                      layout,
+                      showName,
+                      showRole,
+                      showDept,
+                      showTime,
+                      textFont,
+                      textSize,
+                      textBold,
+                      textItalic,
+                    };
+                    const nextPresets = [...presets, newPreset];
+                    setPresets(nextPresets);
+                    localStorage.setItem("bos_signature_presets", JSON.stringify(nextPresets));
+                    setSelectedPresetIndex(nextPresets.length - 1);
+                    setNewPresetName("");
+                    message.success("Đã lưu mẫu cấu hình mới!");
+                  }}
+                >
+                  Lưu
+                </Button>
+              </div>
+            </div>
+
             <div style={{ marginBottom: "16px" }}>
               <Text strong style={{ display: "block", marginBottom: "6px" }}>
                 Hiển thị thông tin đi kèm:
@@ -483,6 +650,55 @@ export default function SignatureOtpModal({
                   Thời điểm ký ({sampleTime.split(" ")[0]})
                 </Checkbox>
               </Space>
+
+              <div style={{ borderTop: "1px solid #f0f0f0", paddingTop: "10px", marginTop: "10px" }}>
+                <Text type="secondary" style={{ fontSize: "12px", display: "block", marginBottom: "6px" }}>
+                  Định dạng chữ đi kèm:
+                </Text>
+                <Row gutter={8} align="middle">
+                  <Col span={10}>
+                    <Select
+                      style={{ width: "100%" }}
+                      size="small"
+                      value={textFont}
+                      onChange={setTextFont}
+                      options={[
+                        { value: "sans-serif", label: "Sans-serif" },
+                        { value: "Times New Roman", label: "Times New Roman" },
+                        { value: "Arial", label: "Arial" },
+                        { value: "Courier New", label: "Courier" },
+                        { value: "Georgia", label: "Georgia" },
+                        { value: "Dancing Script", label: "Dancing Script" },
+                        { value: "Pacifico", label: "Pacifico" },
+                        { value: "Montserrat", label: "Montserrat" },
+                      ]}
+                    />
+                  </Col>
+                  <Col span={6}>
+                    <Select
+                      style={{ width: "100%" }}
+                      size="small"
+                      value={textSize}
+                      onChange={setTextSize}
+                      options={[9, 10, 11, 12, 13, 14, 15, 16].map(v => ({ value: v, label: `${v}px` }))}
+                    />
+                  </Col>
+                  <Col span={8} style={{ display: "flex", gap: "4px" }}>
+                    <Button
+                      type={textBold ? "primary" : "default"}
+                      size="small"
+                      icon={<BoldOutlined />}
+                      onClick={() => setTextBold(!textBold)}
+                    />
+                    <Button
+                      type={textItalic ? "primary" : "default"}
+                      size="small"
+                      icon={<ItalicOutlined />}
+                      onClick={() => setTextItalic(!textItalic)}
+                    />
+                  </Col>
+                </Row>
+              </div>
             </div>
           </Col>
 
@@ -524,10 +740,7 @@ export default function SignatureOtpModal({
                           display: "inline-flex",
                           alignItems: "center",
                           gap: "12px",
-                          border: "1px solid #e2e8f0",
                           padding: "8px",
-                          borderRadius: "6px",
-                          backgroundColor: "#fafafa",
                           fontFamily: "sans-serif",
                           textAlign: "left",
                           lineHeight: "1.3",
@@ -541,9 +754,7 @@ export default function SignatureOtpModal({
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "center",
-                            background: "#ffffff",
-                            border: "1px solid #cbd5e1",
-                            borderRadius: "4px",
+                            background: "transparent",
                             padding: "2px",
                           }}
                         >
@@ -581,18 +792,55 @@ export default function SignatureOtpModal({
                             [ĐÃ KÝ ĐIỆN TỬ]
                           </div>
                           {showName && (
-                            <div style={{ fontSize: "11px", fontWeight: "bold", color: "#1e293b" }}>
+                            <div
+                              style={{
+                                fontFamily: `"${textFont}", sans-serif`,
+                                fontSize: `${textSize}px`,
+                                fontWeight: textBold ? "bold" : "normal",
+                                fontStyle: textItalic ? "italic" : "normal",
+                                color: "#1e293b",
+                              }}
+                            >
                               {userName}
                             </div>
                           )}
                           {showRole && (
-                            <div style={{ fontSize: "9px", color: "#64748b" }}>{sampleRole}</div>
+                            <div
+                              style={{
+                                fontFamily: `"${textFont}", sans-serif`,
+                                fontSize: `${Math.max(8, textSize - 2)}px`,
+                                fontWeight: textBold ? "bold" : "normal",
+                                fontStyle: textItalic ? "italic" : "normal",
+                                color: "#64748b",
+                              }}
+                            >
+                              {sampleRole}
+                            </div>
                           )}
                           {showDept && (
-                            <div style={{ fontSize: "9px", color: "#64748b" }}>{sampleDept}</div>
+                            <div
+                              style={{
+                                fontFamily: `"${textFont}", sans-serif`,
+                                fontSize: `${Math.max(8, textSize - 2)}px`,
+                                fontWeight: textBold ? "bold" : "normal",
+                                fontStyle: textItalic ? "italic" : "normal",
+                                color: "#64748b",
+                              }}
+                            >
+                              {sampleDept}
+                            </div>
                           )}
                           {showTime && (
-                            <div style={{ fontSize: "8px", color: "#94a3b8", marginTop: "1px" }}>
+                            <div
+                              style={{
+                                fontFamily: `"${textFont}", sans-serif`,
+                                fontSize: `${Math.max(8, textSize - 3)}px`,
+                                fontWeight: textBold ? "bold" : "normal",
+                                fontStyle: textItalic ? "italic" : "normal",
+                                color: "#94a3b8",
+                                marginTop: "1px",
+                              }}
+                            >
                               {sampleTime}
                             </div>
                           )}
@@ -605,10 +853,7 @@ export default function SignatureOtpModal({
                           flexDirection: "column",
                           alignItems: "center",
                           textAlign: "center",
-                          border: "1px solid #e2e8f0",
                           padding: "8px",
-                          borderRadius: "6px",
-                          backgroundColor: "#fafafa",
                           fontFamily: "sans-serif",
                           minWidth: "130px",
                           lineHeight: "1.3",
@@ -633,9 +878,7 @@ export default function SignatureOtpModal({
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "center",
-                            background: "#ffffff",
-                            border: "1px solid #cbd5e1",
-                            borderRadius: "4px",
+                            background: "transparent",
                             padding: "2px",
                             marginBottom: "4px",
                             marginLeft: "auto",
@@ -664,20 +907,56 @@ export default function SignatureOtpModal({
                           )}
                         </div>
                         {showName && (
-                          <div style={{ fontSize: "11px", fontWeight: "bold", color: "#1e293b" }}>
+                          <div
+                            style={{
+                              fontFamily: `"${textFont}", sans-serif`,
+                              fontSize: `${textSize}px`,
+                              fontWeight: textBold ? "bold" : "normal",
+                              fontStyle: textItalic ? "italic" : "normal",
+                              color: "#1e293b",
+                            }}
+                          >
                             {userName}
                           </div>
                         )}
                         {showRole && (
-                          <div style={{ fontSize: "9px", color: "#64748b", marginTop: "1px" }}>
+                          <div
+                            style={{
+                              fontFamily: `"${textFont}", sans-serif`,
+                              fontSize: `${Math.max(8, textSize - 2)}px`,
+                              fontWeight: textBold ? "bold" : "normal",
+                              fontStyle: textItalic ? "italic" : "normal",
+                              color: "#64748b",
+                              marginTop: "1px",
+                            }}
+                          >
                             {sampleRole}
                           </div>
                         )}
                         {showDept && (
-                          <div style={{ fontSize: "9px", color: "#64748b" }}>{sampleDept}</div>
+                          <div
+                            style={{
+                              fontFamily: `"${textFont}", sans-serif`,
+                              fontSize: `${Math.max(8, textSize - 2)}px`,
+                              fontWeight: textBold ? "bold" : "normal",
+                              fontStyle: textItalic ? "italic" : "normal",
+                              color: "#64748b",
+                            }}
+                          >
+                            {sampleDept}
+                          </div>
                         )}
                         {showTime && (
-                          <div style={{ fontSize: "8px", color: "#94a3b8", marginTop: "2px" }}>
+                          <div
+                            style={{
+                              fontFamily: `"${textFont}", sans-serif`,
+                              fontSize: `${Math.max(8, textSize - 3)}px`,
+                              fontWeight: textBold ? "bold" : "normal",
+                              fontStyle: textItalic ? "italic" : "normal",
+                              color: "#94a3b8",
+                              marginTop: "2px",
+                            }}
+                          >
                             {sampleTime}
                           </div>
                         )}

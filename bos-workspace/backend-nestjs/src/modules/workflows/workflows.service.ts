@@ -380,6 +380,14 @@ export class WorkflowsService {
       );
     }
 
+    await this.notifyObservers(
+      record.id,
+      recordCode,
+      'Theo dõi hồ sơ mới',
+      `Bạn được gắn thẻ là người liên quan trong hồ sơ ${recordCode} khởi tạo bởi ${initiatorName}. Trạng thái hiện tại: Chờ duyệt tại bước: ${firstStep.name}.`,
+      candidateUsers,
+    );
+
     return instance;
   }
 
@@ -510,6 +518,10 @@ export class WorkflowsService {
           showSignerRole: dto.showSignerRole !== false,
           showSignerDept: dto.showSignerDept !== false,
           showSigningTime: dto.showSigningTime !== false,
+          fontFamily: dto.fontFamily || 'sans-serif',
+          fontSize: dto.fontSize !== undefined ? Number(dto.fontSize) : 11,
+          fontBold: dto.fontBold === true,
+          fontItalic: dto.fontItalic === true,
         };
       }
 
@@ -685,6 +697,7 @@ export class WorkflowsService {
 
       return {
         instanceId,
+        recordId: instance.recordId,
         entityId: instance.record.entityId,
         isCompleted: shouldTransition && finalStatus === 'COMPLETED',
         recordData: instance.record.data,
@@ -693,7 +706,7 @@ export class WorkflowsService {
         initiatorId: (instance.record as any).createdById,
         workflowName: (instance.version as any).workflow.name,
         actionExecuted: actionLabel,
-        isRejected: false,
+        isRejected: finalStatus === 'REJECTED',
         nextStepId: shouldTransition
           ? nextStepId
           : (instance as any).currentStepId,
@@ -726,6 +739,37 @@ export class WorkflowsService {
           },
         },
       );
+      await this.notifyObservers(
+        result.recordId,
+        result.recordCode,
+        'Theo dõi cập nhật hồ sơ',
+        `Hồ sơ liên quan ${result.recordCode} đã được PHÊ DUYỆT HOÀN TẤT.`,
+        [result.initiatorId, userId],
+      );
+    } else if (result.isRejected) {
+      const initiator = await this.prisma.user.findFirst({
+        where: { id: result.initiatorId } as any,
+      });
+      await this.notificationsService.createNotification(
+        result.initiatorId,
+        'Quy trình bị từ chối',
+        `Hồ sơ ${result.recordCode} của bạn đã bị từ chối bởi ${approverName}.`,
+        {
+          emailJobName: 'send-workflow-completed',
+          emailPayload: {
+            recipientName: initiator?.fullName || 'Người dùng',
+            recordCode: result.recordCode,
+            status: 'Bị từ chối',
+          },
+        },
+      );
+      await this.notifyObservers(
+        result.recordId,
+        result.recordCode,
+        'Theo dõi cập nhật hồ sơ',
+        `Hồ sơ liên quan ${result.recordCode} đã bị TỪ CHỐI bởi ${approverName}.`,
+        [result.initiatorId, userId],
+      );
     } else if (result.shouldTransition && result.nextStepId) {
       await this.notificationsService.createNotification(
         result.initiatorId,
@@ -752,6 +796,14 @@ export class WorkflowsService {
           },
         );
       }
+
+      await this.notifyObservers(
+        result.recordId,
+        result.recordCode,
+        'Theo dõi cập nhật hồ sơ',
+        `Hồ sơ liên quan ${result.recordCode} đã được chuyển tiếp sang bước: ${result.nextStepName}.`,
+        [result.initiatorId, userId, ...result.nextStepCandidates],
+      );
     }
 
     if (result.isCompleted) {
@@ -1008,6 +1060,7 @@ export class WorkflowsService {
 
       return {
         instanceId,
+        recordId: instance.recordId,
         entityId: instance.record.entityId,
         isCompleted: finalStatus === 'COMPLETED',
         recordData: instance.record.data,
@@ -1042,6 +1095,13 @@ export class WorkflowsService {
           },
         },
       );
+      await this.notifyObservers(
+        result.recordId,
+        result.recordCode,
+        'Theo dõi cập nhật hồ sơ (Tự động)',
+        `Hồ sơ liên quan ${result.recordCode} đã được HỆ THỐNG TỰ ĐỘNG PHÊ DUYỆT do quá hạn SLA.`,
+        [result.initiatorId],
+      );
     } else if (result.isRejected) {
       const initiator = await this.prisma.user.findFirst({
         where: { id: result.initiatorId } as any,
@@ -1058,6 +1118,13 @@ export class WorkflowsService {
             status: 'Từ chối (Tự động)',
           },
         },
+      );
+      await this.notifyObservers(
+        result.recordId,
+        result.recordCode,
+        'Theo dõi cập nhật hồ sơ (Tự động)',
+        `Hồ sơ liên quan ${result.recordCode} đã bị HỆ THỐNG TỰ ĐỘNG TỪ CHỐI do quá hạn SLA.`,
+        [result.initiatorId],
       );
     } else if (result.nextStepId) {
       await this.notificationsService.createNotification(
@@ -1085,6 +1152,13 @@ export class WorkflowsService {
           },
         );
       }
+      await this.notifyObservers(
+        result.recordId,
+        result.recordCode,
+        'Theo dõi cập nhật hồ sơ (Tự động)',
+        `Hồ sơ liên quan ${result.recordCode} đã được chuyển tiếp tự động sang bước: ${result.nextStepName} do trễ hạn SLA.`,
+        [result.initiatorId, ...result.nextStepCandidates],
+      );
     }
 
     if (result.isCompleted) {
@@ -1393,5 +1467,53 @@ export class WorkflowsService {
       message: 'Mã xác thực OTP đã được gửi qua email của bạn.',
       mockCode: otpCode,
     };
+  }
+
+  private async notifyObservers(
+    recordId: number,
+    recordCode: string,
+    title: string,
+    message: string,
+    excludeUserIds: number[] = [],
+  ) {
+    try {
+      const record = await this.prisma.record.findFirst({
+        where: { id: recordId } as any,
+      });
+      if (!record || !record.data) return;
+      const dataObj = typeof record.data === 'string' ? JSON.parse(record.data) : record.data;
+      
+      const observerFields = ['nguoi_lien_quan', 'related_users', 'observers', 'nguoilienquan'];
+      const userIds: number[] = [];
+      for (const field of observerFields) {
+        const val = dataObj[field];
+        if (val !== undefined && val !== null) {
+          if (Array.isArray(val)) {
+            for (const v of val) {
+              const num = Number(v);
+              if (!isNaN(num) && num > 0) {
+                userIds.push(num);
+              }
+            }
+          } else {
+            const num = Number(val);
+            if (!isNaN(num) && num > 0) {
+              userIds.push(num);
+            }
+          }
+        }
+      }
+      
+      const uniqueIds = Array.from(new Set(userIds)).filter(id => !excludeUserIds.includes(id));
+      for (const observerId of uniqueIds) {
+        await this.notificationsService.createNotification(
+          observerId,
+          title,
+          message,
+        );
+      }
+    } catch (err) {
+      console.error('Error notifying observers:', err);
+    }
   }
 }

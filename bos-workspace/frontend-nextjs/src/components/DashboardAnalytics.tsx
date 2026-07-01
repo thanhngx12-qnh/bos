@@ -1,7 +1,7 @@
 // File: src/components/DashboardAnalytics.tsx
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   Card,
   Row,
@@ -13,7 +13,6 @@ import {
   Empty,
   Spin,
   Alert,
-  Tooltip,
 } from "antd";
 import {
   BarChartOutlined,
@@ -33,6 +32,18 @@ import {
 } from "@/hooks/useAnalytics";
 import { useEntities } from "@/hooks/useEntities";
 import { useFields } from "@/hooks/useFields";
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip as RechartsTooltip,
+  Cell,
+  PieChart,
+  Pie,
+  Legend as RechartsLegend,
+} from "recharts";
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -48,6 +59,12 @@ export default function DashboardAnalytics() {
   const [selectedEntityId, setSelectedEntityId] = useState<number | undefined>(undefined);
   const [selectedAmountField, setSelectedAmountField] = useState<string>("total_amount");
 
+  // SSR hydration guard
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
   // Query fields for the selected entity to identify numeric/formula fields
   const { data: fields = [], isLoading: isFieldsLoading } = useFields(selectedEntityId || null);
 
@@ -62,14 +79,14 @@ export default function DashboardAnalytics() {
   }, [fields]);
 
   // Set first entity as default on load if not set
-  React.useEffect(() => {
+  useEffect(() => {
     if (entities.length > 0 && selectedEntityId === undefined) {
       setSelectedEntityId(entities[0].id);
     }
   }, [entities, selectedEntityId]);
 
   // Set default amount field when entity changes
-  React.useEffect(() => {
+  useEffect(() => {
     if (numericFields.length > 0) {
       // Look for total_amount first, otherwise fallback to the first numeric field
       const totalField = numericFields.find((f) => f.code === "total_amount" || f.code === "total_payment");
@@ -118,18 +135,6 @@ export default function DashboardAnalytics() {
     };
   }, [workflowsSummary]);
 
-  // Max record count for form utilization charting
-  const maxRecordCount = useMemo(() => {
-    const counts = entitiesSummary.map((e) => e._count?.records || 0);
-    return counts.length > 0 ? Math.max(...counts, 1) : 1;
-  }, [entitiesSummary]);
-
-  // Max department spending for budget visualization
-  const maxSpending = useMemo(() => {
-    const spending = spendingData.map((d) => d.totalSpending || 0);
-    return spending.length > 0 ? Math.max(...spending, 1) : 1;
-  }, [spendingData]);
-
   // Formatter for VND currencies
   const formatVND = (value: number) => {
     return new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(value);
@@ -151,12 +156,35 @@ export default function DashboardAnalytics() {
     return `${days} ngày ${remHours} giờ`;
   }, [taskAnalytics]);
 
+  // Recharts formatted data
+  const spendingChartData = useMemo(() => {
+    return spendingData.map((d) => ({
+      name: d.departmentName,
+      "Tổng chi tiêu": d.totalSpending,
+    }));
+  }, [spendingData]);
+
+  const pieData = useMemo(() => {
+    return [
+      { name: "Hoàn tất", value: workflowStats.completed, color: "#52c41a" },
+      { name: "Đang duyệt", value: workflowStats.inProgress, color: "#1890ff" },
+      { name: "Bị từ chối", value: workflowStats.rejected, color: "#ff4d4f" },
+    ].filter((d) => d.value > 0);
+  }, [workflowStats]);
+
+  const utilizationChartData = useMemo(() => {
+    return entitiesSummary.map((item) => ({
+      name: item.name,
+      "Số phiếu": item._count?.records || 0,
+    }));
+  }, [entitiesSummary]);
+
   return (
-    <div style={{ width: "100%" }}>
+    <div style={{ width: "100%" }} className="bos-animate-fade-in">
       {/* 1. TOP METRICS CARDS ROW */}
       <Row gutter={[20, 20]} style={{ marginBottom: "24px" }}>
         <Col xs={24} sm={12} md={6}>
-          <Card bordered={false} className="shadow-sm" style={{ borderRadius: "8px", background: "#f0f5ff", borderLeft: "4px solid #1890ff" }}>
+          <Card bordered={false} className="bos-stat-card" style={{ background: "#f0f5ff", borderLeft: "4px solid #1890ff" }}>
             <Statistic
               title={<span style={{ color: "#4f4f4f", fontWeight: 600 }}>Biểu mẫu Động</span>}
               value={entitiesSummary.length}
@@ -167,7 +195,7 @@ export default function DashboardAnalytics() {
           </Card>
         </Col>
         <Col xs={24} sm={12} md={6}>
-          <Card bordered={false} className="shadow-sm" style={{ borderRadius: "8px", background: "#f6ffed", borderLeft: "4px solid #52c41a" }}>
+          <Card bordered={false} className="bos-stat-card" style={{ background: "#f6ffed", borderLeft: "4px solid #52c41a" }}>
             <Statistic
               title={<span style={{ color: "#4f4f4f", fontWeight: 600 }}>Tổng hồ sơ lưu trữ</span>}
               value={totalRecords}
@@ -178,7 +206,7 @@ export default function DashboardAnalytics() {
           </Card>
         </Col>
         <Col xs={24} sm={12} md={6}>
-          <Card bordered={false} className="shadow-sm" style={{ borderRadius: "8px", background: "#fffbe6", borderLeft: "4px solid #faad14" }}>
+          <Card bordered={false} className="bos-stat-card" style={{ background: "#fffbe6", borderLeft: "4px solid #faad14" }}>
             <Statistic
               title={<span style={{ color: "#4f4f4f", fontWeight: 600 }}>Lượt chạy Quy trình</span>}
               value={totalInstances}
@@ -189,7 +217,7 @@ export default function DashboardAnalytics() {
           </Card>
         </Col>
         <Col xs={24} sm={12} md={6}>
-          <Card bordered={false} className="shadow-sm" style={{ borderRadius: "8px", background: "#fff1f0", borderLeft: "4px solid #ff4d4f" }}>
+          <Card bordered={false} className="bos-stat-card" style={{ background: "#fff1f0", borderLeft: "4px solid #ff4d4f" }}>
             <Statistic
               title={<span style={{ color: "#4f4f4f", fontWeight: 600 }}>Nhiệm vụ trễ hạn SLA</span>}
               value={taskAnalytics?.overdueCount || 0}
@@ -242,54 +270,32 @@ export default function DashboardAnalytics() {
             style={{ borderRadius: "8px", height: "100%" }}
           >
             {isSpendingLoading ? (
-              <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "220px" }}>
+              <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "300px" }}>
                 <Spin tip="Đang tải dữ liệu..." />
               </div>
             ) : spendingData.length === 0 ? (
-              <Empty description="Không có dữ liệu tài chính cho biểu mẫu và trường được cấu hình." style={{ padding: "40px 0" }} />
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: "16px", padding: "8px 0" }}>
-                {spendingData.map((dept, index) => {
-                  const percent = Math.round((dept.totalSpending / maxSpending) * 100);
-                  const barGradients = [
-                    "linear-gradient(90deg, #1890ff, #36cfc9)",
-                    "linear-gradient(90deg, #722ed1, #b37feb)",
-                    "linear-gradient(90deg, #52c41a, #95de64)",
-                    "linear-gradient(90deg, #fa8c16, #ffd591)",
-                    "linear-gradient(90deg, #f5222d, #ff9c6e)",
-                  ];
-                  const barColor = barGradients[index % barGradients.length];
-
-                  return (
-                    <div key={dept.departmentName} style={{ width: "100%" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
-                        <Text strong style={{ fontSize: "13px" }}>{dept.departmentName}</Text>
-                        <Text strong style={{ color: "#0d1b2a", fontSize: "13px" }}>{formatVND(dept.totalSpending)}</Text>
-                      </div>
-                      <div
-                        style={{
-                          width: "100%",
-                          height: "16px",
-                          background: "#f0f2f5",
-                          borderRadius: "8px",
-                          overflow: "hidden",
-                          position: "relative",
-                        }}
-                      >
-                        <div
-                          style={{
-                            width: `${percent}%`,
-                            height: "100%",
-                            background: barColor,
-                            borderRadius: "8px",
-                            transition: "width 0.8s ease-in-out",
-                          }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
+              <Empty description="Không có dữ liệu tài chính cho biểu mẫu và trường được cấu hình." style={{ padding: "80px 0" }} />
+            ) : isMounted ? (
+              <div style={{ width: "100%", height: 320 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={spendingChartData}
+                    layout="vertical"
+                    margin={{ top: 5, right: 30, left: 10, bottom: 5 }}
+                  >
+                    <XAxis type="number" tickFormatter={(val) => `${(val / 1000000).toFixed(0)}M`} style={{ fontSize: 11 }} />
+                    <YAxis dataKey="name" type="category" width={90} style={{ fontSize: 11, fontWeight: 500 }} />
+                    <RechartsTooltip formatter={(value) => formatVND(value as number)} />
+                    <Bar dataKey="Tổng chi tiêu" radius={[0, 4, 4, 0]}>
+                      {spendingChartData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={["#1890ff", "#722ed1", "#52c41a", "#fa8c16", "#f5222d"][index % 5]} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
+            ) : (
+              <div style={{ height: 320 }} />
             )}
           </Card>
         </Col>
@@ -308,93 +314,40 @@ export default function DashboardAnalytics() {
             style={{ borderRadius: "8px", height: "100%" }}
           >
             {isWfSumLoading ? (
-              <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "220px" }}>
+              <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "300px" }}>
                 <Spin tip="Đang phân tích..." />
               </div>
             ) : workflowsSummary.length === 0 ? (
-              <Empty description="Chưa có dữ liệu vận hành quy trình." style={{ padding: "40px 0" }} />
+              <Empty description="Chưa có dữ liệu vận hành quy trình." style={{ padding: "80px 0" }} />
+            ) : isMounted ? (
+              <div style={{ width: "100%", height: 320, display: "flex", flexDirection: "column", justifyContent: "center" }}>
+                <div style={{ width: "100%", height: 260 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={pieData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={65}
+                        outerRadius={85}
+                        paddingAngle={4}
+                        dataKey="value"
+                      >
+                        {pieData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <RechartsTooltip />
+                      <RechartsLegend verticalAlign="bottom" height={36} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div style={{ textAlign: "center", marginTop: "-20px", fontSize: "12px", color: "#64748b" }}>
+                  Tổng lượt chạy quy trình: <strong>{totalInstances}</strong>
+                </div>
+              </div>
             ) : (
-              <Row align="middle" justify="center" style={{ minHeight: "200px" }}>
-                {/* Animated SVG Donut Chart */}
-                <Col span={10}>
-                  <div style={{ position: "relative", width: "100px", height: "100px", margin: "auto" }}>
-                    <svg viewBox="0 0 36 36" style={{ width: "100%", height: "100%", transform: "rotate(-90deg)" }}>
-                      {/* Base Background Circle */}
-                      <circle cx="18" cy="18" r="15.915" fill="none" stroke="#f0f2f5" strokeWidth="4" />
-                      
-                      {/* Completed Arc (Green) */}
-                      <circle
-                        cx="18"
-                        cy="18"
-                        r="15.915"
-                        fill="none"
-                        stroke="#52c41a"
-                        strokeWidth="4"
-                        strokeDasharray={`${workflowStats.completedPct} ${100 - workflowStats.completedPct}`}
-                        strokeDashoffset="0"
-                      />
-
-                      {/* In Progress Arc (Blue) */}
-                      <circle
-                        cx="18"
-                        cy="18"
-                        r="15.915"
-                        fill="none"
-                        stroke="#1890ff"
-                        strokeWidth="4"
-                        strokeDasharray={`${workflowStats.inProgressPct} ${100 - workflowStats.inProgressPct}`}
-                        strokeDashoffset={`-${workflowStats.completedPct}`}
-                      />
-
-                      {/* Rejected Arc (Red) */}
-                      <circle
-                        cx="18"
-                        cy="18"
-                        r="15.915"
-                        fill="none"
-                        stroke="#ff4d4f"
-                        strokeWidth="4"
-                        strokeDasharray={`${workflowStats.rejectedPct} ${100 - workflowStats.rejectedPct}`}
-                        strokeDashoffset={`-${workflowStats.completedPct + workflowStats.inProgressPct}`}
-                      />
-                    </svg>
-                    <div
-                      style={{
-                        position: "absolute",
-                        top: "50%",
-                        left: "50%",
-                        transform: "translate(-50%, -50%)",
-                        textAlign: "center",
-                      }}
-                    >
-                      <span style={{ fontSize: "16px", fontWeight: "bold" }}>{totalInstances}</span>
-                      <br />
-                      <span style={{ fontSize: "8px", color: "#8c8c8c", textTransform: "uppercase" }}>Lượt chạy</span>
-                    </div>
-                  </div>
-                </Col>
-
-                {/* Status Legend list */}
-                <Col span={14}>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "10px", paddingLeft: "16px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                      <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#52c41a" }} />
-                      <span style={{ flex: 1, fontSize: "12px" }}>Hoàn tất:</span>
-                      <Text strong style={{ fontSize: "12px" }}>{workflowStats.completed} ({workflowStats.completedPct}%)</Text>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                      <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#1890ff" }} />
-                      <span style={{ flex: 1, fontSize: "12px" }}>Đang duyệt:</span>
-                      <Text strong style={{ fontSize: "12px" }}>{workflowStats.inProgress} ({workflowStats.inProgressPct}%)</Text>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                      <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#ff4d4f" }} />
-                      <span style={{ flex: 1, fontSize: "12px" }}>Bị từ chối:</span>
-                      <Text strong style={{ fontSize: "12px" }}>{workflowStats.rejected} ({workflowStats.rejectedPct}%)</Text>
-                    </div>
-                  </div>
-                </Col>
-              </Row>
+              <div style={{ height: 320 }} />
             )}
           </Card>
         </Col>
@@ -416,30 +369,28 @@ export default function DashboardAnalytics() {
             style={{ borderRadius: "8px" }}
           >
             {isEntitiesSumLoading ? (
-              <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "150px" }}>
+              <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "220px" }}>
                 <Spin tip="Đang tải tần suất..." />
               </div>
             ) : entitiesSummary.length === 0 ? (
-              <Empty description="Không có biểu mẫu hoạt động." />
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                {entitiesSummary.map((item) => {
-                  const recordCount = item._count?.records || 0;
-                  const ratio = Math.round((recordCount / maxRecordCount) * 100);
-
-                  return (
-                    <div key={item.id}>
-                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
-                        <span style={{ fontSize: "12px", fontWeight: 500 }}>{item.name} ({item.code})</span>
-                        <Text strong style={{ fontSize: "12px" }}>{recordCount} phiếu</Text>
-                      </div>
-                      <div style={{ width: "100%", height: "8px", background: "#f5f5f5", borderRadius: "4px", overflow: "hidden" }}>
-                        <div style={{ width: `${ratio}%`, height: "100%", background: "#fa8c16", borderRadius: "4px" }} />
-                      </div>
-                    </div>
-                  );
-                })}
+              <Empty description="Không có biểu mẫu hoạt động." style={{ padding: "40px 0" }} />
+            ) : isMounted ? (
+              <div style={{ width: "100%", height: 220 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={utilizationChartData} margin={{ top: 10, right: 10, left: -10, bottom: 5 }}>
+                    <XAxis dataKey="name" style={{ fontSize: 11, fontWeight: 500 }} />
+                    <YAxis style={{ fontSize: 11 }} />
+                    <RechartsTooltip />
+                    <Bar dataKey="Số phiếu" fill="#fa8c16" radius={[4, 4, 0, 0]}>
+                      {utilizationChartData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={["#fa8c16", "#1890ff", "#13c2c2", "#722ed1", "#eb2f96"][index % 5]} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
+            ) : (
+              <div style={{ height: 220 }} />
             )}
           </Card>
         </Col>
@@ -451,7 +402,7 @@ export default function DashboardAnalytics() {
             title={
               <Space>
                 <WarningOutlined style={{ color: "#ff4d4f" }} />
-                <span style={{ fontSize: "16px", fontWeight: 600 }}>Bộ Cảnh báo & Phát hiện Điểm nghẽn SLA</span>
+                <span style={{ fontSize: "16px", fontWeight: 600 }}>Bộ Cảnh báo & SLA</span>
               </Space>
             }
             className="shadow-sm"

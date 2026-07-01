@@ -36,9 +36,11 @@ import {
   ShrinkOutlined,
   PaperClipOutlined,
   PictureOutlined,
+  EyeOutlined,
 } from "@ant-design/icons";
 import type { Dayjs } from "dayjs";
 import dayjs from "dayjs";
+import RecordDetailDrawer from "./RecordDetailDrawer";
 import { useFields, Field } from "@/hooks/useFields";
 import { useCreateRecord, useUpdateRecord, RecordData } from "@/hooks/useRecords";
 import { useWorkflows, useWorkflowSteps, useStepCandidates } from "@/hooks/useWorkflows";
@@ -47,6 +49,7 @@ import { useUsers } from "@/hooks/useUsers";
 import { useRoles } from "@/hooks/useRoles";
 import { Entity } from "@/hooks/useEntities";
 import { api } from "@/lib/axios";
+import { safeEvaluate } from "@/lib/formula-evaluator";
 
 const { Text } = Typography;
 const { TextArea } = Input;
@@ -87,28 +90,7 @@ function evaluateCondition(condition: DynamicCondition | undefined, formValues: 
 // =================== GLOBAL FORMULA ENGINE ===================
 function evaluateFormulaString(formula: string, context: Record<string, any>): number {
   try {
-    let expression = formula;
-    // Replace {field_code} with actual values
-    expression = expression.replace(/\{([^}]+)\}/g, (_, code) => {
-      const val = context[code];
-      return val !== undefined && val !== null ? String(Number(val) || 0) : "0";
-    });
-    // Replace raw field names (words)
-    const words = expression.match(/[a-zA-Z_][a-zA-Z0-9_]*/g) || [];
-    const sortedWords = [...new Set(words)].sort((a, b) => b.length - a.length);
-    for (const word of sortedWords) {
-      if (["SUM", "AVG", "COUNT"].includes(word.toUpperCase())) continue;
-      if (context[word] !== undefined && context[word] !== null) {
-        const val = context[word];
-        const numVal = typeof val === "boolean" ? (val ? 1 : 0) : (Number(val) || 0);
-        const regex = new RegExp(`\\b${word}\\b`, 'g');
-        expression = expression.replace(regex, String(numVal));
-      }
-    }
-    // Simple math eval
-    expression = expression.replace(/[^0-9+\-*/().\s]/g, "");
-    if (!expression || expression.trim() === "") return 0;
-    const result = new Function(`"use strict"; return (${expression});`)();
+    const result = safeEvaluate(formula, context);
     return typeof result === "number" && isFinite(result) ? parseFloat(result.toFixed(4)) : 0;
   } catch {
     return 0;
@@ -178,16 +160,7 @@ function calculateFormFormulas(fields: any[], currentValues: Record<string, any>
 // =================== TABLE FORMULA EVALUATOR ===================
 function evaluateTableFormula(formula: string, rowData: Record<string, any>): number {
   try {
-    // Replace {field_code} with actual values
-    let expression = formula.replace(/\{([^}]+)\}/g, (_, code) => {
-      const val = rowData[code];
-      return val !== undefined && val !== null ? String(Number(val) || 0) : "0";
-    });
-    // Simple math eval: only allow numbers, operators, parentheses, dots
-    expression = expression.replace(/[^0-9+\-*/().]/g, "");
-    if (!expression || expression.trim() === "") return 0;
-    // Safe evaluation using Function constructor (no access to global scope)
-    const result = new Function(`"use strict"; return (${expression});`)();
+    const result = safeEvaluate(formula, rowData);
     return typeof result === "number" && isFinite(result) ? parseFloat(result.toFixed(4)) : 0;
   } catch {
     return 0;
@@ -240,7 +213,7 @@ const parseDateValue = (val: any, type: string): Dayjs | undefined => {
   if (type === "TIME") {
     // If it's a simple HH:mm or HH:mm:ss string
     if (typeof val === "string" && /^\d{2}:\d{2}(:\d{2})?$/.test(val)) {
-      return dayjs(`2026-06-20T${val}`);
+      return dayjs(`${dayjs().format("YYYY-MM-DD")}T${val}`);
     }
   }
   const parsed = dayjs(val);
@@ -470,7 +443,17 @@ function TableFieldEditor({
 }
 
 // =================== LOOKUP FIELD COMPONENT ===================
-function LookupField({ field, value, onChange }: { field: Field; value: any; onChange: (val: any) => void; }) {
+function LookupField({ 
+  field, 
+  value, 
+  onChange,
+  onViewDetails,
+}: { 
+  field: Field; 
+  value: any; 
+  onChange: (val: any) => void; 
+  onViewDetails?: (id: number) => void;
+}) {
   const [options, setOptions] = useState<{ value: number; label: string }[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -487,17 +470,28 @@ function LookupField({ field, value, onChange }: { field: Field; value: any; onC
   }, [field.id]);
 
   return (
-    <Select
-      value={value}
-      onChange={onChange}
-      loading={loading}
-      showSearch
-      allowClear
-      placeholder={`Tìm kiếm ${field.name}...`}
-      filterOption={(input, opt) => String(opt?.label ?? "").toLowerCase().includes(input.toLowerCase())}
-      options={options}
-      style={{ width: "100%" }}
-    />
+    <div style={{ display: "flex", gap: "8px", alignItems: "center", width: "100%" }}>
+      <Select
+        value={value}
+        onChange={onChange}
+        loading={loading}
+        showSearch
+        allowClear
+        placeholder={`Tìm kiếm ${field.name}...`}
+        filterOption={(input, opt) => String(opt?.label ?? "").toLowerCase().includes(input.toLowerCase())}
+        options={options}
+        style={{ flex: 1 }}
+      />
+      {onViewDetails && (
+        <Button
+          type="default"
+          icon={<EyeOutlined />}
+          disabled={!value}
+          onClick={() => onViewDetails(Number(value))}
+          title="Xem chi tiết hồ sơ liên kết"
+        />
+      )}
+    </div>
   );
 }
 
@@ -510,6 +504,7 @@ function FieldRenderer({
   userOptions,
   roleOptions,
   record,
+  onViewDetails,
 }: {
   field: Field;
   allFields: Field[];
@@ -518,6 +513,7 @@ function FieldRenderer({
   userOptions: any[];
   roleOptions: any[];
   record?: RecordData | null;
+  onViewDetails?: (id: number) => void;
 }) {
   const customUploadRequest = async ({ file, onSuccess, onError, onProgress }: any) => {
     const formData = new FormData();
@@ -563,7 +559,18 @@ function FieldRenderer({
   // Build rules
   const rules: any[] = [];
   if (isRequired) {
-    rules.push({ required: true, message: `${field.name} là bắt buộc` });
+    if (field.type === "TABLE" || (field.type === "SELECT" && options?.multiple)) {
+      rules.push({
+        validator: (_: any, value: any) => {
+          if (!value || !Array.isArray(value) || value.length === 0) {
+            return Promise.reject(`${field.name} là bắt buộc và phải có ít nhất 1 dòng`);
+          }
+          return Promise.resolve();
+        }
+      });
+    } else {
+      rules.push({ required: true, message: `${field.name} là bắt buộc` });
+    }
   }
   if (options?.regex || options?.regexPattern) {
     const pattern = options.regex || options.regexPattern;
@@ -908,6 +915,7 @@ function FieldRenderer({
               field={field}
               value={form.getFieldValue(field.code)}
               onChange={(val: any) => form.setFieldValue(field.code, val)}
+              onViewDetails={onViewDetails}
             />
           </Form.Item>
         </Col>
@@ -1097,6 +1105,8 @@ export default function RecordSubmitModal({
   const [fullscreen, setFullscreen] = useState(false);
   const [liveTitle, setLiveTitle] = useState<string>("");
   const [isTitleManuallyEdited, setIsTitleManuallyEdited] = useState(false);
+  const [selectedLookupRecordId, setSelectedLookupRecordId] = useState<number | null>(null);
+  const [isLookupDetailOpen, setIsLookupDetailOpen] = useState(false);
 
   const { data: fields = [], isLoading: isFieldsLoading } = useFields(entity?.id || null);
   const { data: workflowsData } = useWorkflows(entity?.id || null);
@@ -1226,6 +1236,60 @@ export default function RecordSubmitModal({
       setLiveTitle(preview);
       form.setFieldValue("title", preview);
     }
+
+    // Auto-fill previous trip values if BIEN_SO_XE is entered
+    if ("BIEN_SO_XE" in changedValues && changedValues.BIEN_SO_XE) {
+      const bienSo = changedValues.BIEN_SO_XE;
+      api.get(`/records/lookup-last-trip?licensePlate=${encodeURIComponent(bienSo)}`)
+        .then((res) => {
+          if (res.data && res.data.found) {
+            const prevData = res.data.data;
+            const newFieldsToSet: Record<string, any> = {};
+
+            const findFieldCode = (target: string) => {
+              const f = fields.find((x: any) => x.code.toUpperCase() === target.toUpperCase());
+              return f ? f.code : null;
+            };
+
+            const containerCode = findFieldCode("SO_CONTAINER");
+            const customerCode = findFieldCode("CHU_HANG");
+            const previousTypeCode = findFieldCode("LOAI_HINH_CU");
+
+            const getPrevValue = (target: string) => {
+              const key = Object.keys(prevData).find((k) => k.toUpperCase() === target.toUpperCase());
+              return key ? prevData[key] : null;
+            };
+
+            if (containerCode) {
+              const val = getPrevValue("SO_CONTAINER");
+              if (val) newFieldsToSet[containerCode] = val;
+            }
+            if (customerCode) {
+              const val = getPrevValue("CHU_HANG");
+              if (val) newFieldsToSet[customerCode] = val;
+            }
+            if (previousTypeCode) {
+              const val = getPrevValue("LOAI_HINH");
+              if (val) newFieldsToSet[previousTypeCode] = val;
+            }
+
+            if (Object.keys(newFieldsToSet).length > 0) {
+              message.info("Hệ thống đã tự động nhận diện xe quay lại và điền thông tin chuyến trước.");
+              const updatedValues = { ...allValues, ...newFieldsToSet };
+              const recomputed = calculateFormFormulas(fields, updatedValues);
+              form.setFieldsValue({ ...updatedValues, ...recomputed });
+              
+              // Regenerate auto-title if needed
+              if (entity?.titlePattern && !isTitleManuallyEdited) {
+                const updatedPreview = buildLiveTitle(entity.titlePattern, { ...updatedValues, ...recomputed });
+                setLiveTitle(updatedPreview);
+                form.setFieldValue("title", updatedPreview);
+              }
+            }
+          }
+        })
+        .catch((err) => console.error("Error looking up last trip", err));
+    }
   };
 
   const handleSubmit = async () => {
@@ -1345,8 +1409,9 @@ export default function RecordSubmitModal({
   );
 
   return (
-    <Modal
-      open={open}
+    <>
+      <Modal
+        open={open}
       onCancel={handleClose}
       width={fullscreen ? "100vw" : 760}
       style={fullscreen ? { top: 0, margin: 0, padding: 0, maxWidth: "100vw" } : {}}
@@ -1563,6 +1628,10 @@ export default function RecordSubmitModal({
                 userOptions={userOptions}
                 roleOptions={roleOptions}
                 record={record}
+                onViewDetails={(id) => {
+                  setSelectedLookupRecordId(id);
+                  setIsLookupDetailOpen(true);
+                }}
               />
             ))}
             {isFirstStepDynamic && (
@@ -1601,5 +1670,16 @@ export default function RecordSubmitModal({
         </Form>
       )}
     </Modal>
+      {selectedLookupRecordId && (
+        <RecordDetailDrawer
+          open={isLookupDetailOpen}
+          recordId={selectedLookupRecordId}
+          onClose={() => {
+            setIsLookupDetailOpen(false);
+            setSelectedLookupRecordId(null);
+          }}
+        />
+      )}
+    </>
   );
 }

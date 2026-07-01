@@ -88,5 +88,23 @@ export class WorkflowActionDto {
   @IsInt()
   @IsOptional()
   nextAssigneeId?: number;
+
+  @ApiPropertyOptional({ description: 'Font chữ của thông tin đi kèm', example: 'sans-serif' })
+  @IsString()
+  @IsOptional()
+  fontFamily?: string;
+
+  @ApiPropertyOptional({ description: 'Cỡ chữ của thông tin đi kèm', example: 11 })
+  @IsInt()
+  @IsOptional()
+  fontSize?: number;
+
+  @ApiPropertyOptional({ description: 'In đậm thông tin đi kèm', example: false })
+  @IsOptional()
+  fontBold?: boolean;
+
+  @ApiPropertyOptional({ description: 'In nghiêng thông tin đi kèm', example: false })
+  @IsOptional()
+  fontItalic?: boolean;
 }
 

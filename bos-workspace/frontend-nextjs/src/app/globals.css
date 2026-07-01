@@ -1,12 +1,419 @@
-/* File: src/app/globals.css */
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* ============================================================
+   BOS Platform — Design System CSS
+   Hệ thống token, animation, utility và style nền tảng
+   ============================================================ */
 
+/* =================== CSS VARIABLES (Design Tokens) =================== */
+:root {
+  /* Colors — Primary Palette */
+  --bos-primary: #0050b3;
+  --bos-primary-hover: #003a8c;
+  --bos-primary-light: #e6f4ff;
+  --bos-primary-bg: #f0f7ff;
+
+  /* Colors — Semantic */
+  --bos-success: #52c41a;
+  --bos-warning: #faad14;
+  --bos-error: #ff4d4f;
+  --bos-info: #1890ff;
+
+  /* Colors — Neutral */
+  --bos-bg-base: #f8fafc;
+  --bos-bg-card: #ffffff;
+  --bos-bg-elevated: #ffffff;
+  --bos-border: #e8ecf1;
+  --bos-border-light: #f0f0f0;
+  --bos-text-primary: #1e293b;
+  --bos-text-secondary: #64748b;
+  --bos-text-tertiary: #94a3b8;
+
+  /* Spacing */
+  --bos-space-xs: 4px;
+  --bos-space-sm: 8px;
+  --bos-space-md: 16px;
+  --bos-space-lg: 24px;
+  --bos-space-xl: 32px;
+  --bos-space-2xl: 48px;
+
+  /* Border Radius */
+  --bos-radius-sm: 6px;
+  --bos-radius-md: 8px;
+  --bos-radius-lg: 12px;
+  --bos-radius-xl: 16px;
+  --bos-radius-full: 9999px;
+
+  /* Shadows */
+  --bos-shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --bos-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+  --bos-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.05);
+  --bos-shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+
+  /* Transitions */
+  --bos-transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --bos-transition-normal: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  --bos-transition-slow: 350ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Z-Index Scale */
+  --bos-z-dropdown: 1050;
+  --bos-z-modal: 1060;
+  --bos-z-toast: 1070;
+}
+
+/* =================== DARK MODE TOKENS OVERRIDE =================== */
+html.dark {
+  --bos-primary-hover: #1472e6;
+  --bos-primary-light: #112a52;
+  --bos-primary-bg: #0c1a30;
+
+  --bos-bg-base: #0f172a;
+  --bos-bg-card: #1e293b;
+  --bos-bg-elevated: #1e293b;
+  --bos-border: #334155;
+  --bos-border-light: #1e293b;
+  --bos-text-primary: #f8fafc;
+  --bos-text-secondary: #94a3b8;
+  --bos-text-tertiary: #64748b;
+}
+
+/* =================== GLOBAL RESET & BASE =================== */
 html, body {
   margin: 0;
   padding: 0;
   height: 100%;
-  background-color: #f8fafc;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background-color: var(--bos-bg-base);
+  color: var(--bos-text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* =================== SCROLLBAR STYLING =================== */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: var(--bos-radius-full);
+  transition: background var(--bos-transition-fast);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Firefox scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+
+/* =================== ANIMATION KEYFRAMES =================== */
+@keyframes bos-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes bos-fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes bos-fade-in-down {
+  from {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes bos-scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes bos-slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes bos-pulse-subtle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+@keyframes bos-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes bos-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* =================== ANIMATION UTILITY CLASSES =================== */
+.bos-animate-fade-in {
+  animation: bos-fade-in var(--bos-transition-normal) ease-out;
+}
+
+.bos-animate-fade-in-up {
+  animation: bos-fade-in-up var(--bos-transition-normal) ease-out;
+}
+
+.bos-animate-fade-in-down {
+  animation: bos-fade-in-down var(--bos-transition-normal) ease-out;
+}
+
+.bos-animate-scale-in {
+  animation: bos-scale-in var(--bos-transition-normal) ease-out;
+}
+
+.bos-animate-slide-in-right {
+  animation: bos-slide-in-right var(--bos-transition-normal) ease-out;
+}
+
+/* =================== SIDER (AppShell) =================== */
+.app-sider {
+  position: relative;
+  z-index: 10;
+}
+
+.app-sider .app-sider-logo {
+  transition: all var(--bos-transition-normal);
+}
+
+.app-sider .ant-menu-item {
+  transition: all var(--bos-transition-fast);
+  border-radius: var(--bos-radius-md) !important;
+  margin: 4px 8px !important;
+}
+
+.app-sider .ant-menu-item:hover {
+  background: var(--bos-primary-light) !important;
+}
+
+.app-sider .ant-menu-item-selected {
+  font-weight: 600;
+}
+
+/* =================== HEADER (AppShell) =================== */
+.app-header {
+  backdrop-filter: blur(8px);
+  transition: all var(--bos-transition-normal);
+}
+
+/* Hide username on small screens */
+@media (max-width: 768px) {
+  .app-header-username {
+    display: none;
+  }
+}
+
+/* =================== CARD ENHANCEMENTS =================== */
+.ant-card {
+  transition: box-shadow var(--bos-transition-normal), transform var(--bos-transition-normal);
+}
+
+.bos-card-hover:hover {
+  box-shadow: var(--bos-shadow-lg);
+  transform: translateY(-2px);
+}
+
+.bos-card-interactive {
+  cursor: pointer;
+  transition: all var(--bos-transition-fast);
+}
+
+.bos-card-interactive:hover {
+  border-color: var(--bos-primary) !important;
+  box-shadow: 0 0 0 2px rgba(0, 80, 179, 0.1);
+}
+
+/* =================== BUTTON ENHANCEMENTS =================== */
+.ant-btn {
+  transition: all var(--bos-transition-fast);
+}
+
+.ant-btn-primary:not(:disabled):hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 80, 179, 0.3);
+}
+
+.ant-btn-primary:not(:disabled):active {
+  transform: translateY(0);
+}
+
+/* =================== TABLE ENHANCEMENTS =================== */
+.ant-table-row {
+  transition: background-color var(--bos-transition-fast);
+}
+
+.ant-table-row:hover > td {
+  background: var(--bos-primary-bg) !important;
+}
+
+/* =================== BADGE PULSE =================== */
+.ant-badge-count {
+  animation: bos-pulse-subtle 2s ease-in-out infinite;
+}
+
+/* =================== DRAWER & MODAL ENHANCEMENTS =================== */
+.ant-drawer-body {
+  padding: var(--bos-space-lg);
+}
+
+.ant-modal-content {
+  border-radius: var(--bos-radius-lg);
+  overflow: hidden;
+}
+
+/* =================== TAG ENHANCEMENTS =================== */
+.ant-tag {
+  border-radius: var(--bos-radius-sm);
+  font-weight: 500;
+}
+
+/* =================== TOOLTIP =================== */
+.ant-tooltip-inner {
+  border-radius: var(--bos-radius-md);
+}
+
+/* =================== PAGE CONTENT ANIMATIONS =================== */
+.bos-page-content {
+  animation: bos-fade-in-up 0.3s ease-out;
+}
+
+/* =================== SKELETON SHIMMER =================== */
+.bos-skeleton {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: bos-shimmer 1.5s ease-in-out infinite;
+  border-radius: var(--bos-radius-md);
+}
+
+/* =================== SELECTION =================== */
+::selection {
+  background: rgba(0, 80, 179, 0.15);
+  color: var(--bos-text-primary);
+}
+
+/* =================== FOCUS VISIBLE =================== */
+:focus-visible {
+  outline: 2px solid var(--bos-primary);
+  outline-offset: 2px;
+  border-radius: var(--bos-radius-sm);
+}
+
+/* =================== RESPONSIVE UTILITIES =================== */
+@media (max-width: 576px) {
+  .bos-hide-xs {
+    display: none !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .bos-hide-sm {
+    display: none !important;
+  }
+}
+
+@media (max-width: 992px) {
+  .bos-hide-md {
+    display: none !important;
+  }
+}
+
+/* =================== STAT CARDS =================== */
+.bos-stat-card {
+  border-radius: var(--bos-radius-lg);
+  border: 1px solid var(--bos-border-light);
+  transition: all var(--bos-transition-fast);
+  overflow: hidden;
+}
+
+.bos-stat-card:hover {
+  box-shadow: var(--bos-shadow-md);
+  transform: translateY(-1px);
+}
+
+/* =================== FORM FIELD FOCUS =================== */
+.ant-input:focus,
+.ant-input-focused,
+.ant-select-focused .ant-select-selector {
+  box-shadow: 0 0 0 3px rgba(0, 80, 179, 0.08) !important;
+}
+
+/* =================== BREADCRUMB =================== */
+.ant-breadcrumb {
+  font-size: 13px;
+}
+
+/* =================== NOTIFICATION BADGE ANIMATION =================== */
+.bos-notification-badge .ant-badge-count {
+  box-shadow: 0 0 0 2px var(--bos-bg-card);
+}
+
+/* =================== PRINT STYLES =================== */
+@media print {
+  .app-sider,
+  .app-header,
+  .ant-btn,
+  .ant-badge {
+    display: none !important;
+  }
+
+  .ant-layout-content {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+}
+
+/* =================== APPSHELL STYLING CUSTOM CLASSES =================== */
+.app-sider-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--bos-border-light);
+  min-height: 64px;
+}
+
+.app-header {
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--bos-border-light);
 }

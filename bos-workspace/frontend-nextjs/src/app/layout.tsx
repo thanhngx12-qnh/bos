@@ -1,10 +1,19 @@
 // File: src/app/layout.tsx
 import type { Metadata } from "next";
+import { Inter } from "next/font/google";
 import AntdRegistry from "@/lib/antd-registry";
 import QueryProvider from "@/providers/query-provider";
-import { ConfigProvider, App } from "antd"; // Tích hợp thành phần App làm cầu nối Context
+import { App } from "antd";
+import { ThemeProvider } from "@/providers/theme-provider";
 import AuthGuard from "@/components/AuthGuard";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import "./globals.css";
+
+const inter = Inter({
+  subsets: ["latin", "vietnamese"],
+  display: "swap",
+  variable: "--font-inter",
+});
 
 export const metadata: Metadata = {
   title: "BOS Platform - Hệ thống Quản trị Doanh nghiệp Low-Code",
@@ -18,28 +27,20 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="vi">
-      <body>
-        <AntdRegistry>
-          <ConfigProvider
-            theme={{
-              token: {
-                colorPrimary: "#0050b3", // Xanh Navy Hoàng Gia
-                colorBgBase: "#f8fafc", // Màu nền xám đá dịu mắt
-                borderRadius: 8, // Bo góc chuẩn chỉnh
-                fontFamily:
-                  "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-              },
-            }}
-          >
-            <QueryProvider>
-              <AuthGuard>
-                {/* Thành phần App bọc ngoài cùng giải quyết triệt để vấn đề consume context tĩnh của React 19 */}
-                <App>{children}</App>
-              </AuthGuard>
-            </QueryProvider>
-          </ConfigProvider>
-        </AntdRegistry>
+    <html lang="vi" className={inter.variable}>
+      <body className={inter.className}>
+        <ErrorBoundary>
+          <AntdRegistry>
+            <ThemeProvider>
+              <QueryProvider>
+                <AuthGuard>
+                  {/* Thành phần App bọc ngoài cùng giải quyết triệt để vấn đề consume context tĩnh của React 19 */}
+                  <App>{children}</App>
+                </AuthGuard>
+              </QueryProvider>
+            </ThemeProvider>
+          </AntdRegistry>
+        </ErrorBoundary>
       </body>
     </html>
   );

@@ -17,6 +17,7 @@ import {
   Empty,
   Spin,
   Divider,
+  Select,
 } from "antd";
 import {
   UndoOutlined,
@@ -24,6 +25,8 @@ import {
   DeleteOutlined,
   CheckCircleOutlined,
   UploadOutlined,
+  BoldOutlined,
+  ItalicOutlined,
 } from "@ant-design/icons";
 import {
   useSignatures,
@@ -43,9 +46,16 @@ export default function SignatureManager() {
 
   // State
   const [name, setName] = useState("");
-  const [type, setType] = useState<"DRAW" | "IMAGE" | "STAMP">("DRAW");
+  const [type, setType] = useState<"DRAW" | "IMAGE" | "STAMP" | "TEXT">("DRAW");
   const [fileBase64, setFileBase64] = useState<string | null>(null);
   const [fileName, setFileName] = useState("");
+
+  // States cho chữ ký văn bản (TEXT)
+  const [textVal, setTextVal] = useState("");
+  const [textFont, setTextFont] = useState("Dancing Script");
+  const [textBold, setTextBold] = useState(false);
+  const [textItalic, setTextItalic] = useState(true);
+  const [textColor, setTextColor] = useState("#0000ff");
 
   // Canvas ref
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -129,6 +139,32 @@ export default function SignatureManager() {
     reader.readAsDataURL(file);
   };
 
+  const convertTextToImage = (
+    text: string,
+    font: string,
+    isBold: boolean,
+    isItalic: boolean,
+    color: string
+  ): string => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 500;
+    canvas.height = 180;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return "";
+
+    // Set font style
+    const styleString = `${isItalic ? "italic " : ""}${isBold ? "bold " : ""}56px "${font}", cursive, sans-serif`;
+    ctx.font = styleString;
+    ctx.fillStyle = color;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    // Draw text in the center
+    ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+
+    return canvas.toDataURL("image/png");
+  };
+
   const handleSave = () => {
     if (!name.trim()) {
       message.warning("Vui lòng nhập tên cho mẫu chữ ký/con dấu.");
@@ -143,6 +179,12 @@ export default function SignatureManager() {
         return;
       }
       signatureUrl = canvas.toDataURL("image/png");
+    } else if (type === "TEXT") {
+      if (!textVal.trim()) {
+        message.warning("Vui lòng nhập nội dung chữ ký văn bản.");
+        return;
+      }
+      signatureUrl = convertTextToImage(textVal.trim(), textFont, textBold, textItalic, textColor);
     } else {
       if (!fileBase64) {
         message.warning("Vui lòng tải lên hình ảnh chữ ký/con dấu của bạn.");
@@ -163,6 +205,7 @@ export default function SignatureManager() {
           setName("");
           setFileBase64(null);
           setFileName("");
+          setTextVal("");
           if (type === "DRAW") {
             initCanvas();
           }
@@ -195,10 +238,12 @@ export default function SignatureManager() {
     });
   };
 
-  const getTypeLabel = (t: "DRAW" | "IMAGE" | "STAMP") => {
+  const getTypeLabel = (t: "DRAW" | "IMAGE" | "STAMP" | "TEXT") => {
     switch (t) {
       case "DRAW":
         return <Tag color="blue">Ký tay điện tử</Tag>;
+      case "TEXT":
+        return <Tag color="orange">Ký chữ viết</Tag>;
       case "IMAGE":
         return <Tag color="purple">Ảnh chữ ký</Tag>;
       case "STAMP":
@@ -352,12 +397,13 @@ export default function SignatureManager() {
                 onChange={(e) => setType(e.target.value)}
               >
                 <Radio.Button value="DRAW">Vẽ tay chữ ký</Radio.Button>
+                <Radio.Button value="TEXT">Tạo chữ ký chữ</Radio.Button>
                 <Radio.Button value="IMAGE">Tải ảnh chữ ký</Radio.Button>
                 <Radio.Button value="STAMP">Tải ảnh con dấu</Radio.Button>
               </Radio.Group>
             </div>
 
-            {type === "DRAW" ? (
+            {type === "DRAW" && (
               <div>
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
                   <Text strong>Khung vẽ chữ ký tay:</Text>
@@ -395,7 +441,128 @@ export default function SignatureManager() {
                   Mẹo: Dùng chuột hoặc bút vẽ/màn hình cảm ứng vẽ vào khung trên.
                 </Paragraph>
               </div>
-            ) : (
+            )}
+
+            {type === "TEXT" && (
+              <div>
+                <link
+                  rel="stylesheet"
+                  href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@400;700&family=Pacifico&family=Great+Vibes&family=Mrs+Saint+Delafield&family=Yellowtail&family=Montserrat:ital,wght@0,400;0,700;1,400&display=swap"
+                />
+                <Text strong style={{ display: "block", marginBottom: "6px" }}>
+                  Nhập nội dung chữ ký:
+                </Text>
+                <Input
+                  placeholder="Nhập tên chữ ký (Ví dụ: Nguyễn Văn A)"
+                  value={textVal}
+                  onChange={(e) => {
+                    setTextVal(e.target.value);
+                    if (!name) {
+                      setName(`Chữ ký ${e.target.value}`);
+                    }
+                  }}
+                  style={{ marginBottom: "12px" }}
+                />
+
+                <Row gutter={[12, 12]} style={{ marginBottom: "12px" }}>
+                  <Col span={12}>
+                    <Text strong style={{ display: "block", marginBottom: "6px", fontSize: "12px" }}>
+                      Font chữ:
+                    </Text>
+                    <Select
+                      className="w-full"
+                      value={textFont}
+                      onChange={setTextFont}
+                      options={[
+                        { value: "Dancing Script", label: "Cursive (Dancing Script)" },
+                        { value: "Pacifico", label: "Friendly (Pacifico)" },
+                        { value: "Great Vibes", label: "Elegant (Great Vibes)" },
+                        { value: "Mrs Saint Delafield", label: "Handwriting (Mrs Saint)" },
+                        { value: "Yellowtail", label: "Brush (Yellowtail)" },
+                        { value: "Montserrat", label: "Sans-Serif (Montserrat)" },
+                      ]}
+                    />
+                  </Col>
+                  <Col span={12}>
+                    <Text strong style={{ display: "block", marginBottom: "6px", fontSize: "12px" }}>
+                      Màu sắc:
+                    </Text>
+                    <Select
+                      className="w-full"
+                      value={textColor}
+                      onChange={setTextColor}
+                      options={[
+                        { value: "#0000ff", label: "Xanh nước biển (Mặc định)" },
+                        { value: "#000000", label: "Đen lịch sự" },
+                        { value: "#ff0000", label: "Đỏ ký duyệt" },
+                        { value: "#2e7d32", label: "Xanh lá cây" },
+                      ]}
+                    />
+                  </Col>
+                </Row>
+
+                <div style={{ marginBottom: "12px" }}>
+                  <Text strong style={{ display: "block", marginBottom: "6px", fontSize: "12px" }}>
+                    Định dạng chữ:
+                  </Text>
+                  <Space>
+                    <Button
+                      type={textBold ? "primary" : "default"}
+                      icon={<BoldOutlined />}
+                      onClick={() => setTextBold(!textBold)}
+                    >
+                      In đậm
+                    </Button>
+                    <Button
+                      type={textItalic ? "primary" : "default"}
+                      icon={<ItalicOutlined />}
+                      onClick={() => setTextItalic(!textItalic)}
+                    >
+                      In nghiêng
+                    </Button>
+                  </Space>
+                </div>
+
+                <div>
+                  <Text strong style={{ display: "block", marginBottom: "6px" }}>
+                    Xem trước chữ ký:
+                  </Text>
+                  <div
+                    style={{
+                      height: "140px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      background: "#fdfdfd",
+                      border: "2px dashed #d9d9d9",
+                      borderRadius: "8px",
+                      padding: "16px",
+                      position: "relative",
+                      overflow: "hidden",
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontFamily: `"${textFont}", cursive, sans-serif`,
+                        fontSize: "40px",
+                        color: textColor,
+                        fontWeight: textBold ? "bold" : "normal",
+                        fontStyle: textItalic ? "italic" : "normal",
+                        whiteSpace: "nowrap",
+                        userSelect: "none",
+                      }}
+                    >
+                      {textVal || "Mẫu chữ ký"}
+                    </span>
+                  </div>
+                  <Paragraph type="secondary" style={{ fontSize: "11px", marginTop: "4px" }}>
+                    Hình ảnh chữ ký sẽ được lưu với nền trong suốt (không có viền dashed ở trên).
+                  </Paragraph>
+                </div>
+              </div>
+            )}
+
+            {(type === "IMAGE" || type === "STAMP") && (
               <div>
                 <Text strong style={{ display: "block", marginBottom: "6px" }}>
                   Tải lên tệp ảnh (Hỗ trợ PNG nền trong suốt để đè tối ưu):
@@ -422,7 +589,7 @@ export default function SignatureManager() {
                   <UploadOutlined style={{ fontSize: "24px", color: "#8c8c8c", marginBottom: "8px" }} />
                   <div>
                     {fileName ? (
-                      <Text strong color="success">
+                      <Text strong style={{ color: "#52c41a" }}>
                         ✓ {fileName}
                       </Text>
                     ) : (

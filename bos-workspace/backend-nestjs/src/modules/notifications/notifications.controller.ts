@@ -28,6 +28,14 @@ export class NotificationsController {
     private readonly redisService: RedisService, // <-- INJECT REDIS SERVICE
   ) {}
 
+  @Get('unread-count')
+  @ApiOperation({ summary: 'Lấy số lượng thông báo chưa đọc' })
+  async getUnreadCount(@Request() req) {
+    const userId = req.user.userId;
+    const count = await this.notificationsService.getUnreadCount(userId);
+    return { count };
+  }
+
   @Get()
   @ApiOperation({ summary: 'Lấy danh sách thông báo (Có phân trang)' })
   @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })

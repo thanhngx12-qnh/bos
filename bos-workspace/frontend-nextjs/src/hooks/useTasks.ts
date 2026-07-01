@@ -104,6 +104,10 @@ export function useWorkflowAction() {
       showSignerDept,
       showSigningTime,
       nextAssigneeId,
+      fontFamily,
+      fontSize,
+      fontBold,
+      fontItalic,
     }: {
       instanceId: number;
       transitionId: number;
@@ -117,6 +121,10 @@ export function useWorkflowAction() {
       showSignerDept?: boolean;
       showSigningTime?: boolean;
       nextAssigneeId?: number;
+      fontFamily?: string;
+      fontSize?: number;
+      fontBold?: boolean;
+      fontItalic?: boolean;
     }) => {
       const { data } = await api.post(`/api/v1/workflows/instances/${instanceId}/action`, {
         transitionId,
@@ -130,6 +138,10 @@ export function useWorkflowAction() {
         showSignerDept,
         showSigningTime,
         nextAssigneeId,
+        fontFamily,
+        fontSize,
+        fontBold,
+        fontItalic,
       });
       return data;
     },

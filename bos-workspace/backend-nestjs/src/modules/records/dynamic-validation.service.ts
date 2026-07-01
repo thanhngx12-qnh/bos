@@ -58,10 +58,16 @@ export class DynamicValidationService {
         isFieldRequired = this.evaluateCondition(options.requiredIf, inputData);
       }
 
-      if (
-        isFieldRequired &&
-        (value === undefined || value === null || value === '')
-      ) {
+      const isEmpty =
+        value === undefined ||
+        value === null ||
+        value === '' ||
+        (Array.isArray(value) && value.length === 0) ||
+        (typeof value === 'object' &&
+          Object.keys(value).length === 0 &&
+          !(value instanceof Date));
+
+      if (isFieldRequired && isEmpty) {
         throw new BadRequestException(
           `Trường '${field.name}' là bắt buộc nhập.`,
         );

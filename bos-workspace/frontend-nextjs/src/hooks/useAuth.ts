@@ -78,3 +78,21 @@ export function useMyProfile() {
   });
 }
 
+export function useRequestForgotPasswordOtp() {
+  return useMutation<any, Error, { email: string }>({
+    mutationFn: async (payload: { email: string }) => {
+      const { data } = await api.post('/api/v1/auth/forgot-password', payload);
+      return data;
+    },
+  });
+}
+
+export function useResetPasswordWithOtp() {
+  return useMutation<any, Error, any>({
+    mutationFn: async (payload: any) => {
+      const { data } = await api.post('/api/v1/auth/reset-password-otp', payload);
+      return data;
+    },
+  });
+}
+

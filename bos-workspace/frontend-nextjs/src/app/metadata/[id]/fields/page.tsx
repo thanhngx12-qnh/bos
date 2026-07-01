@@ -64,6 +64,7 @@ import { useWorkflows, useWorkflowSteps, WorkflowStep } from "@/hooks/useWorkflo
 import { useTenantDetail } from "@/hooks/useTenant";
 import { useMyTenants, useSwitchTenant } from "@/hooks/useAuth";
 import { BankOutlined } from "@ant-design/icons";
+import AppShell, { useAppAuth } from "@/components/AppShell";
 import { useDepartmentTree } from "@/hooks/useDepartments";
 import { useUsers } from "@/hooks/useUsers";
 import { useRoles } from "@/hooks/useRoles";
@@ -228,84 +229,16 @@ const InitValueInput: React.FC<InitValueInputProps> = ({
   }
 };
 
-export default function WorkspaceContainerPage({
-  params,
+function WorkspaceContainerContent({
+  id,
 }: {
-  params: Promise<{ id: string }>;
+  id: string;
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { id } = React.use(params); // Unwrapping dynamic parameters chuẩn Next.js 15 App Router [1]
   const entityIdNum = Number(id);
-
-  const {
-    token: { colorBgContainer },
-  } = theme.useToken();
-  const { message } = App.useApp();
-
-  // Đọc động ID Doanh nghiệp và Tên nhân viên từ LocalStorage [1]
-  const [tenantId, setTenantId] = useState<number | null>(null);
-  const [userName, setUserName] = useState<string>("Thành viên BOS");
-  const [collapsed, setCollapsed] = useState(false);
-  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
-
-  const [userPermissions, setUserPermissions] = useState<Record<string, string[]>>({});
-  const [permissionsLoaded, setPermissionsLoaded] = useState(false);
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const token = localStorage.getItem("bos_token");
-      if (!token) {
-        router.push("/auth/login");
-        return;
-      }
-      const storedTenantId = localStorage.getItem("bos_tenant_id");
-      const storedUserName = localStorage.getItem("bos_user_name");
-      const storedUserType = localStorage.getItem("bos_user_type");
-      setIsSuperAdmin(storedUserType === "SUPER_ADMIN");
-
-      if (storedTenantId) {
-        setTenantId(Number(storedTenantId));
-      }
-      if (storedUserName) {
-        setUserName(storedUserName);
-      }
-      const storedPermissions = localStorage.getItem("bos_user_permissions");
-      if (storedPermissions) {
-        try {
-          setUserPermissions(JSON.parse(storedPermissions));
-        } catch (e) {
-          console.error(e);
-        }
-      }
-      setPermissionsLoaded(true);
-    }
-  }, [router]);
-
-  const handleLogout = () => {
-    localStorage.removeItem("bos_token");
-    localStorage.removeItem("bos_tenant_id");
-    localStorage.removeItem("bos_user_name");
-    localStorage.removeItem("bos_user_permissions");
-    localStorage.removeItem("bos_user_type");
-    router.push("/auth/login");
-  };
-
-  const userMenu = {
-    items: [
-      { key: "profile", label: "Thông tin cá nhân" },
-      { key: "security", label: "Thiết lập bảo mật" },
-      { type: "divider" as const },
-      { key: "logout", label: "Đăng xuất hệ thống", danger: true },
-    ],
-    onClick: (info: any) => {
-      if (info.key === "logout") {
-        handleLogout();
-      } else if (info.key === "profile") {
-        router.push("/profile");
-      }
-    },
-  };
+  const { isSuperAdmin, userPermissions, permissionsLoaded } = useAppAuth();
+  const { message, modal } = App.useApp();
 
   // Trạng thái liên kết đồng bộ 4 phân khu [1]
   const [activeStepId, setActiveStepId] = useState<number | null>(null);
@@ -323,63 +256,6 @@ export default function WorkspaceContainerPage({
   const createField = useCreateField();
   const updateField = useUpdateField();
   const deleteField = useDeleteField();
-
-  // Gọi API Hook truy vấn thông tin Doanh nghiệp ĐỘNG từ database [1]
-  const tenantQuery = useTenantDetail(tenantId);
-
-  const activeTenantName = tenantId === null
-    ? "Quản trị Hệ thống (Super Admin)"
-    : tenantQuery.data
-    ? `${tenantQuery.data.name} (${tenantQuery.data.code})`
-    : "Đang tải thông tin doanh nghiệp...";
-
-  const { data: myTenants = [] } = useMyTenants();
-  const switchTenantMutation = useSwitchTenant();
-
-  const handleSwitchTenant = (targetTenantId: number | null) => {
-    switchTenantMutation.mutate({ tenantId: targetTenantId as any }, {
-      onSuccess: (res) => {
-        message.success("Chuyển doanh nghiệp thành công!");
-        localStorage.setItem("bos_token", res.accessToken);
-        localStorage.setItem("bos_user_name", res.user.fullName);
-        localStorage.setItem("bos_user_permissions", JSON.stringify((res.user as any).role?.permissions || {}));
-        localStorage.setItem("bos_user_type", (res.user as any).userType);
-        if (res.user.tenantId === null || res.user.tenantId === undefined) {
-          localStorage.removeItem("bos_tenant_id");
-        } else {
-          localStorage.setItem("bos_tenant_id", String(res.user.tenantId));
-        }
-        window.location.reload();
-      },
-      onError: (err: any) => {
-        message.error("Không thể chuyển đổi doanh nghiệp.");
-      }
-    });
-  };
-
-  const tenantMenu = {
-    items: [
-      ...(isSuperAdmin ? [{
-        key: "root",
-        label: "Quản trị Hệ thống (Super Admin)",
-        icon: <SettingOutlined />,
-        disabled: tenantId === null,
-      }] : []),
-      ...myTenants.map((t) => ({
-        key: String(t.id),
-        label: t.name,
-        icon: <BankOutlined />,
-        disabled: t.id === tenantId,
-      }))
-    ],
-    onClick: (info: any) => {
-      if (info.key === "root") {
-        handleSwitchTenant(null);
-      } else {
-        handleSwitchTenant(Number(info.key));
-      }
-    }
-  };
 
   // Gọi API Hooks liên kết luồng quy trình của Entity [1]
   const workflowsQuery = useWorkflows(entityIdNum);
@@ -446,12 +322,26 @@ export default function WorkspaceContainerPage({
   const [quickCreateType, setQuickCreateType] = useState<string>("TEXT");
   const [quickForm] = Form.useForm();
   const watchedQuickType = Form.useWatch("type", quickForm);
+  const watchedQuickLookupEntityId = Form.useWatch(["options", "lookupEntityId"], quickForm);
+  const { data: quickLookupFields = [] } = useFields(watchedQuickLookupEntityId || null);
+  const quickLookupWorkflowsQuery = useWorkflows(watchedQuickLookupEntityId || null);
+  const quickLookupActiveWorkflow = quickLookupWorkflowsQuery.data?.data?.[0];
+  const quickLookupActiveVersionId = quickLookupActiveWorkflow?.versions?.find((v: any) => v.status === "PUBLISHED")?.id || quickLookupActiveWorkflow?.versions?.[0]?.id || null;
+  const quickLookupWorkflowStepsQuery = useWorkflowSteps(quickLookupActiveVersionId);
+  const quickLookupWorkflowSteps = quickLookupWorkflowStepsQuery.data || [];
 
   // Trạng thái modal chỉnh sửa trường dữ liệu
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingField, setEditingField] = useState<Field | null>(null);
   const [editForm] = Form.useForm();
   const watchedEditType = Form.useWatch("type", editForm);
+  const watchedEditLookupEntityId = Form.useWatch(["options", "lookupEntityId"], editForm);
+  const { data: editLookupFields = [] } = useFields(watchedEditLookupEntityId || null);
+  const editLookupWorkflowsQuery = useWorkflows(watchedEditLookupEntityId || null);
+  const editLookupActiveWorkflow = editLookupWorkflowsQuery.data?.data?.[0];
+  const editLookupActiveVersionId = editLookupActiveWorkflow?.versions?.find((v: any) => v.status === "PUBLISHED")?.id || editLookupActiveWorkflow?.versions?.[0]?.id || null;
+  const editLookupWorkflowStepsQuery = useWorkflowSteps(editLookupActiveVersionId);
+  const editLookupWorkflowSteps = editLookupWorkflowStepsQuery.data || [];
 
   const handleEditClick = (field: Field) => {
     setEditingField(field);
@@ -473,7 +363,11 @@ export default function WorkspaceContainerPage({
           ? field.config.options.choices.split(",").map((s: string) => s.trim()).filter(Boolean)
           : [],
         lookupEntityId: field.config?.options?.lookupEntityId,
-        displayField: field.config?.options?.displayField || "",
+        displayField: Array.isArray(field.config?.options?.displayField)
+          ? field.config.options.displayField
+          : typeof field.config?.options?.displayField === "string" && field.config.options.displayField
+          ? field.config.options.displayField.split(",").map((s: string) => s.trim()).filter(Boolean)
+          : [],
         formula: field.config?.options?.formula || (field.config as any)?.formula || "",
         minLength: field.config?.options?.minLength,
         maxLength: field.config?.options?.maxLength,
@@ -764,7 +658,7 @@ export default function WorkspaceContainerPage({
 
   if (permissionsLoaded && !isSuperAdmin && !userPermissions.entities?.includes("READ")) {
     return (
-      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100vh", background: "#f8fafc" }}>
+      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "80vh" }}>
         <Result
           status="403"
           title="403"
@@ -775,91 +669,10 @@ export default function WorkspaceContainerPage({
     );
   }
 
-  const sidebarItems = [
-    { key: "dashboard", icon: <DashboardOutlined />, label: "Bảng tổng quan" },
-  ];
-
-  if (isSuperAdmin || userPermissions.departments?.includes("READ")) {
-    sidebarItems.push({ key: "organization", icon: <PartitionOutlined />, label: "Cơ cấu Tổ chức" });
-  }
-  if (isSuperAdmin || userPermissions.entities?.includes("READ")) {
-    sidebarItems.push({ key: "metadata", icon: <BuildOutlined />, label: "Biểu mẫu Động" });
-  }
-  if (isSuperAdmin || userPermissions.workflows?.includes("READ")) {
-    sidebarItems.push({ key: "workflow", icon: <DeploymentUnitOutlined />, label: "Luồng Quy trình" });
-  }
-  if (isSuperAdmin || userPermissions.records?.includes("READ")) {
-    sidebarItems.push({ key: "records", icon: <FormOutlined />, label: "Hồ sơ & Biểu mẫu" });
-  }
-  if (isSuperAdmin || userPermissions.users?.includes("READ") || userPermissions.roles?.includes("READ")) {
-    sidebarItems.push({ key: "settings", icon: <SettingOutlined />, label: "Cài đặt Hệ thống" });
-  }
-
   return (
-    <Layout style={{ minHeight: "100vh" }}>
-      <Sider
-        collapsible
-        collapsed={collapsed}
-        onCollapse={setCollapsed}
-        theme="light"
-        style={{ borderRight: "1px solid #f0f0f0" }}
-      >
-        <div
-          className="flex items-center justify-center py-4 border-b border-gray-100"
-          style={{ minHeight: "64px" }}
-        >
-          <Title level={4} style={{ margin: 0, color: "#0050b3" }}>
-            BOS Platform
-          </Title>
-        </div>
-        <Menu
-          theme="light"
-          selectedKeys={["metadata"]}
-          mode="inline"
-          onClick={handleMenuClick}
-          items={sidebarItems}
-        />
-      </Sider>
-
-      <Layout>
-        <Header
-          style={{
-            padding: "0 24px",
-            background: colorBgContainer,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            borderBottom: "1px solid #f0f0f0",
-          }}
-          className="flex justify-between w-full"
-        >
-          {/* TRUY VẤN TÊN DOANH NGHIỆP THỜI GIAN THỰC TỪ DATABASE [1] */}
-          <Dropdown menu={tenantMenu} trigger={['click']} placement="bottomLeft">
-            <Button icon={<GlobalOutlined />} loading={tenantQuery.isLoading || switchTenantMutation.isPending}>
-              <Text strong>{activeTenantName}</Text>
-            </Button>
-          </Dropdown>
-          <Space size="large">
-            <Badge count={3} dot>
-              <Button type="text" shape="circle" icon={<BellOutlined />} />
-            </Badge>
-            <Dropdown menu={userMenu} placement="bottomRight">
-              <Space style={{ cursor: "pointer" }}>
-                <Avatar
-                  icon={<UserOutlined />}
-                  style={{ backgroundColor: "#0050b3" }}
-                />
-                {/* HIỂN THỊ ĐỘNG TÊN THÀNH VIÊN ĐÃ ĐĂNG NHẬP [1] */}
-                <Text strong className="hidden md:block">
-                  {userName}
-                </Text>
-              </Space>
-            </Dropdown>
-          </Space>
-        </Header>
-
-        <Content style={{ margin: "24px" }}>
-          <Space direction="vertical" size="large" className="w-full">
+    <>
+      <div className="bos-page-content">
+        <div style={{ display: "flex", flexDirection: "column", gap: 24, width: "100%" }}>
             {/* Standard low-code workspace page header */}
             <div className="bg-white p-6 rounded-lg border border-gray-100 shadow-sm flex justify-between items-center">
               <div>
@@ -992,9 +805,8 @@ export default function WorkspaceContainerPage({
               />
             )}
 
-          </Space>
-        </Content>
-      </Layout>
+          </div>
+        </div>
 
       {/* --- MODAL THÊM TRƯỜNG DỮ LIỆU ĐỘNG NHANH TỪ TOOLBOX --- */}
       <Modal
@@ -1242,13 +1054,26 @@ export default function WorkspaceContainerPage({
                 <Col span={12}>
                   <Form.Item
                     name={["options", "displayField"]}
-                    label="Trường hiển thị"
-                    rules={[{ required: true, message: "Nhập displayField" }]}
+                    label="Cột hiển thị nhãn (Chọn và ghép nhiều cột)"
+                    rules={[{ required: true, message: "Chọn ít nhất một trường hiển thị" }]}
                   >
-                    <Input placeholder="Ví dụ: display_name" />
+                    <Select
+                      mode="multiple"
+                      placeholder="Chọn các trường hiển thị..."
+                      showSearch
+                      filterOption={(input, opt) => String(opt?.label ?? "").toLowerCase().includes(input.toLowerCase())}
+                      options={[
+                        { value: "businessCode", label: "Mã hồ sơ (businessCode)" },
+                        { value: "title", label: "Tiêu đề (title)" },
+                        ...quickLookupFields.map((f: any) => ({
+                          value: f.code,
+                          label: `${f.name} (${f.code})`,
+                        })),
+                      ]}
+                    />
                   </Form.Item>
                 </Col>
-                <Col span={24}>
+                <Col span={12}>
                   <Form.Item
                     name={["options", "filter", "status"]}
                     label="Lọc theo trạng thái hồ sơ liên kết"
@@ -1263,6 +1088,22 @@ export default function WorkspaceContainerPage({
                         { value: "COMPLETED", label: "Hoàn thành (COMPLETED)" },
                         { value: "REJECTED", label: "Bị từ chối (REJECTED)" },
                       ]}
+                    />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item
+                    name={["options", "filter", "currentStepId"]}
+                    label="Lọc theo bước quy trình hiện tại"
+                  >
+                    <Select
+                      placeholder="Chọn bước quy trình để lọc (Mặc định: Tất cả)"
+                      allowClear
+                      loading={quickLookupWorkflowStepsQuery.isLoading}
+                      options={quickLookupWorkflowSteps.map((step: any) => ({
+                        value: step.id,
+                        label: `${step.name} (${step.stepType})`,
+                      }))}
                     />
                   </Form.Item>
                 </Col>
@@ -1727,13 +1568,26 @@ export default function WorkspaceContainerPage({
                 <Col span={12}>
                   <Form.Item
                     name={["options", "displayField"]}
-                    label="Trường hiển thị"
-                    rules={[{ required: true, message: "Nhập displayField" }]}
+                    label="Cột hiển thị nhãn (Chọn và ghép nhiều cột)"
+                    rules={[{ required: true, message: "Chọn ít nhất một trường hiển thị" }]}
                   >
-                    <Input placeholder="Ví dụ: display_name" />
+                    <Select
+                      mode="multiple"
+                      placeholder="Chọn các trường hiển thị..."
+                      showSearch
+                      filterOption={(input, opt) => String(opt?.label ?? "").toLowerCase().includes(input.toLowerCase())}
+                      options={[
+                        { value: "businessCode", label: "Mã hồ sơ (businessCode)" },
+                        { value: "title", label: "Tiêu đề (title)" },
+                        ...editLookupFields.map((f: any) => ({
+                          value: f.code,
+                          label: `${f.name} (${f.code})`,
+                        })),
+                      ]}
+                    />
                   </Form.Item>
                 </Col>
-                <Col span={24}>
+                <Col span={12}>
                   <Form.Item
                     name={["options", "filter", "status"]}
                     label="Lọc theo trạng thái hồ sơ liên kết"
@@ -1748,6 +1602,22 @@ export default function WorkspaceContainerPage({
                         { value: "COMPLETED", label: "Hoàn thành (COMPLETED)" },
                         { value: "REJECTED", label: "Bị từ chối (REJECTED)" },
                       ]}
+                    />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item
+                    name={["options", "filter", "currentStepId"]}
+                    label="Lọc theo bước quy trình hiện tại"
+                  >
+                    <Select
+                      placeholder="Chọn bước quy trình để lọc (Mặc định: Tất cả)"
+                      allowClear
+                      loading={editLookupWorkflowStepsQuery.isLoading}
+                      options={editLookupWorkflowSteps.map((step: any) => ({
+                        value: step.id,
+                        label: `${step.name} (${step.stepType})`,
+                      }))}
                     />
                   </Form.Item>
                 </Col>
@@ -2221,7 +2091,20 @@ export default function WorkspaceContainerPage({
           </Row>
         </Form>
       </Modal>
-    </Layout>
+    </>
+  );
+}
+
+export default function WorkspaceContainerPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = React.use(params);
+  return (
+    <AppShell>
+      <WorkspaceContainerContent id={id} />
+    </AppShell>
   );
 }
 

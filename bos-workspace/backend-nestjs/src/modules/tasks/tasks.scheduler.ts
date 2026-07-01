@@ -184,4 +184,73 @@ export class TasksScheduler {
       this.isProcessing = false;
     }
   }
+
+  @Cron('0 0 16 * * *')
+  async handleDailyPowerPlugShiftCheck() {
+    this.logger.log(`[Power Plug Daily Worker] Bắt đầu tự động chốt ca lúc 16h00...`);
+    try {
+      const tenants = await this.prisma.tenant.findMany({
+        where: { status: 'ACTIVE' },
+      });
+
+      for (const tenant of tenants) {
+        await tenantContext.run({ tenantId: tenant.id }, async () => {
+          const query = `
+            SELECT id, business_code as "businessCode", data 
+            FROM records 
+            WHERE tenant_id = $1 
+              AND deleted_at IS NULL 
+              AND (data->>'SO_CONTAINER' IS NOT NULL OR data->>'so_container' IS NOT NULL)
+              AND (data->>'THOI_GIAN_CAM' IS NOT NULL OR data->>'thoi_gian_cam' IS NOT NULL)
+              AND (
+                (data->>'THOI_GIAN_RUT' IS NULL OR data->>'THOI_GIAN_RUT' = '')
+                AND (data->>'thoi_gian_rut' IS NULL OR data->>'thoi_gian_rut' = '')
+              )
+          `;
+          const activePlugs = await this.prisma.$queryRawUnsafe<any[]>(
+            query,
+            tenant.id,
+          );
+
+          const firstUser = await this.prisma.user.findFirst({
+            where: { tenantId: tenant.id },
+          });
+          const systemUserId = firstUser ? firstUser.id : 1;
+
+          this.logger.log(
+            `Tenant ID: ${tenant.id} - ${tenant.name}: Tìm thấy ${activePlugs.length} container đang cắm điện lúc 16h00.`,
+          );
+
+          for (const plug of activePlugs) {
+            const data = plug.data as any;
+            const soCont = data.SO_CONTAINER;
+            const camTime = new Date(data.THOI_GIAN_CAM).getTime();
+            const elapsedHours = parseFloat(((Date.now() - camTime) / 3600000).toFixed(2));
+
+            this.logger.log(
+              `>> Cont lạnh: ${soCont} (Mã: ${plug.businessCode}) đã cắm ${elapsedHours} giờ tính đến 16h00.`,
+            );
+
+            await this.prisma.systemAuditLog.create({
+              data: {
+                tenantId: tenant.id,
+                userId: systemUserId,
+                action: 'DAILY_POWER_PLUG_CHECK',
+                resource: 'Record',
+                resourceId: plug.id,
+                payload: {
+                  soContainer: soCont,
+                  hoursElapsed: elapsedHours,
+                  timestamp: new Date().toISOString(),
+                },
+                ipAddress: '127.0.0.1',
+              },
+            });
+          }
+        });
+      }
+    } catch (err) {
+      this.logger.error(`[Power Plug Daily Worker] Lỗi chốt ca: ${err.message}`);
+    }
+  }
 }

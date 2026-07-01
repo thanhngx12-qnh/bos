@@ -6,6 +6,7 @@ import { LoginDto } from './dto/login.dto';
 import { RegisterTenantDto } from './dto/register-tenant.dto'; // <-- IMPORT DTO MỚI
 import { SelectTenantDto } from './dto/select-tenant.dto';
 import { SwitchTenantDto } from './dto/switch-tenant.dto';
+import { ForgotPasswordRequestDto, ForgotPasswordResetDto } from './dto/forgot-password.dto';
 import { JwtAuthGuard } from '../../core/guards/jwt-auth.guard';
 import { SuperAdminGuard } from '../../core/guards/super-admin.guard';
 
@@ -13,6 +14,20 @@ import { SuperAdminGuard } from '../../core/guards/super-admin.guard';
 @Controller('auth')
 export class AuthController {
   constructor(private authService: AuthService) {}
+
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Gửi mã OTP quên mật khẩu về email' })
+  forgotPassword(@Body() dto: ForgotPasswordRequestDto) {
+    return this.authService.sendForgotPasswordOtp(dto.email);
+  }
+
+  @Post('reset-password-otp')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Đặt lại mật khẩu bằng mã OTP' })
+  resetPasswordWithOtp(@Body() dto: ForgotPasswordResetDto) {
+    return this.authService.resetPasswordWithOtp(dto);
+  }
 
   @Post('login')
   @HttpCode(HttpStatus.OK)

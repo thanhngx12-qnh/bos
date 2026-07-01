@@ -21,6 +21,7 @@
     "react": "^19.0.0-rc-66a323b31e-20241107",
     "react-dom": "^19.0.0-rc-66a323b31e-20241107",
     "react-hook-form": "^7.53.2",
+    "recharts": "^3.9.0",
     "tailwind-merge": "^2.5.4",
     "zod": "^3.23.8"
   },

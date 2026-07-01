@@ -1,7 +1,7 @@
 // File: src/components/ProfileManager.tsx
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import {
   Card,
   Row,
@@ -13,6 +13,11 @@ import {
   Spin,
   Divider,
   Space,
+  Modal,
+  Form,
+  Input,
+  Button,
+  App as AntdApp,
 } from "antd";
 import {
   UserOutlined,
@@ -21,15 +26,30 @@ import {
   KeyOutlined,
   MailOutlined,
   CalendarOutlined,
+  EditOutlined,
+  LockOutlined,
 } from "@ant-design/icons";
 import { useMyProfile } from "@/hooks/useAuth";
+import { useUpdateUser, useResetUserPassword } from "@/hooks/useUsers";
+import { useQueryClient } from "@tanstack/react-query";
 import SignatureManager from "./SignatureManager";
 import DelegationManager from "./DelegationManager";
 
 const { Title, Text, Paragraph } = Typography;
 
 export default function ProfileManager() {
+  const queryClient = useQueryClient();
+  const { message } = AntdApp.useApp();
   const { data: profile, isLoading } = useMyProfile();
+
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+
+  const updateUserMutation = useUpdateUser();
+  const resetPasswordMutation = useResetUserPassword();
+
+  const [editForm] = Form.useForm();
+  const [passwordForm] = Form.useForm();
 
   const getUserTypeTag = (type: string) => {
     switch (type) {
@@ -60,6 +80,39 @@ export default function ProfileManager() {
     );
   }
 
+  const handleUpdateInfo = (values: { fullName: string; email: string }) => {
+    if (!profile) return;
+    updateUserMutation.mutate({
+      id: profile.id,
+      payload: values,
+    }, {
+      onSuccess: () => {
+        message.success("Cập nhật thông tin cá nhân thành công!");
+        queryClient.invalidateQueries({ queryKey: ["myProfile"] });
+        setIsEditModalOpen(false);
+      },
+      onError: (err: any) => {
+        message.error("Lỗi cập nhật thông tin: " + (err.response?.data?.message || err.message));
+      }
+    });
+  };
+
+  const handleChangePassword = (values: any) => {
+    if (!profile) return;
+    resetPasswordMutation.mutate({
+      id: profile.id,
+      password: values.password,
+    }, {
+      onSuccess: () => {
+        message.success("Đổi mật khẩu thành công!");
+        setIsPasswordModalOpen(false);
+      },
+      onError: (err: any) => {
+        message.error("Lỗi đổi mật khẩu: " + (err.response?.data?.message || err.message));
+      }
+    });
+  };
+
   return (
     <Space direction="vertical" size="large" style={{ display: "flex", width: "100%" }}>
       {/* CARD 1: PERSONAL DETAILS PROFILE CARD */}
@@ -89,9 +142,36 @@ export default function ProfileManager() {
                 </Title>
                 {profile?.userType && getUserTypeTag(profile.userType)}
               </Space>
-              <Paragraph type="secondary" style={{ fontSize: "14px", marginTop: "4px", marginBottom: 0 }}>
+              <Paragraph type="secondary" style={{ fontSize: "14px", marginTop: "4px", marginBottom: 8 }}>
                 Xem thông tin hồ sơ cá nhân và quản lý các mẫu chữ ký, con dấu xác thực số của bạn.
               </Paragraph>
+              <Space size="middle" style={{ marginTop: 8 }}>
+                <Button 
+                  type="primary" 
+                  ghost 
+                  icon={<EditOutlined />} 
+                  onClick={() => {
+                    editForm.setFieldsValue({
+                      fullName: profile?.fullName,
+                      email: profile?.email,
+                    });
+                    setIsEditModalOpen(true);
+                  }}
+                >
+                  Cập nhật thông tin
+                </Button>
+                <Button 
+                  type="dashed" 
+                  danger 
+                  icon={<LockOutlined />} 
+                  onClick={() => {
+                    passwordForm.resetFields();
+                    setIsPasswordModalOpen(true);
+                  }}
+                >
+                  Đổi mật khẩu
+                </Button>
+              </Space>
             </div>
 
             <Divider style={{ margin: "12px 0" }} />
@@ -165,6 +245,98 @@ export default function ProfileManager() {
 
       {/* CARD 3: DELEGATION MANAGER PANEL */}
       <DelegationManager />
+
+      {/* Modals */}
+      <Modal
+        title="Cập nhật thông tin cá nhân"
+        open={isEditModalOpen}
+        onCancel={() => setIsEditModalOpen(false)}
+        footer={null}
+      >
+        <Form
+          form={editForm}
+          layout="vertical"
+          onFinish={handleUpdateInfo}
+          style={{ marginTop: 16 }}
+        >
+          <Form.Item
+            name="fullName"
+            label="Họ và tên"
+            rules={[{ required: true, message: "Vui lòng nhập họ và tên" }]}
+          >
+            <Input placeholder="Nhập họ và tên" />
+          </Form.Item>
+          <Form.Item
+            name="email"
+            label="Email"
+            rules={[
+              { required: true, message: "Vui lòng nhập email" },
+              { type: "email", message: "Email không hợp lệ" },
+            ]}
+          >
+            <Input placeholder="Nhập email" />
+          </Form.Item>
+          <Form.Item style={{ marginBottom: 0, textAlign: "right" }}>
+            <Space>
+              <Button onClick={() => setIsEditModalOpen(false)}>Hủy</Button>
+              <Button type="primary" htmlType="submit" loading={updateUserMutation.isPending}>
+                Lưu thay đổi
+              </Button>
+            </Space>
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title="Đổi mật khẩu"
+        open={isPasswordModalOpen}
+        onCancel={() => setIsPasswordModalOpen(false)}
+        footer={null}
+      >
+        <Form
+          form={passwordForm}
+          layout="vertical"
+          onFinish={handleChangePassword}
+          style={{ marginTop: 16 }}
+        >
+          <Form.Item
+            name="password"
+            label="Mật khẩu mới"
+            rules={[
+              { required: true, message: "Vui lòng nhập mật khẩu mới" },
+              { min: 6, message: "Mật khẩu phải dài tối thiểu 6 ký tự" }
+            ]}
+          >
+            <Input.Password placeholder="Nhập mật khẩu mới" />
+          </Form.Item>
+          <Form.Item
+            name="confirmPassword"
+            label="Xác nhận mật khẩu mới"
+            dependencies={['password']}
+            rules={[
+              { required: true, message: "Vui lòng xác nhận mật khẩu mới" },
+              ({ getFieldValue }) => ({
+                validator(_, value) {
+                  if (!value || getFieldValue('password') === value) {
+                    return Promise.resolve();
+                  }
+                  return Promise.reject(new Error('Mật khẩu xác nhận không khớp!'));
+                },
+              }),
+            ]}
+          >
+            <Input.Password placeholder="Xác nhận mật khẩu mới" />
+          </Form.Item>
+          <Form.Item style={{ marginBottom: 0, textAlign: "right" }}>
+            <Space>
+              <Button onClick={() => setIsPasswordModalOpen(false)}>Hủy</Button>
+              <Button type="primary" htmlType="submit" loading={resetPasswordMutation.isPending}>
+                Cập nhật mật khẩu
+              </Button>
+            </Space>
+          </Form.Item>
+        </Form>
+      </Modal>
     </Space>
   );
 }

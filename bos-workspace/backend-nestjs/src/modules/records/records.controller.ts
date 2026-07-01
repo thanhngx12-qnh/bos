@@ -12,7 +12,9 @@ import {
   UseGuards,
   Request,
   DefaultValuePipe,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import {
   ApiTags,
   ApiOperation,
@@ -44,6 +46,37 @@ export class RecordsController {
   })
   getLookupData(@Param('fieldId', ParseIntPipe) fieldId: number) {
     return this.recordsService.getLookupData(fieldId);
+  }
+
+  @Get('lookup-last-trip')
+  @ApiOperation({ summary: 'Tìm kiếm lượt đi gần nhất của xe để tự điền thông tin' })
+  @ApiQuery({ name: 'licensePlate', required: true, type: String })
+  lookupLastTrip(@Request() req, @Query('licensePlate') licensePlate: string) {
+    const tenantId = req.user.tenantId;
+    return this.recordsService.lookupLastTrip(tenantId, licensePlate);
+  }
+
+  @Get('power-plug-report')
+  @ApiOperation({ summary: 'Xuất báo cáo cắm điện container lạnh dạng CSV (Excel)' })
+  @ApiQuery({ name: 'date', required: false, type: String })
+  async getPowerPlugReport(
+    @Request() req,
+    @Res() res: Response,
+    @Query('date') date?: string,
+  ) {
+    const tenantId = req.user.tenantId;
+    const data = await this.recordsService.getPowerPlugReport(tenantId, date);
+
+    let csv = '\ufeff'; // UTF-8 BOM
+    csv += 'ID,Mã hồ sơ,Biển số xe,Số Container,Chủ hàng,Loại hình,Thời gian cắm,Thời gian rút,Số giờ cắm (h),Trạng thái\n';
+
+    for (const row of data) {
+      csv += `"${row.id}","${row.businessCode}","${row.bienSo}","${row.soCont}","${row.chuHang}","${row.loaiHinh}","${row.thoiGianCam}","${row.thoiGianRut}","${row.durationHours}","${row.status}"\n`;
+    }
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename=power-plug-report.csv');
+    res.status(200).send(csv);
   }
 
   @Get()

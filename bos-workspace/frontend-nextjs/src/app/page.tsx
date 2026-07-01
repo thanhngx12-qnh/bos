@@ -3,11 +3,7 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import {
-  Layout,
-  Menu,
   Breadcrumb,
-  Avatar,
-  Dropdown,
   Space,
   Card,
   Button,
@@ -17,7 +13,6 @@ import {
   Typography,
   Row,
   Col,
-  theme,
   Tabs,
   List,
   Drawer,
@@ -39,15 +34,11 @@ import {
   Checkbox,
   TreeSelect,
   Segmented,
+  Avatar,
+  Skeleton,
 } from "antd";
 import {
   DashboardOutlined,
-  PartitionOutlined,
-  BuildOutlined,
-  DeploymentUnitOutlined,
-  BellOutlined,
-  UserOutlined,
-  GlobalOutlined,
   ArrowRightOutlined,
   LoadingOutlined,
   CheckCircleOutlined,
@@ -56,7 +47,6 @@ import {
   FileTextOutlined,
   MessageOutlined,
   RightOutlined,
-  FormOutlined,
   ExpandAltOutlined,
   ShrinkOutlined,
   PaperClipOutlined,
@@ -64,26 +54,30 @@ import {
   InfoCircleOutlined,
   PlusOutlined,
   DeleteOutlined,
-  SettingOutlined,
+  DeploymentUnitOutlined,
+  UserOutlined,
+  SmileOutlined,
+  CheckSquareOutlined,
+  ApartmentOutlined,
+  EyeOutlined,
 } from "@ant-design/icons";
 import type { Dayjs } from "dayjs";
 import dayjs from "dayjs";
+import RecordDetailDrawer from "./records/components/RecordDetailDrawer";
 import { api } from "@/lib/axios";
+import { safeEvaluate } from "@/lib/formula-evaluator";
 import { useRouter } from "next/navigation";
-import { useTenantDetail } from "@/hooks/useTenant";
-import { useMyTenants, useSwitchTenant } from "@/hooks/useAuth";
-import { BankOutlined } from "@ant-design/icons";
 import { useMyTasks, useWorkflowAction, useWorkflowLogs, Task } from "@/hooks/useTasks";
 import { useFields, Field } from "@/hooks/useFields";
 import { useWorkflowSteps, useStepCandidates } from "@/hooks/useWorkflows";
 import { useUpdateRecord } from "@/hooks/useRecords";
 import SignatureOtpModal from "@/components/SignatureOtpModal";
 import DashboardAnalytics from "@/components/DashboardAnalytics";
+import AppShell from "@/components/AppShell";
 import { useDepartmentTree } from "@/hooks/useDepartments";
 import { useUsers } from "@/hooks/useUsers";
 import { useRoles } from "@/hooks/useRoles";
 
-const { Header, Sider, Content } = Layout;
 const { Title, Paragraph, Text } = Typography;
 const { TextArea } = Input;
 
@@ -92,7 +86,7 @@ const parseDateValue = (val: any, type: string): Dayjs | undefined => {
   if (!val) return undefined;
   if (type === "TIME") {
     if (typeof val === "string" && /^\d{2}:\d{2}(:\d{2})?$/.test(val)) {
-      return dayjs(`2026-06-20T${val}`);
+      return dayjs(`${dayjs().format("YYYY-MM-DD")}T${val}`);
     }
   }
   const parsed = dayjs(val);
@@ -127,25 +121,7 @@ function evaluateCondition(condition: DynamicCondition | undefined, formValues: 
 // =================== GLOBAL FORMULA ENGINE ===================
 function evaluateFormulaString(formula: string, context: Record<string, any>): number {
   try {
-    let expression = formula;
-    expression = expression.replace(/\{([^}]+)\}/g, (_, code) => {
-      const val = context[code];
-      return val !== undefined && val !== null ? String(Number(val) || 0) : "0";
-    });
-    const words = expression.match(/[a-zA-Z_][a-zA-Z0-9_]*/g) || [];
-    const sortedWords = [...new Set(words)].sort((a, b) => b.length - a.length);
-    for (const word of sortedWords) {
-      if (["SUM", "AVG", "COUNT"].includes(word.toUpperCase())) continue;
-      if (context[word] !== undefined && context[word] !== null) {
-        const val = context[word];
-        const numVal = typeof val === "boolean" ? (val ? 1 : 0) : (Number(val) || 0);
-        const regex = new RegExp(`\\b${word}\\b`, 'g');
-        expression = expression.replace(regex, String(numVal));
-      }
-    }
-    expression = expression.replace(/[^0-9+\-*/().\s]/g, "");
-    if (!expression || expression.trim() === "") return 0;
-    const result = new Function(`"use strict"; return (${expression});`)();
+    const result = safeEvaluate(formula, context);
     return typeof result === "number" && isFinite(result) ? parseFloat(result.toFixed(4)) : 0;
   } catch {
     return 0;
@@ -211,13 +187,7 @@ function calculateFormFormulas(fields: any[], currentValues: Record<string, any>
 
 function evaluateTableFormula(formula: string, rowData: Record<string, any>): number {
   try {
-    let expression = formula.replace(/\{([^}]+)\}/g, (_, code) => {
-      const val = rowData[code];
-      return val !== undefined && val !== null ? String(Number(val) || 0) : "0";
-    });
-    expression = expression.replace(/[^0-9+\-*/().]/g, "");
-    if (!expression || expression.trim() === "") return 0;
-    const result = new Function(`"use strict"; return (${expression});`)();
+    const result = safeEvaluate(formula, rowData);
     return typeof result === "number" && isFinite(result) ? parseFloat(result.toFixed(4)) : 0;
   } catch {
     return 0;
@@ -475,7 +445,17 @@ function TableFieldEditor({
 }
 
 // =================== LOOKUP FIELD COMPONENT ===================
-function LookupField({ field, value, onChange }: { field: Field; value: any; onChange: (val: any) => void; }) {
+function LookupField({ 
+  field, 
+  value, 
+  onChange,
+  onViewDetails,
+}: { 
+  field: Field; 
+  value: any; 
+  onChange: (val: any) => void; 
+  onViewDetails?: (id: number) => void;
+}) {
   const [options, setOptions] = useState<{ value: number; label: string }[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -492,153 +472,53 @@ function LookupField({ field, value, onChange }: { field: Field; value: any; onC
   }, [field.id]);
 
   return (
-    <Select
-      value={value}
-      onChange={onChange}
-      loading={loading}
-      showSearch
-      allowClear
-      placeholder={`Tìm kiếm ${field.name}...`}
-      filterOption={(input, opt) => String(opt?.label ?? "").toLowerCase().includes(input.toLowerCase())}
-      options={options}
-      style={{ width: "100%" }}
-    />
+    <div style={{ display: "flex", gap: "8px", alignItems: "center", width: "100%" }}>
+      <Select
+        value={value}
+        onChange={onChange}
+        loading={loading}
+        showSearch
+        allowClear
+        placeholder={`Tìm kiếm ${field.name}...`}
+        filterOption={(input, opt) => String(opt?.label ?? "").toLowerCase().includes(input.toLowerCase())}
+        options={options}
+        style={{ flex: 1 }}
+      />
+      {onViewDetails && (
+        <Button
+          type="default"
+          icon={<EyeOutlined />}
+          disabled={!value}
+          onClick={() => onViewDetails(Number(value))}
+          title="Xem chi tiết hồ sơ liên kết"
+        />
+      )}
+    </div>
   );
 }
 
 export default function DashboardPortal() {
   const router = useRouter();
-  const [collapsed, setCollapsed] = useState(false);
 
-  // State quản lý Tenant và User động
-  const [tenantId, setTenantId] = useState<number | null>(null);
-  const [userName, setUserName] = useState<string>("Thành viên BOS");
-  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
-  const [userPermissions, setUserPermissions] = useState<Record<string, string[]>>({});
-  const [permissionsLoaded, setPermissionsLoaded] = useState(false);
+  const [selectedLookupRecordId, setSelectedLookupRecordId] = useState<number | null>(null);
+  const [isLookupDetailOpen, setIsLookupDetailOpen] = useState(false);
 
+  const [userName, setUserName] = useState("Thành viên");
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const token = localStorage.getItem("bos_token");
-      if (!token) {
-        router.push("/auth/login");
-        return;
-      }
-      const storedTenantId = localStorage.getItem("bos_tenant_id");
-      const storedUserName = localStorage.getItem("bos_user_name");
-      const storedUserType = localStorage.getItem("bos_user_type");
-      setIsSuperAdmin(storedUserType === "SUPER_ADMIN");
-
-      if (storedTenantId) {
-        setTenantId(Number(storedTenantId));
-      }
-      if (storedUserName) {
-        setUserName(storedUserName);
-      }
-      const storedPermissions = localStorage.getItem("bos_user_permissions");
-      if (storedPermissions) {
-        try {
-          setUserPermissions(JSON.parse(storedPermissions));
-        } catch (e) {
-          console.error(e);
-        }
-      }
-      setPermissionsLoaded(true);
+      const storedName = localStorage.getItem("bos_user_name");
+      if (storedName) setUserName(storedName);
     }
-  }, [router]);
+  }, []);
 
-  const tenantQuery = useTenantDetail(tenantId);
-  const activeTenantName = tenantId === null
-    ? "Quản trị Hệ thống (Super Admin)"
-    : tenantQuery.data
-    ? `${tenantQuery.data.name} (${tenantQuery.data.code})`
-    : "Đang tải thông tin doanh nghiệp...";
-
-  const { data: myTenants = [] } = useMyTenants();
-  const switchTenantMutation = useSwitchTenant();
-
-  const handleSwitchTenant = (targetTenantId: number | null) => {
-    switchTenantMutation.mutate({ tenantId: targetTenantId as any }, {
-      onSuccess: (res) => {
-        message.success("Chuyển doanh nghiệp thành công!");
-        localStorage.setItem("bos_token", res.accessToken);
-        localStorage.setItem("bos_user_name", res.user.fullName);
-        localStorage.setItem("bos_user_permissions", JSON.stringify((res.user as any).role?.permissions || {}));
-        localStorage.setItem("bos_user_type", (res.user as any).userType);
-        if (res.user.tenantId === null || res.user.tenantId === undefined) {
-          localStorage.removeItem("bos_tenant_id");
-        } else {
-          localStorage.setItem("bos_tenant_id", String(res.user.tenantId));
-        }
-        window.location.reload();
-      },
-      onError: (err: any) => {
-        message.error("Không thể chuyển đổi doanh nghiệp.");
-      }
-    });
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Chào buổi sáng ☀️";
+    if (hour < 18) return "Chào buổi chiều 🌤️";
+    return "Chào buổi tối 🌙";
   };
 
-  const tenantMenu = {
-    items: [
-      ...(isSuperAdmin ? [{
-        key: "root",
-        label: "Quản trị Hệ thống (Super Admin)",
-        icon: <SettingOutlined />,
-        disabled: tenantId === null,
-      }] : []),
-      ...myTenants.map((t) => ({
-        key: String(t.id),
-        label: t.name,
-        icon: <BankOutlined />,
-        disabled: t.id === tenantId,
-      }))
-    ],
-    onClick: (info: any) => {
-      if (info.key === "root") {
-        handleSwitchTenant(null);
-      } else {
-        handleSwitchTenant(Number(info.key));
-      }
-    }
-  };
 
-  const {
-    token: { colorBgContainer, borderRadiusLG },
-  } = theme.useToken();
-
-  const handleLogout = () => {
-    localStorage.removeItem("bos_token");
-    localStorage.removeItem("bos_tenant_id");
-    localStorage.removeItem("bos_user_name");
-    localStorage.removeItem("bos_user_permissions");
-    localStorage.removeItem("bos_user_type");
-    router.push("/auth/login");
-  };
-
-  const handleMenuClick = (e: { key: string }) => {
-    if (e.key === "dashboard") router.push("/");
-    if (e.key === "organization") router.push("/organization");
-    if (e.key === "metadata") router.push("/metadata");
-    if (e.key === "workflow") router.push("/metadata");
-    if (e.key === "records") router.push("/records");
-    if (e.key === "settings") router.push("/settings");
-  };
-
-  const userMenu = {
-    items: [
-      { key: "profile", label: "Thông tin cá nhân" },
-      { key: "security", label: "Thiết lập bảo mật" },
-      { type: "divider" as const },
-      { key: "logout", label: "Đăng xuất hệ thống", danger: true },
-    ],
-    onClick: (info: any) => {
-      if (info.key === "logout") {
-        handleLogout();
-      } else if (info.key === "profile") {
-        router.push("/profile");
-      }
-    },
-  };
 
   // State Tabs và Drawer phê duyệt
   const [activeTab, setActiveTab] = useState<"PENDING" | "COMPLETED">("PENDING");
@@ -780,6 +660,53 @@ export default function DashboardPortal() {
   const handleFormValuesChange = (changedValues: any, allValues: any) => {
     const computedValues = calculateFormFormulas(entityFields, allValues);
     taskForm.setFieldsValue(computedValues);
+
+    // Auto-fill previous trip values if BIEN_SO_XE is entered
+    if ("BIEN_SO_XE" in changedValues && changedValues.BIEN_SO_XE) {
+      const bienSo = changedValues.BIEN_SO_XE;
+      api.get(`/records/lookup-last-trip?licensePlate=${encodeURIComponent(bienSo)}`)
+        .then((res) => {
+          if (res.data && res.data.found) {
+            const prevData = res.data.data;
+            const newFieldsToSet: Record<string, any> = {};
+
+            const findFieldCode = (target: string) => {
+              const f = entityFields.find((x: any) => x.code.toUpperCase() === target.toUpperCase());
+              return f ? f.code : null;
+            };
+
+            const containerCode = findFieldCode("SO_CONTAINER");
+            const customerCode = findFieldCode("CHU_HANG");
+            const previousTypeCode = findFieldCode("LOAI_HINH_CU");
+
+            const getPrevValue = (target: string) => {
+              const key = Object.keys(prevData).find((k) => k.toUpperCase() === target.toUpperCase());
+              return key ? prevData[key] : null;
+            };
+
+            if (containerCode) {
+              const val = getPrevValue("SO_CONTAINER");
+              if (val) newFieldsToSet[containerCode] = val;
+            }
+            if (customerCode) {
+              const val = getPrevValue("CHU_HANG");
+              if (val) newFieldsToSet[customerCode] = val;
+            }
+            if (previousTypeCode) {
+              const val = getPrevValue("LOAI_HINH");
+              if (val) newFieldsToSet[previousTypeCode] = val;
+            }
+
+            if (Object.keys(newFieldsToSet).length > 0) {
+              message.info("Hệ thống đã tự động nhận diện xe quay lại và điền thông tin chuyến trước.");
+              const updatedValues = { ...allValues, ...newFieldsToSet };
+              const recomputed = calculateFormFormulas(entityFields, updatedValues);
+              taskForm.setFieldsValue({ ...updatedValues, ...recomputed });
+            }
+          }
+        })
+        .catch((err) => console.error("Error looking up last trip", err));
+    }
   };
 
   // Xác định trạm hiện tại và các nút bấm phê duyệt động
@@ -797,7 +724,11 @@ export default function DashboardPortal() {
     showSignerRole?: boolean,
     showSignerDept?: boolean,
     showSigningTime?: boolean,
-    nextAssigneeId?: number
+    nextAssigneeId?: number,
+    fontFamily?: string,
+    fontSize?: number,
+    fontBold?: boolean,
+    fontItalic?: boolean
   ) => {
     if (!selectedTask || !selectedTask.instance?.record) return;
     const hideLoading = message.loading(`Đang thực thi: ${actionLabel}...`, 0);
@@ -875,6 +806,10 @@ export default function DashboardPortal() {
         showSignerDept,
         showSigningTime,
         nextAssigneeId,
+        fontFamily,
+        fontSize,
+        fontBold,
+        fontItalic,
       });
 
       message.success(`Đã xử lý thành công hành động: ${actionLabel}`);
@@ -936,7 +871,18 @@ export default function DashboardPortal() {
     }
 
     if (isRequired) {
-      rules.push({ required: true, message: `${field.name} là bắt buộc` });
+      if (field.type === "TABLE" || (field.type === "SELECT" && options?.multiple)) {
+        rules.push({
+          validator: (_: any, value: any) => {
+            if (!value || !Array.isArray(value) || value.length === 0) {
+              return Promise.reject(`${field.name} là bắt buộc và phải có ít nhất 1 dòng`);
+            }
+            return Promise.resolve();
+          }
+        });
+      } else {
+        rules.push({ required: true, message: `${field.name} là bắt buộc` });
+      }
     }
     if (options?.regex || options?.regexPattern) {
       const pattern = options.regex || options.regexPattern;
@@ -1197,7 +1143,15 @@ export default function DashboardPortal() {
       case "LOOKUP":
         return (
           <Form.Item name={field.code} rules={rules} style={{ marginBottom: 0 }}>
-            <LookupField field={field} value={taskForm.getFieldValue(field.code)} onChange={(val: any) => taskForm.setFieldValue(field.code, val)} />
+            <LookupField
+              field={field}
+              value={taskForm.getFieldValue(field.code)}
+              onChange={(val: any) => taskForm.setFieldValue(field.code, val)}
+              onViewDetails={(id) => {
+                setSelectedLookupRecordId(id);
+                setIsLookupDetailOpen(true);
+              }}
+            />
           </Form.Item>
         );
       case "TABLE":
@@ -1524,158 +1478,222 @@ export default function DashboardPortal() {
     return <Text style={{ fontWeight: 500 }}>{String(val)}</Text>;
   };
 
-  const sidebarItems = [
-    { key: "dashboard", icon: <DashboardOutlined />, label: "Bảng tổng quan" },
-  ];
-
-  if (isSuperAdmin || userPermissions.departments?.includes("READ")) {
-    sidebarItems.push({ key: "organization", icon: <PartitionOutlined />, label: "Cơ cấu Tổ chức" });
-  }
-  if (isSuperAdmin || userPermissions.entities?.includes("READ")) {
-    sidebarItems.push({ key: "metadata", icon: <BuildOutlined />, label: "Biểu mẫu Động" });
-  }
-  if (isSuperAdmin || userPermissions.workflows?.includes("READ")) {
-    sidebarItems.push({ key: "workflow", icon: <DeploymentUnitOutlined />, label: "Luồng Quy trình" });
-  }
-  if (isSuperAdmin || userPermissions.records?.includes("READ")) {
-    sidebarItems.push({ key: "records", icon: <FormOutlined />, label: "Hồ sơ & Biểu mẫu" });
-  }
-  if (isSuperAdmin || userPermissions.users?.includes("READ") || userPermissions.roles?.includes("READ")) {
-    sidebarItems.push({ key: "settings", icon: <SettingOutlined />, label: "Cài đặt Hệ thống" });
-  }
 
   return (
-    <AntdApp>
-      <Layout style={{ minHeight: "100vh" }}>
-        {/* Sider Navigation */}
-        <Sider
-          collapsible
-          collapsed={collapsed}
-          onCollapse={(value) => setCollapsed(value)}
-          theme="light"
-          style={{ borderRight: "1px solid #f0f0f0" }}
-        >
-          <div className="flex items-center justify-center py-4 border-b border-gray-100" style={{ minHeight: "64px" }}>
-            <Title level={4} style={{ margin: 0, color: "#0050b3" }}>
-              {collapsed ? "BOS" : "BOS Platform"}
-            </Title>
-          </div>
-          <Menu
-            theme="light"
-            selectedKeys={["dashboard"]}
-            mode="inline"
-            onClick={handleMenuClick}
-            items={sidebarItems}
-          />
-        </Sider>
-
-        {/* Main Layout Area */}
-        <Layout>
-          {/* Header Section */}
-          <Header
+    <AppShell>
+      <div className="bos-page-content">
+        <Space direction="vertical" size="large" style={{ display: "flex", width: "100%" }}>
+          {/* Premium Welcome Banner */}
+          <div
             style={{
-              padding: "0 24px",
-              background: colorBgContainer,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              borderBottom: "1px solid #f0f0f0",
+              background: "linear-gradient(135deg, #001529 0%, #003a8c 50%, #0050b3 100%)",
+              padding: "32px 40px",
+              borderRadius: "var(--bos-radius-lg)",
+              color: "#ffffff",
+              position: "relative",
+              overflow: "hidden",
+              boxShadow: "var(--bos-shadow-md)",
             }}
+            className="bos-animate-fade-in"
           >
-            <Space size="middle">
-              <Dropdown menu={tenantMenu} trigger={['click']} placement="bottomLeft">
-                <Button icon={<GlobalOutlined />} loading={tenantQuery.isLoading || switchTenantMutation.isPending}>
-                  <Space>
-                    <Text strong>{activeTenantName}</Text>
-                  </Space>
-                </Button>
-              </Dropdown>
-            </Space>
+            {/* Background Blur Decor */}
+            <div
+              style={{
+                position: "absolute",
+                width: "200px",
+                height: "200px",
+                borderRadius: "50%",
+                background: "rgba(24, 144, 255, 0.2)",
+                filter: "blur(60px)",
+                right: "-20px",
+                top: "-20px",
+                pointerEvents: "none",
+              }}
+            />
 
-            {/* Công cụ góc phải */}
-            <Space size="large">
-              <Badge count={tasksData?.total || 0} overflowCount={99}>
-                <Button type="text" shape="circle" icon={<BellOutlined />} />
-              </Badge>
-              <Dropdown menu={userMenu} placement="bottomRight">
-                <Space style={{ cursor: "pointer" }}>
-                  <Avatar icon={<UserOutlined />} style={{ backgroundColor: "#0050b3" }} />
-                  <div className="hidden md:block">
-                    <Text strong>{userName}</Text>
-                  </div>
-                </Space>
-              </Dropdown>
-            </Space>
-          </Header>
-
-          {/* Content Section */}
-          <Content style={{ margin: "24px 24px 0", overflow: "initial" }}>
-            <Space direction="vertical" size="large" className="w-full">
-              {/* Page Header Tiêu Chuẩn */}
-              <div className="flex justify-between items-center bg-white p-6 rounded-lg border border-gray-100 flex-wrap gap-4">
-                <div>
-                  <Breadcrumb
-                    items={[
-                      { title: "Trang chủ" },
-                      { title: "Bảng tổng quan" },
+            <Row align="middle" justify="space-between" gutter={[24, 24]}>
+              <Col xs={24} md={16} style={{ position: "relative", zIndex: 2 }}>
+                <Breadcrumb
+                  items={[
+                    { title: <span style={{ color: "rgba(255,255,255,0.6)" }}>Trang chủ</span> },
+                    { title: <span style={{ color: "#ffffff" }}>Bảng tổng quan</span> },
+                  ]}
+                  style={{ marginBottom: "16px" }}
+                />
+                <Title level={2} style={{ color: "#ffffff", margin: "0 0 8px 0", fontWeight: 700 }}>
+                  {getGreeting()}, {userName}!
+                </Title>
+                <Paragraph style={{ color: "rgba(255, 255, 255, 0.8)", margin: 0, fontSize: "14px" }}>
+                  Chào mừng quay trở lại hệ thống vận hành doanh nghiệp BOS Platform. Dưới đây là thống kê hiệu suất phê duyệt và luồng hồ sơ trực thuộc tài khoản của bạn.
+                </Paragraph>
+                
+                <div style={{ marginTop: "20px" }}>
+                  <Segmented
+                    value={viewMode}
+                    onChange={(value) => setViewMode(value as any)}
+                    options={[
+                      { label: <span style={{ color: viewMode === "tasks" ? undefined : "#ffffff" }}>Nhiệm vụ & Công việc</span>, value: "tasks", icon: <ClockCircleOutlined /> },
+                      { label: <span style={{ color: viewMode === "analytics" ? undefined : "#ffffff" }}>Báo cáo & Phân tích (BI)</span>, value: "analytics", icon: <DashboardOutlined /> },
                     ]}
+                    size="middle"
+                    style={{ background: "rgba(255, 255, 255, 0.15)", backdropFilter: "blur(8px)", padding: "2px" }}
                   />
-                  <Title level={2} style={{ margin: "8px 0 0 0" }}>Bảng điều khiển Trung tâm</Title>
-                  <Paragraph type="secondary" style={{ margin: "4px 0 0 0" }}>
-                    Hệ thống Động hóa Doanh nghiệp đa ngành Low-Code - Trạng thái hệ thống tổng quan.
-                  </Paragraph>
-                  <div style={{ marginTop: "12px" }}>
-                    <Segmented
-                      value={viewMode}
-                      onChange={(value) => setViewMode(value as any)}
-                      options={[
-                        { label: "Nhiệm vụ & Công việc", value: "tasks", icon: <ClockCircleOutlined /> },
-                        { label: "Báo cáo & Phân tích (BI)", value: "analytics", icon: <DashboardOutlined /> },
-                      ]}
-                      size="middle"
-                    />
-                  </div>
                 </div>
-                <Button type="primary" size="large" icon={<ArrowRightOutlined />} onClick={() => router.push("/metadata")}>
+              </Col>
+              
+              <Col xs={24} md={8} style={{ display: "flex", justifyContent: "md-flex-end", position: "relative", zIndex: 2 }}>
+                <Button
+                  type="primary"
+                  size="large"
+                  icon={<ArrowRightOutlined />}
+                  onClick={() => router.push("/metadata")}
+                  style={{
+                    backgroundColor: "#1890ff",
+                    borderColor: "#1890ff",
+                    boxShadow: "0 4px 14px rgba(24, 144, 255, 0.4)",
+                    height: "46px",
+                    borderRadius: "8px",
+                  }}
+                >
                   Thiết kế Biểu mẫu Động
                 </Button>
-              </div>
+              </Col>
+            </Row>
+          </div>
 
-              {viewMode === "tasks" ? (
-                <>
-                  {/* KPI Metrics row */}
-                  <Row gutter={[20, 20]}>
-                    <Col xs={24} md={8}>
-                      <Card bordered={false} className="shadow-sm bg-gradient-to-br from-blue-50 to-white" style={{ borderLeft: "4px solid #1890ff", borderRadius: "8px" }}>
-                        <Space direction="vertical">
-                          <Text type="secondary" strong>Nhiệm vụ Chờ phê duyệt</Text>
-                          <Title level={2} style={{ margin: 0, color: "#0050b3" }}>
-                            {isTasksLoading ? <Spin size="small" /> : (activeTab === "PENDING" ? tasksData?.total || 0 : "N/A")}
-                          </Title>
-                        </Space>
-                      </Card>
-                    </Col>
-                    <Col xs={24} md={8}>
-                      <Card bordered={false} className="shadow-sm" style={{ borderLeft: "4px solid #52c41a", borderRadius: "8px" }}>
-                        <Space direction="vertical">
-                          <Text type="secondary" strong>Nhiệm vụ Đã hoàn thành</Text>
-                          <Title level={2} style={{ margin: 0, color: "#237804" }}>
-                            {isTasksLoading ? <Spin size="small" /> : (activeTab === "COMPLETED" ? tasksData?.total || 0 : "N/A")}
-                          </Title>
-                        </Space>
-                      </Card>
-                    </Col>
-                    <Col xs={24} md={8}>
-                      <Card bordered={false} className="shadow-sm" style={{ borderLeft: "4px solid #faad14", borderRadius: "8px" }}>
-                        <Space direction="vertical">
-                          <Text type="secondary" strong>Đơn vị / Phòng ban</Text>
-                          <Title level={2} style={{ margin: 0, color: "#d48806" }}>
-                            1
-                          </Title>
-                        </Space>
-                      </Card>
-                    </Col>
-                  </Row>
+          {viewMode === "tasks" ? (
+            <>
+              {/* Premium KPI Metrics Row */}
+              <Row gutter={[20, 20]}>
+                <Col xs={24} md={8}>
+                  <div
+                    style={{
+                      background: "var(--bos-bg-card)",
+                      padding: "24px",
+                      borderRadius: "var(--bos-radius-lg)",
+                      border: "1px solid var(--bos-border-light)",
+                      borderLeft: "5px solid var(--bos-primary)",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}
+                    className="bos-stat-card"
+                  >
+                    <div>
+                      <Text type="secondary" style={{ fontSize: "14px", fontWeight: 600 }}>
+                        Nhiệm vụ Chờ phê duyệt
+                      </Text>
+                      <Title level={2} style={{ margin: "8px 0 0 0", color: "var(--bos-primary)", fontWeight: 800 }}>
+                        {isTasksLoading ? (
+                          <Spin size="small" />
+                        ) : activeTab === "PENDING" ? (
+                          tasksData?.total || 0
+                        ) : (
+                          "0"
+                        )}
+                      </Title>
+                    </div>
+                    <div
+                      style={{
+                        width: "48px",
+                        height: "48px",
+                        borderRadius: "12px",
+                        background: "rgba(0, 80, 179, 0.08)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: "var(--bos-primary)",
+                      }}
+                    >
+                      <ClockCircleOutlined style={{ fontSize: "22px" }} />
+                    </div>
+                  </div>
+                </Col>
+
+                <Col xs={24} md={8}>
+                  <div
+                    style={{
+                      background: "var(--bos-bg-card)",
+                      padding: "24px",
+                      borderRadius: "var(--bos-radius-lg)",
+                      border: "1px solid var(--bos-border-light)",
+                      borderLeft: "5px solid var(--bos-success)",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}
+                    className="bos-stat-card"
+                  >
+                    <div>
+                      <Text type="secondary" style={{ fontSize: "14px", fontWeight: 600 }}>
+                        Nhiệm vụ Đã hoàn thành
+                      </Text>
+                      <Title level={2} style={{ margin: "8px 0 0 0", color: "var(--bos-success)", fontWeight: 800 }}>
+                        {isTasksLoading ? (
+                          <Spin size="small" />
+                        ) : activeTab === "COMPLETED" ? (
+                          tasksData?.total || 0
+                        ) : (
+                          "0"
+                        )}
+                      </Title>
+                    </div>
+                    <div
+                      style={{
+                        width: "48px",
+                        height: "48px",
+                        borderRadius: "12px",
+                        background: "rgba(82, 196, 26, 0.08)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: "var(--bos-success)",
+                      }}
+                    >
+                      <CheckSquareOutlined style={{ fontSize: "22px" }} />
+                    </div>
+                  </div>
+                </Col>
+
+                <Col xs={24} md={8}>
+                  <div
+                    style={{
+                      background: "var(--bos-bg-card)",
+                      padding: "24px",
+                      borderRadius: "var(--bos-radius-lg)",
+                      border: "1px solid var(--bos-border-light)",
+                      borderLeft: "5px solid var(--bos-warning)",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}
+                    className="bos-stat-card"
+                  >
+                    <div>
+                      <Text type="secondary" style={{ fontSize: "14px", fontWeight: 600 }}>
+                        Đơn vị / Phòng ban
+                      </Text>
+                      <Title level={2} style={{ margin: "8px 0 0 0", color: "var(--bos-warning)", fontWeight: 800 }}>
+                        1
+                      </Title>
+                    </div>
+                    <div
+                      style={{
+                        width: "48px",
+                        height: "48px",
+                        borderRadius: "12px",
+                        background: "rgba(250, 173, 20, 0.08)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: "var(--bos-warning)",
+                      }}
+                    >
+                      <ApartmentOutlined style={{ fontSize: "22px" }} />
+                    </div>
+                  </div>
+                </Col>
+              </Row>
 
                   {/* TRUNG TÂM PHÊ DUYỆT (APPROVALS CENTER) */}
                   <Card
@@ -1752,14 +1770,40 @@ export default function DashboardPortal() {
                     )}
 
                     {isTasksLoading ? (
-                      <div className="flex justify-center items-center py-12">
-                        <Spin tip="Đang tải danh sách nhiệm vụ..." />
+                      <div style={{ padding: "8px 0" }}>
+                        <Card style={{ marginBottom: "12px" }} bodyStyle={{ padding: "16px" }}>
+                          <Skeleton active avatar paragraph={{ rows: 2 }} />
+                        </Card>
+                        <Card style={{ marginBottom: "12px" }} bodyStyle={{ padding: "16px" }}>
+                          <Skeleton active avatar paragraph={{ rows: 2 }} />
+                        </Card>
+                        <Card bodyStyle={{ padding: "16px" }}>
+                          <Skeleton active avatar paragraph={{ rows: 2 }} />
+                        </Card>
                       </div>
                     ) : (tasksData?.data?.length || 0) === 0 ? (
                       <Empty
                         image={Empty.PRESENTED_IMAGE_SIMPLE}
-                        description={`Bạn không có nhiệm vụ nào trong danh sách ${activeTab === "PENDING" ? "chờ xử lý" : "đã hoàn thành"}.`}
-                      />
+                        style={{ margin: "48px 0" }}
+                        description={
+                          <div style={{ textAlign: "center", marginBottom: "16px" }}>
+                            <Paragraph type="secondary" style={{ fontSize: "14px", margin: 0 }}>
+                              {`Bạn không có nhiệm vụ nào trong danh sách ${activeTab === "PENDING" ? "chờ xử lý" : "đã hoàn thành"}.`}
+                            </Paragraph>
+                            {activeTab === "PENDING" && (
+                              <Text type="secondary" style={{ fontSize: "12px", opacity: 0.8 }}>
+                                Hãy thư giãn hoặc kiểm tra lại các bộ lọc khác.
+                              </Text>
+                            )}
+                          </div>
+                        }
+                      >
+                        {activeTab === "PENDING" && (
+                          <Button type="default" onClick={() => refetchTasks()} style={{ borderRadius: "6px" }}>
+                            Làm mới danh sách
+                          </Button>
+                        )}
+                      </Empty>
                     ) : (
                       <List
                         itemLayout="horizontal"
@@ -1869,8 +1913,6 @@ export default function DashboardPortal() {
                 <DashboardAnalytics />
               )}
             </Space>
-          </Content>
-        </Layout>
 
         <Drawer
           title={
@@ -1913,11 +1955,11 @@ export default function DashboardPortal() {
           }
         >
           {selectedTask && (
-            <Space direction="vertical" size="large" className="w-full">
+            <Space direction="vertical" size="large" style={{ width: "100%" }}>
               {/* PHÂN KHU 1: THÔNG TIN BẢN GHI DỮ LIỆU ĐỘNG */}
               <Card size="small" title="Chi tiết Dữ liệu hồ sơ" headStyle={{ background: "#fafafa" }}>
                 {isFieldsLoading ? (
-                  <Spin tip="Đang đọc cấu hình biểu mẫu..." />
+                  <div style={{ padding: "16px" }}><Skeleton active paragraph={{ rows: 4 }} /></div>
                 ) : (
                   <Form form={taskForm} layout="vertical" onValuesChange={handleFormValuesChange}>
                     <Descriptions bordered column={1} size="small" labelStyle={{ width: "180px", fontWeight: "bold" }}>
@@ -1967,7 +2009,7 @@ export default function DashboardPortal() {
               {/* PHÂN KHU 2: NHẬT KÝ DUYỆT (TIMELINE LOGS) */}
               <Card size="small" title="Lịch sử Lộ trình phê duyệt" headStyle={{ background: "#fafafa" }}>
                 {isLogsLoading ? (
-                  <Spin tip="Đang tải nhật ký..." />
+                  <div style={{ padding: "16px" }}><Skeleton active paragraph={{ rows: 3 }} /></div>
                 ) : auditLogs.length === 0 ? (
                   <Empty description="Chưa có nhật ký hoạt động nào." image={Empty.PRESENTED_IMAGE_SIMPLE} />
                 ) : (
@@ -2024,183 +2066,243 @@ export default function DashboardPortal() {
                               <div style={{ marginTop: "8px" }}>
                                 {log.snapshot.signature.startsWith("data:image/") ? (
                                   (() => {
-                                    const layout = log.snapshot.layout || "vertical";
-                                    const isHorizontal = layout === "horizontal";
-                                    const showName = log.snapshot.showSignerName !== false;
-                                    const showRole = log.snapshot.showSignerRole !== false;
-                                    const showDept = log.snapshot.showSignerDept !== false;
-                                    const showTime = log.snapshot.showSigningTime !== false;
+                                      const layout = log.snapshot.layout || "vertical";
+                                      const isHorizontal = layout === "horizontal";
+                                      const showName = log.snapshot.showSignerName !== false;
+                                      const showRole = log.snapshot.showSignerRole !== false;
+                                      const showDept = log.snapshot.showSignerDept !== false;
+                                      const showTime = log.snapshot.showSigningTime !== false;
 
-                                    if (isHorizontal) {
-                                      return (
-                                        <div
-                                          style={{
-                                            display: "inline-flex",
-                                            alignItems: "center",
-                                            gap: "12px",
-                                            border: "1px solid #e2e8f0",
-                                            padding: "8px",
-                                            borderRadius: "6px",
-                                            backgroundColor: "#fafafa",
-                                            fontFamily: "sans-serif",
-                                            textAlign: "left",
-                                            lineHeight: "1.3",
-                                          }}
-                                        >
+                                      const fontFam = log.snapshot.fontFamily || "sans-serif";
+                                      const fontSz = log.snapshot.fontSize !== undefined ? Number(log.snapshot.fontSize) : 11;
+                                      const fontBld = log.snapshot.fontBold === true;
+                                      const fontItal = log.snapshot.fontItalic === true;
+
+                                      if (isHorizontal) {
+                                        return (
                                           <div
                                             style={{
-                                              position: "relative",
-                                              height: "44px",
-                                              minWidth: "90px",
-                                              display: "flex",
+                                              display: "inline-flex",
                                               alignItems: "center",
-                                              justifyContent: "center",
-                                              background: "#ffffff",
-                                              border: "1px solid #cbd5e1",
-                                              borderRadius: "4px",
-                                              padding: "2px",
+                                              gap: "12px",
+                                              padding: "8px",
+                                              fontFamily: `"${fontFam}", sans-serif`,
+                                              textAlign: "left",
+                                              lineHeight: "1.3",
                                             }}
                                           >
-                                            <img
-                                              src={log.snapshot.signature}
-                                              alt="Signature"
-                                              style={{ maxHeight: "38px", maxWidth: "86px", display: "block" }}
-                                            />
-                                            {log.snapshot.stamp && (
+                                            <div
+                                              style={{
+                                                position: "relative",
+                                                height: "44px",
+                                                minWidth: "90px",
+                                                display: "flex",
+                                                alignItems: "center",
+                                                justifyContent: "center",
+                                                background: "transparent",
+                                                padding: "2px",
+                                              }}
+                                            >
                                               <img
-                                                src={log.snapshot.stamp}
-                                                alt="Stamp"
-                                                style={{
-                                                  position: "absolute",
-                                                  right: "-10px",
-                                                  bottom: "-6px",
-                                                  maxHeight: "40px",
-                                                  maxWidth: "40px",
-                                                  opacity: 0.85,
-                                                  mixBlendMode: "multiply",
-                                                }}
+                                                src={log.snapshot.signature}
+                                                alt="Signature"
+                                                style={{ maxHeight: "38px", maxWidth: "86px", display: "block" }}
                                               />
-                                            )}
+                                              {log.snapshot.stamp && (
+                                                <img
+                                                  src={log.snapshot.stamp}
+                                                  alt="Stamp"
+                                                  style={{
+                                                    position: "absolute",
+                                                    right: "-10px",
+                                                    bottom: "-6px",
+                                                    maxHeight: "40px",
+                                                    maxWidth: "40px",
+                                                    opacity: 0.85,
+                                                    mixBlendMode: "multiply",
+                                                  }}
+                                                />
+                                              )}
+                                            </div>
+                                            <div>
+                                              <div
+                                                style={{
+                                                  fontSize: "8px",
+                                                  color: "green",
+                                                  fontFamily: "monospace",
+                                                  fontWeight: "bold",
+                                                  marginBottom: "2px",
+                                                }}
+                                              >
+                                                [ĐÃ KÝ ĐIỆN TỬ]
+                                              </div>
+                                              {showName && (
+                                                <div
+                                                  style={{
+                                                    fontSize: `${fontSz}px`,
+                                                    fontWeight: fontBld ? "bold" : "normal",
+                                                    fontStyle: fontItal ? "italic" : "normal",
+                                                    color: "#1e293b",
+                                                  }}
+                                                >
+                                                  {log.snapshot.signerName || log.user?.fullName}
+                                                </div>
+                                              )}
+                                              {showRole && log.snapshot.signerRole && (
+                                                <div
+                                                  style={{
+                                                    fontSize: `${Math.max(8, fontSz - 2)}px`,
+                                                    fontWeight: fontBld ? "bold" : "normal",
+                                                    fontStyle: fontItal ? "italic" : "normal",
+                                                    color: "#64748b",
+                                                  }}
+                                                >
+                                                  {log.snapshot.signerRole}
+                                                </div>
+                                              )}
+                                              {showDept && log.snapshot.signerDept && (
+                                                <div
+                                                  style={{
+                                                    fontSize: `${Math.max(8, fontSz - 2)}px`,
+                                                    fontWeight: fontBld ? "bold" : "normal",
+                                                    fontStyle: fontItal ? "italic" : "normal",
+                                                    color: "#64748b",
+                                                  }}
+                                                >
+                                                  {log.snapshot.signerDept}
+                                                </div>
+                                              )}
+                                              {showTime && log.snapshot.signingTime && (
+                                                <div
+                                                  style={{
+                                                    fontSize: `${Math.max(8, fontSz - 3)}px`,
+                                                    fontWeight: fontBld ? "bold" : "normal",
+                                                    fontStyle: fontItal ? "italic" : "normal",
+                                                    color: "#94a3b8",
+                                                    marginTop: "1px",
+                                                  }}
+                                                >
+                                                  {log.snapshot.signingTime}
+                                                </div>
+                                              )}
+                                            </div>
                                           </div>
-                                          <div>
+                                        );
+                                      } else {
+                                        return (
+                                          <div
+                                            style={{
+                                              display: "inline-flex",
+                                              flexDirection: "column",
+                                              alignItems: "center",
+                                              textAlign: "center",
+                                              padding: "8px",
+                                              fontFamily: `"${fontFam}", sans-serif`,
+                                              minWidth: "120px",
+                                              lineHeight: "1.3",
+                                            }}
+                                          >
                                             <div
                                               style={{
                                                 fontSize: "8px",
                                                 color: "green",
                                                 fontFamily: "monospace",
                                                 fontWeight: "bold",
-                                                marginBottom: "2px",
+                                                marginBottom: "4px",
                                               }}
                                             >
                                               [ĐÃ KÝ ĐIỆN TỬ]
                                             </div>
+                                            <div
+                                              style={{
+                                                position: "relative",
+                                                height: "44px",
+                                                width: "90px",
+                                                display: "flex",
+                                                alignItems: "center",
+                                                justifyContent: "center",
+                                                background: "transparent",
+                                                padding: "2px",
+                                                marginBottom: "4px",
+                                                marginLeft: "auto",
+                                                marginRight: "auto",
+                                              }}
+                                            >
+                                              <img
+                                                src={log.snapshot.signature}
+                                                alt="Signature"
+                                                style={{ maxHeight: "38px", maxWidth: "86px", display: "block" }}
+                                              />
+                                              {log.snapshot.stamp && (
+                                                <img
+                                                  src={log.snapshot.stamp}
+                                                  alt="Stamp"
+                                                  style={{
+                                                    position: "absolute",
+                                                    right: "-10px",
+                                                    bottom: "-6px",
+                                                    maxHeight: "40px",
+                                                    maxWidth: "40px",
+                                                    opacity: 0.85,
+                                                    mixBlendMode: "multiply",
+                                                  }}
+                                                />
+                                              )}
+                                            </div>
                                             {showName && (
-                                              <div style={{ fontSize: "11px", fontWeight: "bold", color: "#1e293b" }}>
+                                              <div
+                                                style={{
+                                                  fontSize: `${fontSz}px`,
+                                                  fontWeight: fontBld ? "bold" : "normal",
+                                                  fontStyle: fontItal ? "italic" : "normal",
+                                                  color: "#1e293b",
+                                                }}
+                                              >
                                                 {log.snapshot.signerName || log.user?.fullName}
                                               </div>
                                             )}
                                             {showRole && log.snapshot.signerRole && (
-                                              <div style={{ fontSize: "9px", color: "#64748b" }}>{log.snapshot.signerRole}</div>
+                                              <div
+                                                style={{
+                                                  fontSize: `${Math.max(8, fontSz - 2)}px`,
+                                                  fontWeight: fontBld ? "bold" : "normal",
+                                                  fontStyle: fontItal ? "italic" : "normal",
+                                                  color: "#64748b",
+                                                  marginTop: "1px",
+                                                }}
+                                              >
+                                                {log.snapshot.signerRole}
+                                              </div>
                                             )}
                                             {showDept && log.snapshot.signerDept && (
-                                              <div style={{ fontSize: "9px", color: "#64748b" }}>{log.snapshot.signerDept}</div>
+                                              <div
+                                                style={{
+                                                  fontSize: `${Math.max(8, fontSz - 2)}px`,
+                                                  fontWeight: fontBld ? "bold" : "normal",
+                                                  fontStyle: fontItal ? "italic" : "normal",
+                                                  color: "#64748b",
+                                                }}
+                                              >
+                                                {log.snapshot.signerDept}
+                                              </div>
                                             )}
                                             {showTime && log.snapshot.signingTime && (
-                                              <div style={{ fontSize: "8px", color: "#94a3b8", marginTop: "1px" }}>
+                                              <div
+                                                style={{
+                                                  fontSize: `${Math.max(8, fontSz - 3)}px`,
+                                                  fontWeight: fontBld ? "bold" : "normal",
+                                                  fontStyle: fontItal ? "italic" : "normal",
+                                                  color: "#94a3b8",
+                                                  marginTop: "2px",
+                                                }}
+                                              >
                                                 {log.snapshot.signingTime}
                                               </div>
                                             )}
                                           </div>
-                                        </div>
-                                      );
-                                    } else {
-                                      return (
-                                        <div
-                                          style={{
-                                            display: "inline-flex",
-                                            flexDirection: "column",
-                                            alignItems: "center",
-                                            textAlign: "center",
-                                            border: "1px solid #e2e8f0",
-                                            padding: "8px",
-                                            borderRadius: "6px",
-                                            backgroundColor: "#fafafa",
-                                            fontFamily: "sans-serif",
-                                            minWidth: "120px",
-                                            lineHeight: "1.3",
-                                          }}
-                                        >
-                                          <div
-                                            style={{
-                                              fontSize: "8px",
-                                              color: "green",
-                                              fontFamily: "monospace",
-                                              fontWeight: "bold",
-                                              marginBottom: "4px",
-                                            }}
-                                          >
-                                            [ĐÃ KÝ ĐIỆN TỬ]
-                                          </div>
-                                          <div
-                                            style={{
-                                              position: "relative",
-                                              height: "44px",
-                                              width: "90px",
-                                              display: "flex",
-                                              alignItems: "center",
-                                              justifyContent: "center",
-                                              background: "#ffffff",
-                                              border: "1px solid #cbd5e1",
-                                              borderRadius: "4px",
-                                              padding: "2px",
-                                              marginBottom: "4px",
-                                              marginLeft: "auto",
-                                              marginRight: "auto",
-                                            }}
-                                          >
-                                            <img
-                                              src={log.snapshot.signature}
-                                              alt="Signature"
-                                              style={{ maxHeight: "38px", maxWidth: "86px", display: "block" }}
-                                            />
-                                            {log.snapshot.stamp && (
-                                              <img
-                                                src={log.snapshot.stamp}
-                                                alt="Stamp"
-                                                style={{
-                                                  position: "absolute",
-                                                  right: "-10px",
-                                                  bottom: "-6px",
-                                                  maxHeight: "40px",
-                                                  maxWidth: "40px",
-                                                  opacity: 0.85,
-                                                  mixBlendMode: "multiply",
-                                                }}
-                                              />
-                                            )}
-                                          </div>
-                                          {showName && (
-                                            <div style={{ fontSize: "11px", fontWeight: "bold", color: "#1e293b" }}>
-                                              {log.snapshot.signerName || log.user?.fullName}
-                                            </div>
-                                          )}
-                                          {showRole && log.snapshot.signerRole && (
-                                            <div style={{ fontSize: "9px", color: "#64748b", marginTop: "1px" }}>
-                                              {log.snapshot.signerRole}
-                                            </div>
-                                          )}
-                                          {showDept && log.snapshot.signerDept && (
-                                            <div style={{ fontSize: "9px", color: "#64748b" }}>{log.snapshot.signerDept}</div>
-                                          )}
-                                          {showTime && log.snapshot.signingTime && (
-                                            <div style={{ fontSize: "8px", color: "#94a3b8", marginTop: "2px" }}>
-                                              {log.snapshot.signingTime}
-                                            </div>
-                                          )}
-                                        </div>
-                                      );
-                                    }
-                                  })()
+                                        );
+                                      }
+                                    })()
                                 ) : (
                                   <Tag color="purple">{log.snapshot.signature}</Tag>
                                 )}
@@ -2280,7 +2382,6 @@ export default function DashboardPortal() {
             </Space>
           )}
         </Drawer>
-      </Layout>
 
       <Modal
         title="Duyệt nhanh hàng loạt nhiệm vụ"
@@ -2317,7 +2418,7 @@ export default function DashboardPortal() {
             setSigTransitionId(null);
             setNextStepStepId(null);
           }}
-          onConfirm={(sigData, otp, stamp, layout, sName, sRole, sDept, sTime, nextAssId) => {
+          onConfirm={(sigData, otp, stamp, layout, sName, sRole, sDept, sTime, nextAssId, fontFamily, fontSize, fontBold, fontItalic) => {
             if (sigTransitionId) {
               executeWorkflowAction(
                 sigTransitionId,
@@ -2330,7 +2431,11 @@ export default function DashboardPortal() {
                 sRole,
                 sDept,
                 sTime,
-                nextAssId
+                nextAssId,
+                fontFamily,
+                fontSize,
+                fontBold,
+                fontItalic
               );
             }
           }}
@@ -2403,10 +2508,21 @@ export default function DashboardPortal() {
                   label: `${c.fullName} (${c.email})`,
                 }))}
               />
-            </Form.Item>
-          </Form>
-        </div>
-      </Modal>
-    </AntdApp>
+              </Form.Item>
+            </Form>
+          </div>
+        </Modal>
+        {selectedLookupRecordId && (
+          <RecordDetailDrawer
+            open={isLookupDetailOpen}
+            recordId={selectedLookupRecordId}
+            onClose={() => {
+              setIsLookupDetailOpen(false);
+              setSelectedLookupRecordId(null);
+            }}
+          />
+        )}
+      </div>
+    </AppShell>
   );
 }
