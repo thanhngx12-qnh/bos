@@ -612,12 +612,12 @@ export class RecordsService {
 
   async remove(id: number) {
     const currentRecord = await this.findOne(id);
-    const instances = await this.prisma.workflowInstance.findFirst({
-      where: { recordId: id } as any,
+    const activeInstance = await this.prisma.workflowInstance.findFirst({
+      where: { recordId: id, status: 'IN_PROGRESS' } as any,
     });
-    if (instances) {
+    if (activeInstance) {
       throw new BadRequestException(
-        'Không thể xóa bản ghi vì nó đang nằm trong một luồng quy trình chờ duyệt.',
+        'Không thể xóa bản ghi vì nó đang trong một luồng quy trình đang chạy.',
       );
     }
 

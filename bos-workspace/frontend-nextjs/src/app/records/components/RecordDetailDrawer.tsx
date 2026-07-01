@@ -23,6 +23,8 @@ import {
   Steps,
   Tabs,
   Avatar,
+  Popconfirm,
+  App,
 } from "antd";
 import { api } from "@/lib/axios";
 import { safeEvaluate } from "@/lib/formula-evaluator";
@@ -37,8 +39,9 @@ import {
   ExpandAltOutlined,
   ShrinkOutlined,
   PrinterOutlined,
+  DeleteOutlined,
 } from "@ant-design/icons";
-import { RecordData, useRecordRevisions } from "@/hooks/useRecords";
+import { RecordData, useRecordRevisions, useDeleteRecord } from "@/hooks/useRecords";
 import { useFields, Field } from "@/hooks/useFields";
 import { useRecordWorkflowLogs } from "@/hooks/useTasks";
 import { useDepartmentTree } from "@/hooks/useDepartments";
@@ -761,6 +764,34 @@ export default function RecordDetailDrawer({
   const { data: usersData } = useUsers(1, 100);
   const { data: rolesData } = useRoles(1, 100);
 
+  const deleteRecordMutation = useDeleteRecord();
+  const { modal: confirmModal } = App.useApp();
+
+  const handleDeleteRecord = () => {
+    if (!record) return;
+    confirmModal.confirm({
+      title: "Xóa hồ sơ này?",
+      content: "Hành động này không thể hoàn tác. Hồ sơ sẽ bị xóa vĩnh viễn.",
+      okText: "Xóa",
+      okType: "danger",
+      cancelText: "Hủy",
+      onOk: async () => {
+        try {
+          await deleteRecordMutation.mutateAsync({
+            id: record.id,
+            entityId: record.entityId,
+          });
+          message.success("Đã xóa hồ sơ thành công!");
+          onClose();
+        } catch (err: any) {
+          message.error(
+            err?.response?.data?.message || "Không thể xóa hồ sơ."
+          );
+        }
+      },
+    });
+  };
+
   const findDeptName = (id: number): string => {
     const search = (nodes: any[]): string => {
       for (const n of nodes) {
@@ -998,6 +1029,22 @@ export default function RecordDetailDrawer({
               </Button>
             </Dropdown>
           )}
+          <Popconfirm
+            title="Xóa hồ sơ này?"
+            description="Hành động này không thể hoàn tác."
+            onConfirm={handleDeleteRecord}
+            okText="Xóa"
+            okType="danger"
+            cancelText="Hủy"
+          >
+            <Button
+              danger
+              icon={<DeleteOutlined />}
+              loading={deleteRecordMutation.isPending}
+            >
+              Xóa
+            </Button>
+          </Popconfirm>
           <Tooltip title={fullscreen ? "Thu nhỏ" : "Phóng to toàn màn hình"}>
             <Button
               type="text"
