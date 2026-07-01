@@ -648,110 +648,123 @@ export default function WorkflowStepsController({
             <InputNumber min={1} className="w-full" style={{ width: "100%" }} />
           </Form.Item>
 
-          <Divider style={{ margin: "12px 0" }} />
-          <Text strong style={{ fontSize: "13px", display: "block", marginBottom: "12px" }}>
-            Phân quyền Người duyệt (Step-Level RBAC)
-          </Text>
-
-          <Form.Item
-            name="approverType"
-            label="Kiểu duyệt"
-            initialValue="SINGLE"
-            rules={[{ required: true }]}
-          >
-            <Select
-              options={[
-                { value: "SINGLE", label: "Cá nhân duyệt (SINGLE - Chỉ cần 1 người duyệt)" },
-                { value: "ALL_OF", label: "Đồng thuận (ALL_OF - Tất cả người được giao đều phải duyệt)" },
-              ]}
-            />
-          </Form.Item>
-
-          <Form.Item
-            name="assigneeType"
-            label="Hình thức chỉ định người duyệt"
-            initialValue="INITIATOR"
-            rules={[{ required: true }]}
-          >
-            <Select
-              options={[
-                { value: "INITIATOR", label: "Người khởi tạo phiếu ($initiator)" },
-                { value: "MANAGER", label: "Quản lý của người khởi tạo ($initiator.manager)" },
-                { value: "ROLE", label: "Theo vai trò / chức danh ($role:ID)" },
-                { value: "FIELD", label: "Theo trường trên biểu mẫu ($record.data.field)" },
-                { value: "CUSTOM_USERS", label: "Chỉ định tài khoản nhân viên cụ thể" },
-              ]}
-            />
-          </Form.Item>
-
           <Form.Item
             noStyle
-            shouldUpdate={(prevValues, currentValues) => prevValues.assigneeType !== currentValues.assigneeType}
+            shouldUpdate={(prevValues, currentValues) => prevValues.stepType !== currentValues.stepType}
           >
             {({ getFieldValue }) => {
-              const assigneeType = getFieldValue("assigneeType");
-              if (assigneeType === "ROLE") {
-                return (
-                  <Form.Item
-                    name="assigneeRoleId"
-                    label="Chọn Vai trò người duyệt"
-                    rules={[{ required: true, message: "Vui lòng chọn vai trò" }]}
-                  >
-                    <Select
-                      placeholder="Chọn vai trò..."
-                      options={roles.map((r) => ({
-                        value: r.id,
-                        label: r.name,
-                      }))}
-                    />
-                  </Form.Item>
-                );
-              }
-              if (assigneeType === "FIELD") {
-                return (
-                  <Form.Item
-                    name="assigneeFieldCode"
-                    label="Chọn Trường chứa người duyệt"
-                    rules={[{ required: true, message: "Vui lòng chọn trường biểu mẫu" }]}
-                  >
-                    <Select
-                      placeholder="Chọn trường dữ liệu..."
-                      options={fields.map((f) => ({
-                        value: f.code,
-                        label: `${f.name} (${f.code})`,
-                      }))}
-                    />
-                  </Form.Item>
-                );
-              }
-              if (assigneeType === "CUSTOM_USERS") {
-                return (
-                  <Form.Item
-                    name="assigneeUsers"
-                    label="Chọn tài khoản người duyệt"
-                    rules={[{ required: true, message: "Vui lòng chọn ít nhất 1 nhân viên" }]}
-                  >
-                    <Select
-                      mode="multiple"
-                      placeholder="Chọn nhân viên..."
-                      options={users.map((u) => ({
-                        value: u.id,
-                        label: `${u.fullName} (${u.email})`,
-                      }))}
-                    />
-                  </Form.Item>
-                );
-              }
-              return null;
-            }}
-          </Form.Item>
+              const stepType = getFieldValue("stepType");
+              if (stepType === "SYSTEM_TASK") return null;
+              return (
+                <>
+                  <Divider style={{ margin: "12px 0" }} />
+                  <Text strong style={{ fontSize: "13px", display: "block", marginBottom: "12px" }}>
+                    Phân quyền Người duyệt (Step-Level RBAC)
+                  </Text>
 
-          <Form.Item
-            name="chooseApproverDynamically"
-            valuePropName="checked"
-            style={{ marginBottom: "12px" }}
-          >
-            <Checkbox>Cho phép người gửi/người duyệt trước chọn cụ thể người duyệt tiếp theo</Checkbox>
+                  <Form.Item
+                    name="approverType"
+                    label="Kiểu duyệt"
+                    initialValue="SINGLE"
+                    rules={[{ required: true }]}
+                  >
+                    <Select
+                      options={[
+                        { value: "SINGLE", label: "Cá nhân duyệt (SINGLE - Chỉ cần 1 người duyệt)" },
+                        { value: "ALL_OF", label: "Đồng thuận (ALL_OF - Tất cả người được giao đều phải duyệt)" },
+                      ]}
+                    />
+                  </Form.Item>
+
+                  <Form.Item
+                    name="assigneeType"
+                    label="Hình thức chỉ định người duyệt"
+                    initialValue="INITIATOR"
+                    rules={[{ required: true }]}
+                  >
+                    <Select
+                      options={[
+                        { value: "INITIATOR", label: "Người khởi tạo phiếu ($initiator)" },
+                        { value: "MANAGER", label: "Quản lý của người khởi tạo ($initiator.manager)" },
+                        { value: "ROLE", label: "Theo vai trò / chức danh ($role:ID)" },
+                        { value: "FIELD", label: "Theo trường trên biểu mẫu ($record.data.field)" },
+                        { value: "CUSTOM_USERS", label: "Chỉ định tài khoản nhân viên cụ thể" },
+                      ]}
+                    />
+                  </Form.Item>
+
+                  <Form.Item
+                    noStyle
+                    shouldUpdate={(prevValues, currentValues) => prevValues.assigneeType !== currentValues.assigneeType}
+                  >
+                    {({ getFieldValue }) => {
+                      const assigneeType = getFieldValue("assigneeType");
+                      if (assigneeType === "ROLE") {
+                        return (
+                          <Form.Item
+                            name="assigneeRoleId"
+                            label="Chọn Vai trò người duyệt"
+                            rules={[{ required: true, message: "Vui lòng chọn vai trò" }]}
+                          >
+                            <Select
+                              placeholder="Chọn vai trò..."
+                              options={roles.map((r) => ({
+                                value: r.id,
+                                label: r.name,
+                              }))}
+                            />
+                          </Form.Item>
+                        );
+                      }
+                      if (assigneeType === "FIELD") {
+                        return (
+                          <Form.Item
+                            name="assigneeFieldCode"
+                            label="Chọn Trường chứa người duyệt"
+                            rules={[{ required: true, message: "Vui lòng chọn trường biểu mẫu" }]}
+                          >
+                            <Select
+                              placeholder="Chọn trường dữ liệu..."
+                              options={fields.map((f) => ({
+                                value: f.code,
+                                label: `${f.name} (${f.code})`,
+                              }))}
+                            />
+                          </Form.Item>
+                        );
+                      }
+                      if (assigneeType === "CUSTOM_USERS") {
+                        return (
+                          <Form.Item
+                            name="assigneeUsers"
+                            label="Chọn tài khoản người duyệt"
+                            rules={[{ required: true, message: "Vui lòng chọn ít nhất 1 nhân viên" }]}
+                          >
+                            <Select
+                              mode="multiple"
+                              placeholder="Chọn nhân viên..."
+                              options={users.map((u) => ({
+                                value: u.id,
+                                label: `${u.fullName} (${u.email})`,
+                              }))}
+                            />
+                          </Form.Item>
+                        );
+                      }
+                      return null;
+                    }}
+                  </Form.Item>
+
+                  <Form.Item
+                    name="chooseApproverDynamically"
+                    valuePropName="checked"
+                    style={{ marginBottom: "12px" }}
+                  >
+                    <Checkbox>Cho phép người gửi/người duyệt trước chọn cụ thể người duyệt tiếp theo</Checkbox>
+                  </Form.Item>
+                </>
+              );
+            }}
           </Form.Item>
 
           <Divider style={{ margin: "12px 0" }} />

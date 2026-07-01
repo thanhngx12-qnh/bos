@@ -257,7 +257,7 @@ function OrganizationContent() {
   return (
     <>
       <div className="bos-page-content">
-        <Space direction="vertical" size="large" className="w-full">
+        <Space direction="vertical" size="large" style={{ width: "100%" }}>
             <div className="bg-white p-6 rounded-lg border border-gray-100 shadow-sm">
               <Breadcrumb items={[{ title: "Trang chủ" }, { title: "Cơ cấu Tổ chức" }]} />
               <Title level={2} style={{ margin: "8px 0 0 0" }}>
