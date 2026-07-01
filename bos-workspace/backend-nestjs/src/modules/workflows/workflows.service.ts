@@ -344,6 +344,21 @@ export class WorkflowsService {
       return newInstance;
     });
 
+    // Bổ sung: Tự động chuyển bước nếu bước đầu tiên là SYSTEM_TASK
+    if (firstStep.stepType === 'SYSTEM_TASK') {
+      const autoTransition = await this.prisma.workflowTransition.findFirst({
+        where: { fromStepId: firstStep.id } as any,
+      });
+      if (autoTransition) {
+        await this.handleSystemAutoTransition(
+          instance.id,
+          autoTransition.id,
+          'Tự động khởi tạo',
+          'Hệ thống tự động xử lý bước khởi tạo và chuyển sang bước tiếp theo.',
+        );
+      }
+    }
+
     const actualTasks = await this.prisma.task.findMany({
       where: {
         instanceId: instance.id,
