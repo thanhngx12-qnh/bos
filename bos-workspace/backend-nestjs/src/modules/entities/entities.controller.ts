@@ -68,16 +68,16 @@ export class EntitiesController {
     return this.entitiesService.update(id, dto);
   }
 
-  @Delete(':id')
-  @ApiOperation({ summary: 'Xóa Entity (và tất cả dữ liệu liên quan nếu là SUPER_ADMIN)' })
-  remove(@Request() req, @Param('id', ParseIntPipe) id: number) {
-    return this.entitiesService.remove(id, req.user?.userType);
-  }
-
   @Delete('clear-all')
   @ApiOperation({ summary: '[SUPER ADMIN] Xóa tất cả Entities + dữ liệu của tenant' })
   clearAll(@Request() req) {
     return this.entitiesService.clearAllData();
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Xóa Entity (và tất cả dữ liệu liên quan nếu là SUPER_ADMIN)' })
+  remove(@Request() req, @Param('id', ParseIntPipe) id: number) {
+    return this.entitiesService.remove(id, req.user?.userType);
   }
 
   @Get(':id/versions')
