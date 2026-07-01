@@ -1,4 +1,4 @@
-// File: src/app/layout.tsx
+// File: src/app/layout.tsx - Trigger Vercel Staging Build
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import AntdRegistry from "@/lib/antd-registry";
