@@ -12,9 +12,6 @@ const nextConfig: NextConfig = {
     "rc-tree",
     "rc-table"
   ],
-  devIndicators: {
-    appIsrStatus: false,
-  },
 };
 
 export default nextConfig;
