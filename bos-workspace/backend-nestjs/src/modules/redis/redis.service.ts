@@ -8,11 +8,15 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   private redisClient: Redis;
 
   onModuleInit() {
-    // Đấu nối với Redis Container đã cấu hình trong docker-compose (port 6379)
-    this.redisClient = new Redis({
-      host: process.env.REDIS_HOST || 'localhost',
-      port: Number(process.env.REDIS_PORT) || 6379,
-    });
+    // Đấu nối với Redis (ưu tiên REDIS_URL kết nối string)
+    if (process.env.REDIS_URL) {
+      this.redisClient = new Redis(process.env.REDIS_URL);
+    } else {
+      this.redisClient = new Redis({
+        host: process.env.REDIS_HOST || 'localhost',
+        port: Number(process.env.REDIS_PORT) || 6379,
+      });
+    }
   }
 
   onModuleDestroy() {
