@@ -41,6 +41,7 @@ export class WorkflowsController {
   })
   @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
   @ApiQuery({ name: 'limit', required: false, type: Number, example: 10 })
+  @ApiQuery({ name: 'entityId', required: false, type: Number, example: 1 })
   @ApiQuery({ name: 'sortBy', required: false, type: String, example: 'id' })
   @ApiQuery({
     name: 'sortOrder',
@@ -52,15 +53,18 @@ export class WorkflowsController {
     @Request() req,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
+    @Query('entityId') entityId?: string,
     @Query('sortBy') sortBy?: string,
     @Query('sortOrder') sortOrder?: 'asc' | 'desc',
   ) {
     const currentUser = req.user;
+    const parsedEntityId = entityId ? Number(entityId) : undefined;
     return this.workflowsService.findAll(currentUser, {
       page,
       limit,
       sortBy,
       sortOrder,
+      entityId: parsedEntityId,
     });
   }
 

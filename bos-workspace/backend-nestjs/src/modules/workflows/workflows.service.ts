@@ -99,7 +99,10 @@ export class WorkflowsService {
     });
   }
 
-  async findAll(currentUser: any, options: PaginateOptions) {
+  async findAll(
+    currentUser: any,
+    options: PaginateOptions & { entityId?: number },
+  ) {
     const whereClause: any = {
       OR: [
         { visibility: { path: ['allowAll'], equals: true } },
@@ -130,6 +133,10 @@ export class WorkflowsService {
         },
       ],
     };
+
+    if (options.entityId) {
+      whereClause.entityId = options.entityId;
+    }
 
     return paginate(this.prisma.workflow, whereClause, options, {
       entity: { select: { id: true, name: true, code: true } },
